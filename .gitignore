@@ -40,3 +40,4 @@ gurobi.log
 
 # Data files
 data
+*.pkl
