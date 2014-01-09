@@ -230,11 +230,11 @@ def compute_action_margin(model, a1, a2):
     return model.margin(None, a1, a2)
 
 if __name__ == '__main__':
-    combine_expert_demo_files('expert_demos.h5', 'expert_demos_test.h5', 'combine_test.h5')
-    (feature_fn, num_features, act_file) = get_bias_feature_fn('all.h5')
+    combine_expert_demo_files('data/expert_demos.h5', 'data/expert_demos_test.h5', 'data/combine_test.h5')
+    (feature_fn, num_features, act_file) = get_bias_feature_fn('data/all.h5')
     (margin_fn, act_file) = get_action_only_margin_fn(act_file)
     C = 1 # hyperparameter
-    mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, 'mm_constraints_1.h5')
+    mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, 'data/mm_constraints_1.h5')
     # mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn)
     # add_constraints_from_demo(mm_model, 'expert_demos.h5', outfile='mm_constraints_1.h5', verbose=True)
     # comment this in to recompute features, be forewarned that it will be slow
