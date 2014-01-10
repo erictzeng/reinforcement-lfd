@@ -239,4 +239,5 @@ if __name__ == '__main__':
     # add_constraints_from_demo(mm_model, 'expert_demos.h5', outfile='mm_constraints_1.h5', verbose=True)
     # comment this in to recompute features, be forewarned that it will be slow
     weights = mm_model.optimize_model()
+    mm_model.save_weights_to_file("data/mm_weights_1.npy")
     print weights
