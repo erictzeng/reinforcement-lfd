@@ -100,12 +100,18 @@ class MaxMarginModel(object):
             self.add_constraint(exp_phi, rhs_phi, margin, update=False)
         infile.close()
         self.model.update()
+        
+    def save_weights_to_file(self, fname):
+        outfile = open(fname, 'w')
+        np.save(outfile, self.weights)
+        outfile.close()
 
     def optimize_model(self):
         self.model.update()
         self.model.optimize()
         try:
-            return [x.X for x in self.w]
+            self.weights = [x.X for x in self.w]
+            return self.weights
         except grb.GurobiError:
             raise RuntimeError, "issue with optimizing model, check gurobi optimizer output"
     
