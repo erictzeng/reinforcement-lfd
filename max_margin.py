@@ -4,6 +4,7 @@ import gurobipy as grb
 import IPython as ipy
 import numpy as np
 import h5py, random, math, util
+from pdb import pm
 GRB = grb.GRB # constants for gurobi
 eps = 10**-8
 MAX_ITER=1000
@@ -49,8 +50,13 @@ class MaxMarginModel(object):
         function to add a constraint to the model with pre-computed
         features and margins
         """
-        self.model.addConstr(np.dot(self.w, expert_action_phi) >= 
-                                np.dot(self.w, rhs_action_phi) + margin_value - self.xi)
+        lhs_coeffs = [(p, w) for p, w in zip(expert_action_phi, self.w) if abs(p) >= eps]
+        lhs = grb.LinExpr(lhs_coeffs)
+        rhs_coeffs = [(p, w) for w, p in zip(self.w, rhs_action_phi) if abs(p) >= eps]
+        rhs_coeffs.append((-1, self.xi))
+        rhs = grb.LinExpr(rhs_coeffs)
+        rhs += margin_value
+        self.model.addConstr(lhs >= rhs)
         #store the constraint so we can store them to a file later
         self.constraints_cache.add(util.tuplify((expert_action_phi, rhs_action_phi, margin_value)))
         if update:

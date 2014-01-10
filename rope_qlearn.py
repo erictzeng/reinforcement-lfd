@@ -12,6 +12,7 @@ from max_margin import MaxMarginModel
 from pdb import pm
 import numpy as np
 from joblib import Parallel, delayed
+import cProfile
 try:
     from rapprentice import registration, clouds
     use_rapprentice = True
@@ -234,10 +235,12 @@ if __name__ == '__main__':
     (feature_fn, num_features, act_file) = get_bias_feature_fn('data/all.h5')
     (margin_fn, act_file) = get_action_only_margin_fn(act_file)
     C = 1 # hyperparameter
-    mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, 'data/mm_constraints_1.h5')
-    # mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn)
-    # add_constraints_from_demo(mm_model, 'expert_demos.h5', outfile='mm_constraints_1.h5', verbose=True)
-    # comment this in to recompute features, be forewarned that it will be slow
-    weights = mm_model.optimize_model()
-    mm_model.save_weights_to_file("data/mm_weights_1.npy")
-    print weights
+    cProfile.run('rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, \'data/mm_constraints_1.h5\')')
+
+    # mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, 'data/mm_constraints_1.h5')
+    # # mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn)
+    # # add_constraints_from_demo(mm_model, 'expert_demos.h5', outfile='mm_constraints_1.h5', verbose=True)
+    # # comment this in to recompute features, be forewarned that it will be slow
+    # weights = mm_model.optimize_model()
+    # mm_model.save_weights_to_file("data/mm_weights_1.npy")
+    # print weights

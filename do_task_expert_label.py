@@ -2,7 +2,6 @@
 
 import pprint
 import argparse
-import kmeans
 usage="""
 To label data
 ./do_task_expert_label.py /home/dhm/sampledata/overhand/all.h5 --fake_data_segment=demo1-seg00 --animation=1 --simulation=1 --select_manual --results_outfile=expert_demos.h5
