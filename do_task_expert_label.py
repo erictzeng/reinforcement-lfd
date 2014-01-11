@@ -154,7 +154,8 @@ def set_gripper_maybesim(lr, is_open, prev_is_open):
 #                Globals.viewer.Step()
                 if args.interactive: Globals.viewer.Idle()
         # add constraints if necessary
-        Globals.viewer.Step()
+        if Globals.viewer:
+            Globals.viewer.Step()
         if not is_open and prev_is_open:
             if not Globals.sim.grab_rope(lr):
                 return False
@@ -217,7 +218,8 @@ def exec_traj_maybesim(bodypart2traj):
 
         animate_traj.animate_traj(full_traj, Globals.robot, restore=False, pause=args.interactive,
             callback=sim_callback if args.simulation else None, step_viewer=animate_speed)
-        Globals.viewer.Step()
+        if Globals.viewer:
+            Globals.viewer.Step()
         return True
 
     if args.execution:
@@ -250,7 +252,6 @@ def sample_rope_state(demofile, human_check=True, perturb_points=5, min_rad=0, m
             success = resp not in ('N', 'n')
         else:
             success = True
-
 
 def find_closest_manual(demofile, new_xyz, outfile):
     "for now, just prompt the user"
@@ -534,7 +535,8 @@ def simulate_demo(new_xyz, demofile, seg_name, reset_rope=None, animate=False, p
 def replace_rope(new_rope):
     import bulletsimpy
     old_rope_nodes = Globals.sim.rope.GetControlPoints()
-    Globals.viewer.RemoveKinBody(Globals.env.GetKinBody('rope'))
+    if Globals.viewer:
+        Globals.viewer.RemoveKinBody(Globals.env.GetKinBody('rope'))
     Globals.env.Remove(Globals.env.GetKinBody('rope'))
     Globals.sim.bt_env.Remove(Globals.sim.bt_env.GetObjectByName('rope'))
     Globals.sim.rope = bulletsimpy.CapsuleRope(Globals.sim.bt_env, 'rope', new_rope,
@@ -635,6 +637,92 @@ class Globals:
     viewer = None
     resample_rope = None
 
+def main_learned_eval():
+    from rope_qlearn import *
+    import matplotlib
+    import pylab
+
+    demofile = h5py.File(args.h5file, 'r')
+    
+    trajoptpy.SetInteractive(args.interactive)
+
+    if not args.log:
+        from datetime import datetime
+        args.log = "log_%s.pkl" % datetime.now().isoformat()
+    redprint("Writing log to file %s" % args.log)
+    Globals.exec_log = task_execution.ExecutionLog(args.log)
+    atexit.register(Globals.exec_log.close)
+
+    Globals.exec_log(0, "main.args", args)
+
+    Globals.env = openravepy.Environment()
+    Globals.env.StopSimulation()
+    Globals.env.Load("robots/pr2-beta-static.zae")
+    Globals.robot = Globals.env.GetRobots()[0]
+
+    init_rope_xyz, _ = load_fake_data_segment(demofile, set_robot_state=False)
+    table_height = init_rope_xyz[:,2].mean() - .02
+    table_xml = make_table_xml(translation=[1, 0, table_height], extents=[.85, .55, .01])
+    Globals.env.LoadData(table_xml)
+    Globals.sim = ropesim.Simulation(Globals.env, Globals.robot)
+
+    if args.animation:
+        Globals.viewer = trajoptpy.GetViewer(Globals.env)
+
+    #####################
+    combine_expert_demo_files('data/expert_demos.h5', 'data/expert_demos_test.h5', 'data/combine_test.h5')
+    (feature_fn, num_features, act_file) = get_bias_feature_fn('data/all.h5')
+    (margin_fn, act_file) = get_action_only_margin_fn(act_file)
+    C = 1 # hyperparameter
+    
+    mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, 'data/mm_constraints_1.h5')
+    weights = mm_model.optimize_model()
+    mm_model.save_weights_to_file("mm_weights_1.npy")
+    
+    #####################
+    # TODO replace with h5 file of held out set
+    rope_nodes_tasks = np.load("data/sampled_rope_nodes.npy")
+    
+    num_steps = 5
+    
+    for (i_task, rope_nodes) in zip(range(len(rope_nodes_tasks)), rope_nodes_tasks):
+        Globals.robot.SetDOFValues(PR2_L_POSTURES["side"], Globals.robot.GetManipulator("leftarm").GetArmIndices())
+        Globals.robot.SetDOFValues(mirror_arm_joints(PR2_L_POSTURES["side"]), Globals.robot.GetManipulator("rightarm").GetArmIndices())
+
+        redprint("Acquire point cloud")
+        if i_task == 0:
+            Globals.sim.create(rope_nodes)
+            
+            if args.animation:
+                print "move viewer to viewpoint that isn't stupid"
+                print "then hit 'p' to continue"
+                Globals.viewer.Idle()
+        else:
+            replace_rope(rope_nodes)
+            Globals.sim.settle()
+            if args.animation:
+                Globals.viewer.Step()
+
+        for i_step in range(num_steps):
+            print "step ", i_step
+            
+            new_xyz = Globals.sim.observe_cloud()
+    
+            Globals.robot.SetDOFValues(PR2_L_POSTURES["side"], Globals.robot.GetManipulator("leftarm").GetArmIndices())
+            Globals.robot.SetDOFValues(mirror_arm_joints(PR2_L_POSTURES["side"]), Globals.robot.GetManipulator("rightarm").GetArmIndices())
+    
+            ################################    
+            redprint("Finding closest demonstration")
+    
+            seg_name = mm_model.best_action(new_xyz)[1]
+            
+            (success, result) = simulate_demo(new_xyz, demofile, seg_name, reset_rope=None, animate=args.animation, pause=False)
+    
+            h = matplotlib.pyplot.scatter(result[:,0], result[:,1])
+            matplotlib.pyplot.axis("equal")
+            matplotlib.pyplot.savefig("eval/task_%i_step_%i" % (i_task, i_step))
+            h.remove()
+        
 def main():
 
     demofile = h5py.File(args.h5file, 'r')
