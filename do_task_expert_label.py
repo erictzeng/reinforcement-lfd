@@ -257,6 +257,7 @@ def find_closest_manual(demofile, new_xyz, outfile):
     "for now, just prompt the user"
     seg_names = demofile.keys()
     print "choose from the following options (type an integer)"
+    print new_xyz.shape
     ignore_inds = get_ignored_inds(demofile)
     keys = remove_inds(demofile.keys(), ignore_inds)
     ds_clouds = dict(zip(keys, remove_inds(get_downsampled_clouds(demofile), ignore_inds)))
@@ -275,8 +276,9 @@ def find_closest_manual(demofile, new_xyz, outfile):
     rope_state = Globals.sim.rope.GetControlPoints()
     for seg_name in best_keys:
         # Set animate=False to speed up collection
-        # pass back result = None --> ignore this one
-        (success, result) = simulate_demo(new_xyz, demofile, seg_name, reset_rope=rope_state, animate=True, pause=True)        
+        # pass back result = None --> ignore this one        
+        (success, result) = simulate_demo(new_xyz, demofile, seg_name, reset_rope=rope_state, animate=True, pause=True)
+        print new_xyz.shape        
         if success:
             break
     if result != None: # TODO: save pt cld and action
@@ -430,8 +432,6 @@ def simulate_demo(new_xyz, demofile, seg_name, reset_rope=None, animate=False, p
                                    plotting=5 if args.animation else 0,rot_reg=np.r_[1e-4,1e-4,1e-1], n_iter=50, reg_init=10, reg_final=.1)
     f = registration.unscale_tps(f, src_params, targ_params)
 
-    handles.extend(plotting_openrave.draw_grid(Globals.env, f.transform_points, old_xyz.min(axis=0)-np.r_[0,0,.1], old_xyz.max(axis=0)+np.r_[0,0,.1], xres = .1, yres = .1, zres = .04))        
-
     link2eetraj = {}
     for lr in 'lr':
         link_name = "%s_gripper_tool_frame"%lr
@@ -439,9 +439,6 @@ def simulate_demo(new_xyz, demofile, seg_name, reset_rope=None, animate=False, p
         new_ee_traj = f.transform_hmats(old_ee_traj)
         link2eetraj[link_name] = new_ee_traj
         
-        handles.append(Globals.env.drawlinestrip(old_ee_traj[:,:3,3], 2, (1,0,0,1)))
-        handles.append(Globals.env.drawlinestrip(new_ee_traj[:,:3,3], 2, (0,1,0,1)))
-
     miniseg_starts, miniseg_ends = split_trajectory_by_gripper(seg_info)    
     success = True
     print colorize.colorize("mini segments:", "red"), miniseg_starts, miniseg_ends
