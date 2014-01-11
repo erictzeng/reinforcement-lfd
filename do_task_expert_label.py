@@ -282,6 +282,8 @@ def find_closest_manual(demofile, new_xyz, outfile):
             break
     if result != None: # TODO: save pt cld and action
         save_example_action(outfile, new_xyz, seg_name)
+        if Globals.resample_rope == 'd': # result is a tied knot; #bestpractices
+            save_example_action(outfile, result, 'endstate: overhand_knot')
     return (seg_name, False)
 
 def save_example_action(filename, xyz, action):
@@ -507,10 +509,10 @@ def simulate_demo(new_xyz, demofile, seg_name, reset_rope=None, animate=False, p
         print "i ignores and resamples rope"
         response = raw_input("Use this demonstration?[y/N/d/i]")
         if response in ('I', 'i'):
-            Globals.resample_rope = True
+            Globals.resample_rope = 'i'
             return (True, None)
         if response in ('D', 'd'):
-            Globals.resample_rope = True
+            Globals.resample_rope = 'd'
             return (True, result_xyz)
         success = response in ('Y', 'y')
         if success:

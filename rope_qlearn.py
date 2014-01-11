@@ -54,6 +54,8 @@ def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=F
     for group in expert_demofile.itervalues():
         state = group['cloud_xyz'][:] # these are already downsampled
         action = group['action'][()]
+        if action.startswith('endstate'): # this is a knot
+            continue
         if verbose:
             print 'adding constraints for:\t', action
         mm_model.add_example(state, action, verbose)
