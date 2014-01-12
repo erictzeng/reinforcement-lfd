@@ -30,6 +30,7 @@ class MaxMarginModel(object):
         self.C = C
         self.w = np.asarray([self.model.addVar(lb = -1*GRB.INFINITY, name = str(i)) 
                              for i in range(N)])
+        self.weights = np.zeros(N)
         self.xi = self.model.addVar(lb = 0, name = 'xi')
         self.model.update()
         # w'*w + C*xi
@@ -79,13 +80,15 @@ class MaxMarginModel(object):
                 print "added {}/{}".format(i, len(self.actions))
         self.model.update()
 
-    def save_constraints_to_file(self, fname):
+    def save_constraints_to_file(self, fname, save_weights=False):
         outfile = h5py.File(fname, 'w')
         for i, (exp_phi, rhs_phi, margin) in enumerate(self.constraints_cache):
             g = outfile.create_group(str(i))
             g['exp_features'] = exp_phi
             g['rhs_phi'] = rhs_phi
             g['margin'] = margin
+        if save_weights:
+            outfile['weights'] = self.weights
         outfile.close()
         
     def load_constraints_from_file(self, fname):
@@ -93,17 +96,26 @@ class MaxMarginModel(object):
         loads the contraints from the file indicated and adds them to the optimization problem
         """
         infile = h5py.File(fname, 'r')
-        for constr in infile.values():
+        for key, constr in infile.iteritems():
+            if key == 'weights': continue
             exp_phi = constr['exp_features'][:]
             rhs_phi = constr['rhs_phi'][:]
             margin = float(constr['margin'][()])
             self.add_constraint(exp_phi, rhs_phi, margin, update=False)
+        if 'weights' in infile:
+            self.weights = infile['weights'][:]
         infile.close()
         self.model.update()
+
+    def load_weights_from_file(self, fname):
+        infile = h5py.File(fname, 'r')
+        self.weights = infile['weights'][:]
+        infile.close()
         
     def save_weights_to_file(self, fname):
-        outfile = open(fname, 'w')
-        np.save(outfile, self.weights)
+        # changed to use h5py.File so file i/o is consistent
+        outfile = h5py.File(fname, 'a')
+        outfile['weights'] = self.weights
         outfile.close()
 
     def optimize_model(self):
@@ -165,13 +177,15 @@ if __name__ == '__main__':
         expert_actions.append(select_action(s))
         learned_actions.append(mm.best_action(s)[1])
 
-    mm.save_constraints_to_file('test.h5')
+    mm.save_constraints_to_file('test.h5', save_weights=True)
     mm_2 = MaxMarginModel(actions, C, N, feat, margin)
     mm_2.load_constraints_from_file('test.h5')
+    loaded_weights = mm_2.weights
     weights_2 = mm_2.optimize_model()
     
     # storing constraints and recomputing max margin shouldn't change result by much
-    print 'weight difference', np.linalg.norm(np.asarray(weights) - np.asarray(weights_2))    
+    print 'load weights difference', np.linalg.norm(np.asarray(weights) - np.asarray(loaded_weights))
+    print 're-computed weight difference', np.linalg.norm(np.asarray(weights) - np.asarray(weights_2))    
     # error rate should be low because we have the value we're minimizing as a feature
     print "error rate", np.mean(np.asarray(expert_actions) != np.asarray(learned_actions))
     # so we can see what the weights are
