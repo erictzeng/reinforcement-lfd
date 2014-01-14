@@ -32,6 +32,7 @@ class MaxMarginModel(object):
                              for i in range(N)])
         self.weights = np.zeros(N)
         self.xi = self.model.addVar(lb = 0, name = 'xi')
+        self.xi_val = None
         self.model.update()
         # w'*w + C*xi
         self.model.setObjective(np.dot(self.w, self.w) + self.C*self.xi)
@@ -93,6 +94,7 @@ class MaxMarginModel(object):
             g['margin'] = margin
         if save_weights:
             outfile['weights'] = self.weights
+            outfile['xi'] = self.xi_val
         outfile.close()
         
     def load_constraints_from_file(self, fname):
@@ -101,25 +103,30 @@ class MaxMarginModel(object):
         """
         infile = h5py.File(fname, 'r')
         for key, constr in infile.iteritems():
-            if key == 'weights': continue
+            if key in ('weights', 'xi'): continue
             exp_phi = constr['exp_features'][:]
             rhs_phi = constr['rhs_phi'][:]
             margin = float(constr['margin'][()])
             self.add_constraint(exp_phi, rhs_phi, margin, update=False)
         if 'weights' in infile:
             self.weights = infile['weights'][:]
+        if 'xi' in infile:
+            self.xi_val = infile['xi'][()]
         infile.close()
         self.model.update()
 
     def load_weights_from_file(self, fname):
         infile = h5py.File(fname, 'r')
         self.weights = infile['weights'][:]
+        if 'xi' in infile:
+            self.xi_val = infile['xi'][()]
         infile.close()
         
     def save_weights_to_file(self, fname):
         # changed to use h5py.File so file i/o is consistent
         outfile = h5py.File(fname, 'a')
         outfile['weights'] = self.weights
+        outfile['xi'] = self.xi_val
         outfile.close()
 
     def optimize_model(self):
@@ -127,6 +134,7 @@ class MaxMarginModel(object):
         self.model.optimize()
         try:
             self.weights = [x.X for x in self.w]
+            self.xi_val = self.xi.X
             return self.weights
         except grb.GurobiError:
             raise RuntimeError, "issue with optimizing model, check gurobi optimizer output"
@@ -185,10 +193,12 @@ if __name__ == '__main__':
     mm_2 = MaxMarginModel(actions, C, N, feat, margin)
     mm_2.load_constraints_from_file('test.h5')
     loaded_weights = mm_2.weights
+    loaded_xi = mm_2.xi_val
     weights_2 = mm_2.optimize_model()
     
     # storing constraints and recomputing max margin shouldn't change result by much
     print 'load weights difference', np.linalg.norm(np.asarray(weights) - np.asarray(loaded_weights))
+    print 'load xi computed difference', abs(loaded_xi - mm.xi_val)
     print 're-computed weight difference', np.linalg.norm(np.asarray(weights) - np.asarray(weights_2))    
     # error rate should be low because we have the value we're minimizing as a feature
     print "error rate", np.mean(np.asarray(expert_actions) != np.asarray(learned_actions))
