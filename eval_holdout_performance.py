@@ -108,6 +108,10 @@ curr_index = 0
 results = {}
 root = Tk()
 app = Application(master=root)
+app.focus_set()
+app.bind('y', lambda event: app.record_yes())
+app.bind('n', lambda event: app.record_no())
+app.bind('u', lambda event: app.undo_record())
 img = ImageTk.PhotoImage(Image.open(images_folder + image_filenames[curr_index]))
 panel = Label(app, image = img)
 panel.pack(side = "bottom", fill = "both", expand = "yes")
