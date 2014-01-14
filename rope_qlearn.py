@@ -6,6 +6,18 @@ includes helper functions for manipulating demonstration
 and action data
 """
 
+import argparse
+usage="""
+To use bias features
+./rope_qlearn.py
+
+To use quadratic features
+./rope_qlearn.py --quad_features
+"""
+parser = argparse.ArgumentParser(usage=usage)
+parser.add_argument("--quad_features", action="store_true")
+args = parser.parse_args()
+
 import h5py
 import gurobipy as grb
 import IPython as ipy
@@ -74,6 +86,12 @@ def get_bias_feature_fn(actionfile):
     act_set = ActionSet(actionfile)
     return (act_set.bias_features, act_set.num_actions + 1, actionfile)
 
+def get_quad_feature_fn(actionfile):
+    if type(actionfile) is str:
+        actionfile = h5py.File(actionfile, 'r')
+    act_set = ActionSet(actionfile)
+    return (act_set.quad_features, 2 + 2*act_set.num_actions, actionfile)
+
 def get_action_only_margin_fn(actionfile):
     if type(actionfile) is str:
         actionfile = h5py.File(actionfile, 'r')
@@ -107,6 +125,15 @@ class ActionSet(object):
         feat = np.zeros(self.num_actions + 1)
         feat[0] = registration_cost(state[1], self.get_ds_cloud(action))
         feat[self.action_to_ind[action]+1] = 1
+        return feat
+    
+    def quad_features(self, state, action):
+        feat = np.zeros(2 + 2*self.num_actions)
+        s = registration_cost(state[1], self.get_ds_cloud(action))
+        feat[0] = s**2
+        feat[1] = s
+        feat[2+self.action_to_ind[action]] = s
+        feat[2+self.num_actions+self.action_to_ind[action]] = 1
         return feat
 
     def action_only_margin(self, s, a1, a2):
@@ -289,7 +316,12 @@ def test_saving_model(mm_model):
 
 if __name__ == '__main__':
     combine_expert_demo_files('data/expert_demos.h5', 'data/expert_demos_test.h5', 'data/combine_test.h5')
-    (feature_fn, num_features, act_file) = get_bias_feature_fn('data/all.h5')
+    if args.quad_features:
+        print "using quadratic features"
+        (feature_fn, num_features, act_file) = get_quad_feature_fn('data/all.h5')
+    else:
+        print "using bias features"
+        (feature_fn, num_features, act_file) = get_bias_feature_fn('data/all.h5')
     (margin_fn, act_file) = get_action_only_margin_fn(act_file)
     (margin_fn, act_file) = get_action_state_margin_fn(act_file)
     C = 1 # hyperparameter
