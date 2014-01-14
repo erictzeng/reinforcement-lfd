@@ -51,14 +51,19 @@ def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=F
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
         print "adding constraints"
-    for group in expert_demofile.itervalues():
-        state = group['cloud_xyz'][:] # these are already downsampled
+    max = 100
+    c = 0
+    for key, group in expert_demofile.iteritems():
+        if c > max: break
+        state = [key,group['cloud_xyz'][:]] # these are already downsampled
         action = group['action'][()]
         if action.startswith('endstate'): # this is a knot
             continue
         if verbose:
             print 'adding constraints for:\t', action
+        c += 1
         mm_model.add_example(state, action, verbose)
+        mm_model.clear_asm_cache()
         if outfile:
             mm_model.save_constraints_to_file(outfile)
 
@@ -73,7 +78,12 @@ def get_action_only_margin_fn(actionfile):
         actionfile = h5py.File(actionfile, 'r')
     act_set = ActionSet(actionfile)
     return (act_set.action_only_margin, actionfile)
-    
+
+def get_action_state_margin_fn(actionfile):
+    if type(actionfile) is str:
+        actionfile = h5py.File(actionfile, 'r')
+    act_set = ActionSet(actionfile)
+    return (act_set.action_state_margin, actionfile)
 
 class ActionSet(object):
     """
@@ -85,6 +95,7 @@ class ActionSet(object):
         self.action_to_ind = dict((v, i) for i, v in enumerate(self.actions))
         self.num_actions = len(self.actions)
         self.action_margin_cache = {}
+        self.action_state_cache = {}
         self.use_cache = use_cache
         self.link_names = ["%s_gripper_tool_frame"%lr for lr in ('lr')]
 
@@ -93,7 +104,7 @@ class ActionSet(object):
     
     def bias_features(self, state, action):
         feat = np.zeros(self.num_actions + 1)
-        feat[0] = registration_cost(state, self.get_ds_cloud(action))
+        feat[0] = registration_cost(state[1], self.get_ds_cloud(action))
         feat[self.action_to_ind[action]+1] = 1
         return feat
 
@@ -130,6 +141,22 @@ class ActionSet(object):
         if self.use_cache:
             self.action_margin_cache[(a1, a2)] = v
 
+    def check_asm_cache(self, s, a):
+        # cache stores the warped traj for a
+        if self.use_cache:
+            key = (s[0], a)
+            if key in self.action_state_cache:
+                return (True, self.action_state_cache[key])
+        return False, False
+
+    def store_asm_cache(self, s, a, v):
+        if self.use_cache:
+            key = (s[0], a)
+            self.action_state_cache[key] = v
+
+    def clear_asm_cache(self):
+        self.action_state_cache = {}
+
     def action_state_margin(self, state, a1, a2):
         """
         look at the difference for both when warped to state
@@ -140,12 +167,22 @@ class ActionSet(object):
         when we call this with a particular expert demo we will warp that trajectory
         once for each action we compare to -- issue is hashing point clouds effectively        
         """
-        warped_a1_trajs = [warp_hmats(self.get_ds_cloud(a1),
-                                      state,
-                                      self.actionfile[a1][ln]['hmat']) for ln in self.link_names]
-        warped_a2_trajs = [warp_hmats(self.get_ds_clouds(a2),
-                                      state,
+        a1_hit, value = self.check_asm_cache(state, a1)
+        if a1_hit:
+            warped_a1_trajs = value
+        else:
+            warped_a1_trajs = [warp_hmats(self.get_ds_cloud(a1),
+                                          state[1],
+                                          self.actionfile[a1][ln]['hmat']) for ln in self.link_names]
+            self.store_asm_cache(state, a1, warped_a1_trajs)
+        a2_hit, value = self.check_asm_cache(state, a2)
+        if a2_hit:
+            warped_a2_trajs = value
+        else:
+            warped_a2_trajs = [warp_hmats(self.get_ds_cloud(a2),
+                                      state[1],
                                       self.actionfile[a2][ln]['hmat']) for ln in self.link_names]
+            self.store_asm_cache(state, a2, warped_a2_trajs)
         return sum(compare_hmats(t1, t2) for (t1, t2) in zip(warped_a1_trajs, warped_a2_trajs))
 
     def combined_margin(self, state, a1, a2):
@@ -236,12 +273,13 @@ if __name__ == '__main__':
     combine_expert_demo_files('data/expert_demos.h5', 'data/expert_demos_test.h5', 'data/combine_test.h5')
     (feature_fn, num_features, act_file) = get_bias_feature_fn('data/all.h5')
     (margin_fn, act_file) = get_action_only_margin_fn(act_file)
+    (margin_fn, act_file) = get_action_state_margin_fn(act_file)
     C = 1 # hyperparameter
-    cProfile.run('rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, \'data/mm_constraints_1.h5\')')
+    # cProfile.run('rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, \'data/mm_constraints_1.h5\')')
 
     # mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, 'data/mm_constraints_1.h5')
-    # # mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn)
-    # # add_constraints_from_demo(mm_model, 'expert_demos.h5', outfile='mm_constraints_1.h5', verbose=True)
+    mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn)
+    add_constraints_from_demo(mm_model, 'expert_demos.h5', outfile='mm_constraints_1.h5', verbose=True)
     # # comment this in to recompute features, be forewarned that it will be slow
     # weights = mm_model.optimize_model()
     # mm_model.save_weights_to_file("data/mm_weights_1.npy")
