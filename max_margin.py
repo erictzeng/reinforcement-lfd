@@ -51,6 +51,10 @@ class MaxMarginModel(object):
         function to add a constraint to the model with pre-computed
         features and margins
         """
+        # make sure the feature size is consistent with phi
+        assert self.N == expert_action_phi.shape[0], "failed adding constraint: size of expert_action_phi is inconsistent with feature size"
+        assert self.N == rhs_action_phi.shape[0], "failed adding constraint: size of rhs_action_phi is inconsistent with feature size"
+        
         lhs_coeffs = [(p, w) for p, w in zip(expert_action_phi, self.w) if abs(p) >= eps]
         lhs = grb.LinExpr(lhs_coeffs)
         rhs_coeffs = [(p, w) for w, p in zip(self.w, rhs_action_phi) if abs(p) >= eps]
