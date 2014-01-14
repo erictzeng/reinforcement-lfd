@@ -638,11 +638,10 @@ class Globals:
     viewer = None
     resample_rope = None
 
+from rope_qlearn import *
+import matplotlib
+import pylab
 def main():
-    from rope_qlearn import *
-    import matplotlib
-    import pylab
-
     demofile = h5py.File(args.h5file, 'r')
     
     trajoptpy.SetInteractive(args.interactive)
@@ -671,13 +670,22 @@ def main():
         Globals.viewer = trajoptpy.GetViewer(Globals.env)
 
     #####################
-    combine_expert_demo_files('data/expert_demos.h5', 'data/expert_demos_test.h5', 'data/combine_test.h5')
+#     combine_expert_demo_files('data/expert_demos.h5', 'data/expert_demos_test.h5', 'data/combine_test.h5')
     (feature_fn, num_features, act_file) = get_bias_feature_fn('data/all.h5')
-    (margin_fn, act_file) = get_action_only_margin_fn(act_file)
-    C = 1 # hyperparameter
+#     (margin_fn, act_file) = get_action_only_margin_fn(act_file)
+#     C = 1 # hyperparameter
     
-    mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, 'data/mm_constraints_1.h5')
-    weights = mm_model.optimize_model()
+#     mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, 'data/mm_constraints_1.h5')
+#     weights = mm_model.optimize_model()
+
+    weight_file = h5py.File("data/mm_weights_1.npy", 'r')
+    weights = weight_file['weights'][:]
+    weight_file.close()
+    
+    actions = act_file.keys()
+    def best_action(s):
+        besti = np.argmax([np.dot(weights, feature_fn(s, a)) for a in actions])
+        return (besti, actions[besti])
     
     #####################
     holdout_file = h5py.File("data/holdout_set.h5", 'r')
@@ -721,7 +729,7 @@ def main():
             ################################    
             redprint("Finding closest demonstration")
     
-            seg_name = mm_model.best_action(new_xyz)[1]
+            seg_name = best_action(new_xyz)[1]
             
             (success, result) = simulate_demo(new_xyz, demofile, seg_name, reset_rope=None, animate=args.animation, pause=False)
         
