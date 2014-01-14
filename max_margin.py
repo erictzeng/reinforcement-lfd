@@ -114,7 +114,7 @@ class MaxMarginModel(object):
         
     def save_weights_to_file(self, fname):
         # changed to use h5py.File so file i/o is consistent
-        outfile = h5py.File(fname, 'a')
+        outfile = h5py.File(fname, 'w')
         outfile['weights'] = self.weights
         outfile.close()
 
@@ -130,6 +130,9 @@ class MaxMarginModel(object):
     def best_action(self, s):
         besti = np.argmax([np.dot(self.w, self.feature(s, a)).getValue() for a in self.actions])
         return (besti, self.actions[besti])
+
+    def save_model(self, fname):
+        self.model.write(fname)
 
 if __name__ == '__main__':
     """

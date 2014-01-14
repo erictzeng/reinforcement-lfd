@@ -7,6 +7,7 @@ and action data
 """
 
 import h5py
+import gurobipy as grb
 import IPython as ipy
 from max_margin import MaxMarginModel
 from pdb import pm
@@ -269,6 +270,23 @@ def compute_action_margin(model, a1, a2):
     print 'done'
     return model.margin(None, a1, a2)
 
+def test_saving_model(mm_model):
+    # Use Gurobi to save the model in MPS format
+    weights = mm_model.optimize_model()
+    mm_model.save_model('data/rope_model_saved_test.mps')
+    mm_model_saved = grb.read('data/rope_model_saved_test.mps')
+    mm_model_saved.optimize()
+    weights_from_saved = [x.X for x in mm_model.w]
+
+    saved_correctly = True
+    for i in range(len(weights)):
+        if weights[i] != weights_from_saved[i]:
+            print "ERROR in saving model: Orig weight: ", weights[i], \
+                  ", Weight from optimizing saved model: ", weights_from_saved[i]
+            saved_correctly = False
+    if saved_correctly:
+        print "PASSED: Model saved and reloaded correctly"
+
 if __name__ == '__main__':
     combine_expert_demo_files('data/expert_demos.h5', 'data/expert_demos_test.h5', 'data/combine_test.h5')
     (feature_fn, num_features, act_file) = get_bias_feature_fn('data/all.h5')
@@ -278,9 +296,11 @@ if __name__ == '__main__':
     # cProfile.run('rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, \'data/mm_constraints_1.h5\')')
 
     # mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, 'data/mm_constraints_1.h5')
-    mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn)
-    add_constraints_from_demo(mm_model, 'expert_demos.h5', outfile='mm_constraints_1.h5', verbose=True)
+    mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, 'data/mm_constraints_1.h5')
+    #add_constraints_from_demo(mm_model, 'expert_demos.h5', outfile='mm_constraints_1.h5', verbose=True)
     # # comment this in to recompute features, be forewarned that it will be slow
     # weights = mm_model.optimize_model()
-    # mm_model.save_weights_to_file("data/mm_weights_1.npy")
+    # mm_model.save_weights_to_file("data/mm_weights_1.h5")
     # print weights
+
+    test_saving_model(mm_model)
