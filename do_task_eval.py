@@ -678,7 +678,8 @@ def main():
 #     mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, 'data/mm_constraints_1.h5')
 #     weights = mm_model.optimize_model()
 
-    weight_file = h5py.File("data/mm_weights_1.npy", 'r')
+    #weight_file = h5py.File("data/mm_weights_1.npy", 'r')
+    weight_file = h5py.File("data/nearest_neighbor_weights.h5", 'r')
     weights = weight_file['weights'][:]
     weight_file.close()
     
@@ -688,7 +689,9 @@ def main():
         return (besti, actions[besti])
     
     #####################
+    result_fname = "data/eval/baseline/holdout_result.h5"
     holdout_file = h5py.File("data/holdout_set.h5", 'r')
+
     num_steps = 5
             
     curr_step = 0
@@ -701,6 +704,7 @@ def main():
 
         redprint("Acquire point cloud")
         if curr_step == 1:
+            new_xyz, r2r = load_fake_data_segment(demofile)
             Globals.sim.create(rope_nodes)
             
             if args.animation:
@@ -713,7 +717,7 @@ def main():
             if args.animation:
                 Globals.viewer.Step()
 
-        result_file = h5py.File("data/holdout_result.h5", 'a')
+        result_file = h5py.File(result_fname, 'a')
         if i_task in result_file:
             del result_file[i_task]
         result_file.create_group(i_task)
