@@ -293,36 +293,102 @@ def test_saving_model(mm_model):
     if saved_correctly:
         print "PASSED: Model saved and reloaded correctly"
 
+def select_feature_fn(args):
+    if args.quad_features:
+        print 'Using quadratic features.'
+        feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile)
+    else:
+        print 'Using bias features.'
+        feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile)
+    margin_fn, act_file = get_action_state_margin_fn(act_file)
+    actions = act_file.keys()
+    return feature_fn, margin_fn, num_features, actions
+
+def build_constraints(args):
+    feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
+    print 'Building constraints into {}.'.format(args.constraintfile)
+    mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
+    add_constraints_from_demo(mm_model,
+                              args.demofile,
+                              outfile=args.constraintfile,
+                              verbose=True)
+
+def build_model(args):
+    feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
+    print 'Building model into {}.'.format(args.modelfile)
+    mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
+    mm_model.load_constraints_from_file(args.constraintfile)
+    mm_model.save_model(args.modelfile)
+
+def optimize_model(args):
+    feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
+    print 'Found model: {}'.format(args.modelfile)
+    model = MaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
+    model.optimize_model()
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('constraintfile')
-    parser.add_argument('modelfile')
-    parser.add_argument('weightfile', nargs='?', default=None)
+    subparsers = parser.add_subparsers()
     parser.add_argument("--quad_features", action="store_true")
-    parser.add_argument('--build_constraints', nargs=1, metavar='demofile')
-    args = parser.parse_args()
-    if args.quad_features:
-        print "using quadratic features"
-        (feature_fn, num_features, act_file) = get_quad_feature_fn('data/all.h5')
-    else:
-        print "using bias features"
-        (feature_fn, num_features, act_file) = get_bias_feature_fn('data/all.h5')
-    (margin_fn, act_file) = get_action_state_margin_fn(act_file)
-    C = 1 # hyperparameter
-    actions = act_file.keys()
+    parser.add_argument('--C', '-c', type=float, default=1)
 
-    if args.build_constraints is not None:
-        print 'Building constraints into {}.'.format(args.constraintfile)
-        mm_model = MaxMarginModel(actions, C, num_features, feature_fn, margin_fn)
-        add_constraints_from_demo(mm_model, args.build_constraints[0], outfile=args.constraintfile, verbose=True)
-    else:
-        if os.path.exists(args.modelfile):
-            print 'Found model: {}'.format(args.modelfile)
-            model = MaxMarginModel.read(args.modelfile, act_file.keys(), feature_fn, margin_fn)
-            model.optimize_model()
-        else:
-            print 'Building and optimizing model.'
-            mm_model = MultiSlackMaxMarginModel(actions, C, num_features, feature_fn, margin_fn)
-            mm_model.load_constraints_from_file(args.constraintfile)
-            mm_model.save_model(args.modelfile)
-            mm_model.optimize_model()
+    # build-constraints subparser
+    parser_build_constraints = subparsers.add_parser('build-constraints')
+    parser_build_constraints.add_argument('demofile')
+    parser_build_constraints.add_argument('constraintfile')
+    parser_build_constraints.add_argument('actionfile', nargs='?', default='data/all.h5')
+    parser_build_constraints.set_defaults(func=build_constraints)
+
+    # build-model subparser
+    parser_build_model = subparsers.add_parser('build-model')
+    parser_build_model.add_argument('constraintfile')
+    parser_build_model.add_argument('modelfile')
+    parser_build_model.add_argument('actionfile', nargs='?', default='data/all.h5')
+    parser_build_model.set_defaults(func=build_model)
+
+    # optimize-model subparser
+    parser_optimize = subparsers.add_parser('optimize-model')
+    parser_optimize.add_argument('modelfile')
+    parser_optimize.add_argument('weightfile')
+    parser_optimize.add_argument('actionfile', nargs='?', default='data/all.h5')
+    parser_optimize.set_defaults(func=optimize_model)
+
+    # parse args and call appropriate function
+    args = parser.parse_args()
+    args.func(args)
+
+
+
+#if __name__ == '__main__':
+#    parser = argparse.ArgumentParser()
+#    parser.add_argument('constraintfile')
+#    parser.add_argument('modelfile')
+#    parser.add_argument('weightfile', nargs='?', default=None)
+#    parser.add_argument("--quad_features", action="store_true")
+#    parser.add_argument('--build_constraints', nargs=1, metavar='demofile')
+#    args = parser.parse_args()
+#    if args.quad_features:
+#        print "using quadratic features"
+#        (feature_fn, num_features, act_file) = get_quad_feature_fn('data/all.h5')
+#    else:
+#        print "using bias features"
+#        (feature_fn, num_features, act_file) = get_bias_feature_fn('data/all.h5')
+#    (margin_fn, act_file) = get_action_state_margin_fn(act_file)
+#    C = 1 # hyperparameter
+#    actions = act_file.keys()
+#
+#    if args.build_constraints is not None:
+#        print 'Building constraints into {}.'.format(args.constraintfile)
+#        mm_model = MaxMarginModel(actions, C, num_features, feature_fn, margin_fn)
+#        add_constraints_from_demo(mm_model, args.build_constraints[0], outfile=args.constraintfile, verbose=True)
+#    else:
+#        if os.path.exists(args.modelfile):
+#            print 'Found model: {}'.format(args.modelfile)
+#            model = MaxMarginModel.read(args.modelfile, act_file.keys(), feature_fn, margin_fn)
+#            model.optimize_model()
+#        else:
+#            print 'Building and optimizing model.'
+#            mm_model = MultiSlackMaxMarginModel(actions, C, num_features, feature_fn, margin_fn)
+#            mm_model.load_constraints_from_file(args.constraintfile)
+#            mm_model.save_model(args.modelfile)
+#            mm_model.optimize_model()
