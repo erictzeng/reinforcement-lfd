@@ -54,6 +54,10 @@ class MaxMarginModel(object):
         function to add a constraint to the model with pre-computed
         features and margins
         """
+        # make sure the feature size is consistent with phi
+        assert self.N == expert_action_phi.shape[0], "failed adding constraint: size of expert_action_phi is inconsistent with feature size"
+        assert self.N == rhs_action_phi.shape[0], "failed adding constraint: size of rhs_action_phi is inconsistent with feature size"
+        
         lhs_coeffs = [(p, w) for p, w in zip(expert_action_phi, self.w) if abs(p) >= eps]
         lhs = grb.LinExpr(lhs_coeffs)
         rhs_coeffs = [(p, w) for w, p in zip(self.w, rhs_action_phi) if abs(p) >= eps]
@@ -122,7 +126,7 @@ class MaxMarginModel(object):
         
     def save_weights_to_file(self, fname):
         # changed to use h5py.File so file i/o is consistent
-        outfile = h5py.File(fname, 'a')
+        outfile = h5py.File(fname, 'w')
         outfile['weights'] = self.weights
         outfile['xi'] = self.xi_val
         outfile.close()
@@ -140,6 +144,9 @@ class MaxMarginModel(object):
     def best_action(self, s):
         besti = np.argmax([np.dot(self.w, self.feature(s, a)).getValue() for a in self.actions])
         return (besti, self.actions[besti])
+
+    def save_model(self, fname):
+        self.model.write(fname)
 
 class MultiSlackMaxMarginModel(MaxMarginModel):
     

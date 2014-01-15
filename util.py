@@ -5,6 +5,7 @@ import operator
 import types
 import numpy as np
 import h5py
+import IPython as ipy
 
 class Transform(object):
     """
@@ -829,6 +830,8 @@ def pop(x):
             return None
 
 def isIterable(x):
+    if type(x) in (str, unicode):
+        return False
     try:
         x_iter = iter(x)
         return True
