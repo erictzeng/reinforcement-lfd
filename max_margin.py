@@ -29,6 +29,7 @@ class MaxMarginModel(object):
         self.model = grb.Model()
         self.actions = actions[:]
         self.N = N
+        self._C = C
         self.w = np.asarray([self.model.addVar(lb = -1*GRB.INFINITY, name = str(i)) 
                              for i in range(N)])
         self.weights = np.zeros(N)
@@ -55,31 +56,24 @@ class MaxMarginModel(object):
             N += 1
         mm_model.N = N
         mm_model.w = np.asarray(w)
+        mm_model.populate_xi()
         mm_model.weights = np.zeros(N)
-        mm_model.xi = grb_model.getVarByName('xi')
-        # ensure we're grabbing C correctly
-        grb_lin = grb_model.getObjective().getLinExpr()
-        assert grb_lin.getVar(0) is mm_model.xi
-        mm_model.C = grb_lin.getCoeff(0)
-        mm_model.xi_val = None
         mm_model.feature_fn = feature_fn
         mm_model.margin_fn = margin_fn
         mm_model.constraints_cache = set()
         return mm_model
 
+    def populate_xi(self):
+        mm_model.xi = grb_model.getVarByName('xi')
+        mm_model.xi_val = None
+
     @property
     def C(self):
-        grb_lin = self.model.getObjective().getLinExpr()
-        assert grb_lin.getVar(0) is self.xi
-        return grb_lin.getCoeff(0)
-
+        return self._C
     @C.setter
     def C(self, value):
-        new_obj = self.model.getObjective()
-        grb_lin = new_obj.getLinExpr()
-        grb_lin.remove(self.xi)
-        grb_lin.add(self.xi, value)
-        self.model.setObjective(new_obj)
+        self._C = C
+        self.xi.Obj = value
         self.model.update()
 
     def feature(self, s, a):
@@ -204,6 +198,25 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         self.xi = []            #  list to keep track of slack variables
         self.xi_val = []
 
+    def populate_xi(self):
+        self.xi = []
+        next_xi = self.model.getVarByName('xi_0')
+        while next_xi is not None:
+            self.xi.append(next_xi)
+            next_xi = self.model.getVarByName('xi_{}'.format(len(self.xi)))
+        self.xi_val = []
+
+    @property
+    def C(self):
+        return self._C
+
+    @C.setter
+    def C(self, value):
+        self._C = value
+        for xi_var in self.xi:
+            xi_var.Obj = value
+        self.model.update()
+
     def add_constraint(self, expert_action_phi, rhs_action_phi, margin_value, xi_var, update=True):
         """
         function to add a constraint to the model with pre-computed
@@ -261,7 +274,7 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         outfile.close()
 
     @staticmethod
-    def update_constraints_file(self, fname):
+    def update_constraints_file(fname):
         infile = h5py.File(fname, 'r+')
         valiter = infile.itervalues()
         test_group = valiter.next()
@@ -400,7 +413,25 @@ def test_model(model_class):
     return not any(errs)
 
 def test_update_constraints():
-    pass
+    (actions, C, N, feat, margin, select_action, sample_state) = grid_test_fns()
+
+    expert_demos = gen_labels(sample_state, select_action)
+    mm_orig = MaxMarginModel(actions, C, N, feat, margin)
+    for (s, a) in expert_demos:
+        mm_orig.add_example(s, a)
+    mm_orig.save_constraints_to_file('test.h5')
+    MultiSlackMaxMarginModel.update_constraints_file('test.h5')
+    msmm_loaded = MultiSlackMaxMarginModel(actions, C, N, feat, margin)
+    msmm_loaded.load_constraints_from_file('test.h5')
+
+    msmm_orig = MultiSlackMaxMarginModel(actions, C, N, feat, margin)
+    for (s, a) in expert_demos:
+        msmm_orig.add_example(s, a)
+
+    msmm_loaded.optimize_model()
+    msmm_orig.optimize_model()
+    return not any(w1 - w2 > eps for w1, w2 in zip(msmm_loaded.weights, msmm_orig.weights))
+    
     
 
 if __name__ == '__main__':
@@ -409,7 +440,6 @@ if __name__ == '__main__':
 
     print 'Testing out multi-slack max margin model'
     if not test_model(MultiSlackMaxMarginModel): print 'Unit Test Failed'
-    
-    
-    
-                    
+
+    print 'Testing update constraints'
+    if not test_update_constraints(): print 'Unit Test Failed'
