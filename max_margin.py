@@ -64,8 +64,8 @@ class MaxMarginModel(object):
         return mm_model
 
     def populate_xi(self):
-        mm_model.xi = grb_model.getVarByName('xi')
-        mm_model.xi_val = None
+        self.xi = self.model.getVarByName('xi')
+        self.xi_val = None
 
     @property
     def C(self):
