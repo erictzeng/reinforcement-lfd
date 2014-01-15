@@ -1,0 +1,33 @@
+# The file containing expert examples.
+datafile: jobs/small/small_demos.h5
+
+# The file containing the bank of actions.
+actionfile: ../data/all.h5
+
+# Output from each remote machine will be collected into this folder.
+outfolder: jobs/small/out
+
+# The output file to create.
+outfile: jobs/small/small_constraints.h5
+
+# This will be created if it doesn't exist. Used to store splits that are distributed to machines,
+# where a "split" is the subset of examples that a particular core runs on.
+splitsdir: jobs/small/splits
+
+# This is the folder containing the scripts that will run on remote machines.
+payload: jobs/small/payload
+
+# For each server, specify host (the hostname), path (the directory to use on the remote, which
+# will be created if necessary), and cores (the number of cores to run with).
+servers:
+  - host: rll5.eecs.berkeley.edu
+    path: comp/small
+    cores: 1
+
+  - host: rll7.eecs.berkeley.edu
+    path: comp/small
+    cores: 1
+
+  - host: primus.banatao.berkeley.edu
+    path: comp/small
+    cores: 1
