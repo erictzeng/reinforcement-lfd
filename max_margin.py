@@ -27,7 +27,6 @@ class MaxMarginModel(object):
         self.model = grb.Model()
         self.actions = actions[:]
         self.N = N
-        self.C = C
         self.w = np.asarray([self.model.addVar(lb = -1*GRB.INFINITY, name = str(i)) 
                              for i in range(N)])
         self.weights = np.zeros(N)
@@ -35,11 +34,51 @@ class MaxMarginModel(object):
         self.xi_val = None
         self.model.update()
         # w'*w + C*xi
-        self.model.setObjective(np.dot(self.w, self.w) + self.C*self.xi)
+        self.model.setObjective(np.dot(self.w, self.w) + C*self.xi)
         self.model.update()
         self.feature_fn = feature_fn
         self.margin_fn = margin_fn
         self.constraints_cache = set()
+
+    @staticmethod
+    def read(fname, actions, feature_fn, margin_fn):
+        mm_model = MaxMarginModel.__new__(MaxMarginModel)
+        mm_model.actions = actions[:]
+        grb_model = grb.read(fname)
+        mm_model.model = grb_model
+        N = 0
+        w = []
+        while grb_model.getVarByName(str(N)) is not None:
+            w.append(grb_model.getVarByName(str(N)))
+            N += 1
+        mm_model.N = N
+        mm_model.w = np.asarray(w)
+        mm_model.weights = np.zeros(N)
+        mm_model.xi = grb_model.getVarByName('xi')
+        # ensure we're grabbing C correctly
+        grb_lin = grb_model.getObjective().getLinExpr()
+        assert grb_lin.getVar(0) is mm_model.xi
+        mm_model.C = grb_lin.getCoeff(0)
+        mm_model.xi_val = None
+        mm_model.feature_fn = feature_fn
+        mm_model.margin_fn = margin_fn
+        mm_model.constraints_cache = set()
+        return mm_model
+
+    @property
+    def C(self):
+        grb_lin = self.model.getObjective().getLinExpr()
+        assert grb_lin.getVar(0) is self.xi
+        return grb_lin.getCoeff(0)
+
+    @C.setter
+    def C(self, value):
+        new_obj = self.model.getObjective()
+        grb_lin = new_obj.getLinExpr()
+        grb_lin.remove(self.xi)
+        grb_lin.add(self.xi, value)
+        self.model.setObjective(new_obj)
+        self.model.update()
 
     def feature(self, s, a):
         return self.feature_fn(s, a)
@@ -55,7 +94,7 @@ class MaxMarginModel(object):
         # make sure the feature size is consistent with phi
         assert self.N == expert_action_phi.shape[0], "failed adding constraint: size of expert_action_phi is inconsistent with feature size"
         assert self.N == rhs_action_phi.shape[0], "failed adding constraint: size of rhs_action_phi is inconsistent with feature size"
-        
+
         lhs_coeffs = [(p, w) for p, w in zip(expert_action_phi, self.w) if abs(p) >= eps]
         lhs = grb.LinExpr(lhs_coeffs)
         rhs_coeffs = [(p, w) for w, p in zip(self.w, rhs_action_phi) if abs(p) >= eps]

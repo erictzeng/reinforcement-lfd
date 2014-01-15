@@ -7,16 +7,6 @@ and action data
 """
 
 import argparse
-usage="""
-To use bias features
-./rope_qlearn.py
-
-To use quadratic features
-./rope_qlearn.py --quad_features
-"""
-parser = argparse.ArgumentParser(usage=usage)
-parser.add_argument("--quad_features", action="store_true")
-args = parser.parse_args()
 
 import h5py
 import gurobipy as grb
@@ -25,6 +15,7 @@ from max_margin import MaxMarginModel
 from pdb import pm
 import numpy as np
 from joblib import Parallel, delayed
+import os.path
 import cProfile
 try:
     from rapprentice import registration, clouds
@@ -64,7 +55,7 @@ def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=F
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
         print "adding constraints"
-    max = 100
+    max = 1
     c = 0
     for key, group in expert_demofile.iteritems():
         if c > max: break
@@ -76,7 +67,7 @@ def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=F
             print 'adding constraints for:\t', action
         c += 1
         mm_model.add_example(state, action, verbose)
-        mm_model.clear_asm_cache()
+        #mm_model.clear_asm_cache()
         if outfile:
             mm_model.save_constraints_to_file(outfile)
 
@@ -315,24 +306,34 @@ def test_saving_model(mm_model):
         print "PASSED: Model saved and reloaded correctly"
 
 if __name__ == '__main__':
-    combine_expert_demo_files('data/expert_demos.h5', 'data/expert_demos_test.h5', 'data/combine_test.h5')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('constraintfile')
+    parser.add_argument('modelfile')
+    parser.add_argument('weightfile', nargs='?', default=None)
+    parser.add_argument("--quad_features", action="store_true")
+    parser.add_argument('--build_constraints', nargs=1, metavar='demofile')
+    args = parser.parse_args()
     if args.quad_features:
         print "using quadratic features"
         (feature_fn, num_features, act_file) = get_quad_feature_fn('data/all.h5')
     else:
         print "using bias features"
         (feature_fn, num_features, act_file) = get_bias_feature_fn('data/all.h5')
-    (margin_fn, act_file) = get_action_only_margin_fn(act_file)
     (margin_fn, act_file) = get_action_state_margin_fn(act_file)
     C = 1 # hyperparameter
-    # cProfile.run('rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, \'data/mm_constraints_1.h5\')')
 
-    # mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, 'data/mm_constraints_1.h5')
-    mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, 'data/mm_constraints_1.h5')
-    #add_constraints_from_demo(mm_model, 'expert_demos.h5', outfile='mm_constraints_1.h5', verbose=True)
-    # # comment this in to recompute features, be forewarned that it will be slow
-    # weights = mm_model.optimize_model()
-    # mm_model.save_weights_to_file("data/mm_weights_1.h5")
-    # print weights
-
-    test_saving_model(mm_model)
+    if args.build_constraints is not None:
+        print 'Building constraints into {}.'.format(args.constraintfile)
+        mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn)
+        add_constraints_from_demo(mm_model, args.build_constraints[0], outfile=args.constraintfile, verbose=True)
+    else:
+        if os.path.exists(args.modelfile):
+            print 'Found model: {}'.format(args.modelfile)
+            model = MaxMarginModel.read(args.modelfile, act_file.keys(), feature_fn, margin_fn)
+            model.optimize_model()
+        else:
+            print 'Building and optimizing model.'
+            mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, \
+                                             args.constraintfile)
+            mm_model.save_model(args.modelfile)
+            mm_model.optimize_model()
