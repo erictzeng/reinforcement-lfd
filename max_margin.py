@@ -259,6 +259,24 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
             outfile['weights'] = self.weights
             outfile['xi'] = self.xi_val
         outfile.close()
+
+    @staticmethod
+    def update_constraints_file(self, fname):
+        infile = h5py.File(fname, 'r+')
+        valiter = infile.itervalues()
+        test_group = valiter.next()
+        if 'xi' in test_group:
+            infile.close()
+            return
+        prev_exp_phi = None
+        counter = 0
+        for key, constr in infile.iteritems():
+            exp_phi = constr['exp_features'][:]
+            if prev_exp_phi != exp_phi:
+                xi_name = 'xi_{}'.format(counter)
+                counter += 1
+            constr['xi'] = str(xi_name)
+        infile.close()
         
     def load_constraints_from_file(self, fname):
         """
@@ -300,7 +318,7 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         except grb.GurobiError:
             raise RuntimeError, "issue with optimizing model, check gurobi optimizer output"
 
-def test_model(model_class):
+def grid_test_fns():
     """
     Test Example: 2d grid -- 
     3 Actions: 
@@ -309,6 +327,7 @@ def test_model(model_class):
          2: [0, 0]
     The right action to take is the closest one
     """
+
     actions = [(5, 5), (10, 10), (0, 0)]
     N = 4
     C = .1
@@ -326,13 +345,22 @@ def test_model(model_class):
     def select_action(s):
         vals = [np.linalg.norm(s - a) for a in actions]
         return actions[np.argmin(vals)]
+    def sample_state():
+        return np.asarray([random.random()*10 for i in range(2)])
+    return (actions, C, N, feat, margin, select_action, sample_state)
 
-    expert_demos = []
-    for j in range(100):
-        s = np.asarray([random.random()*10 for i in range(2)])
+def gen_labels(sample_state, select_action, N = 100):
+    exp_demos = []
+    for j in range(N):
+        s = sample_state()
         a = select_action(s)
-        expert_demos.append((s, a))
+        exp_demos.append((s, a))
+    return exp_demos
 
+def test_model(model_class):
+    (actions, C, N, feat, margin, select_action, sample_state) = grid_test_fns()
+
+    expert_demos = gen_labels(sample_state, select_action)
     mm = model_class(actions, C, N, feat, margin)
 
     for (s, a) in expert_demos:
@@ -343,7 +371,7 @@ def test_model(model_class):
     expert_actions = []
     learned_actions = []
     for j in range(100):
-        s = np.asarray([random.random()*10 for i in range(2)])
+        s = sample_state()
         expert_actions.append(select_action(s))
         learned_actions.append(mm.best_action(s)[1])
 
@@ -370,6 +398,9 @@ def test_model(model_class):
     print 'xi', mm.xi_val
     errs = [x > eps for x in [load_weight_diff, load_xi_diff, recomputed_weight_diff]]
     return not any(errs)
+
+def test_update_constraints():
+    pass
     
 
 if __name__ == '__main__':
