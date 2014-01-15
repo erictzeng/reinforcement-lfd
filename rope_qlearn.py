@@ -11,7 +11,7 @@ import argparse
 import h5py
 import gurobipy as grb
 import IPython as ipy
-from max_margin import MaxMarginModel
+from max_margin import MaxMarginModel, MultiSlackMaxMarginModel
 from pdb import pm
 import numpy as np
 from joblib import Parallel, delayed
@@ -27,19 +27,7 @@ except:
 
 DS_SIZE = .025
 
-def rope_max_margin_model(actionfile, C, N, feature_fn, margin_fn, constraints = None):    
-    """
-    returns a handle to an optimization model that comptues uses a max margin
-    approach to learn a q function
-    can include use precomputed constraints if specified
-    """
-    actions = actionfile.keys() # feature_fn takes a seg name and 
-    # computes appropriately (so we don't spend a bunch of time copying over
-    # clouds and hmat lists
-    mm_model = MaxMarginModel(actions, C, N, feature_fn, margin_fn)        
-    if constraints:
-        mm_model.load_constraints_from_file(constraints)
-    return mm_model
+# rip rope_max_margin_model, you will not be missed --eric 1/14/2014
 
 def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=False):
     """
@@ -321,10 +309,11 @@ if __name__ == '__main__':
         (feature_fn, num_features, act_file) = get_bias_feature_fn('data/all.h5')
     (margin_fn, act_file) = get_action_state_margin_fn(act_file)
     C = 1 # hyperparameter
+    actions = act_file.keys()
 
     if args.build_constraints is not None:
         print 'Building constraints into {}.'.format(args.constraintfile)
-        mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn)
+        mm_model = MaxMarginModel(actions, C, num_features, feature_fn, margin_fn)
         add_constraints_from_demo(mm_model, args.build_constraints[0], outfile=args.constraintfile, verbose=True)
     else:
         if os.path.exists(args.modelfile):
@@ -333,7 +322,7 @@ if __name__ == '__main__':
             model.optimize_model()
         else:
             print 'Building and optimizing model.'
-            mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, \
-                                             args.constraintfile)
+            mm_model = MultiSlackMaxMarginModel(actions, C, num_features, feature_fn, margin_fn)
+            mm_model.load_constraints_from_file(args.constraintfile)
             mm_model.save_model(args.modelfile)
             mm_model.optimize_model()
