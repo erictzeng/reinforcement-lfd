@@ -44,8 +44,7 @@ class MaxMarginModel(object):
         self.constraints_cache = set()
 
     @staticmethod
-    def read(fname, actions, feature_fn, margin_fn):
-        mm_model = MaxMarginModel.__new__(MaxMarginModel)
+    def read_helper(mm_model, fname, actions, feature_fn, margin_fn):
         mm_model.actions = actions[:]
         grb_model = grb.read(fname)
         mm_model.model = grb_model
@@ -61,6 +60,11 @@ class MaxMarginModel(object):
         mm_model.feature_fn = feature_fn
         mm_model.margin_fn = margin_fn
         mm_model.constraints_cache = set()
+
+    @staticmethod
+    def read(fname, actions, feature_fn, margin_fn):
+        mm_model = MaxMarginModel.__new__(MaxMarginModel)
+        MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
         return mm_model
 
     def populate_xi(self):
@@ -72,7 +76,7 @@ class MaxMarginModel(object):
         return self._C
     @C.setter
     def C(self, value):
-        self._C = C
+        self._C = value
         self.xi.Obj = value
         self.model.update()
 
@@ -198,6 +202,12 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         self.xi = []            #  list to keep track of slack variables
         self.xi_val = []
 
+    @staticmethod
+    def read(fname, actions, feature_fn, margin_fn):
+        mm_model = MultiSlackMaxMarginModel.__new__(MultiSlackMaxMarginModel)
+        MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
+        return mm_model
+
     def populate_xi(self):
         self.xi = []
         next_xi = self.model.getVarByName('xi_0')
@@ -275,26 +285,27 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
 
     @staticmethod
     def update_constraints_file(fname):
+        def get_abbr_tuple(exp_features):
+            return (exp_features[0], exp_features[1:].tolist().index(1))
         infile = h5py.File(fname, 'r+')
         valiter = infile.itervalues()
         test_group = valiter.next()
         if 'xi' in test_group:
             infile.close()
             return
-        prev_exp_phi = None
-        counter = 0
+        xi_names = {}
         for key, constr in infile.iteritems():
-            exp_phi = constr['exp_features'][:]
-            if prev_exp_phi != exp_phi:
-                xi_name = 'xi_{}'.format(counter)
-                counter += 1
-            constr['xi'] = str(xi_name)
+            exp_tuple = get_abbr_tuple(constr['exp_features'][:])
+            if exp_tuple not in xi_names:
+                xi_names[exp_tuple] = 'xi_{}'.format(len(xi_names))
+            constr['xi'] = str(xi_names[exp_tuple])
         infile.close()
         
     def load_constraints_from_file(self, fname):
         """
         loads the contraints from the file indicated and adds them to the optimization problem
         """
+        MultiSlackMaxMarginModel.update_constraints_file(fname)
         infile = h5py.File(fname, 'r')
         slack_names = {}
         for key, constr in infile.iteritems():

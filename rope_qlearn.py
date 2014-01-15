@@ -307,7 +307,10 @@ def select_feature_fn(args):
 def build_constraints(args):
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Building constraints into {}.'.format(args.constraintfile)
-    mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
+    if args.multi_slack:
+        mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
+    else:
+        mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     add_constraints_from_demo(mm_model,
                               args.demofile,
                               outfile=args.constraintfile,
@@ -316,22 +319,30 @@ def build_constraints(args):
 def build_model(args):
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Building model into {}.'.format(args.modelfile)
-    mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
+    if args.multi_slack:
+        mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
+    else:
+        mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     mm_model.load_constraints_from_file(args.constraintfile)
     mm_model.save_model(args.modelfile)
 
 def optimize_model(args):
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Found model: {}'.format(args.modelfile)
-    model = MaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
-    model.C = args.C
-    model.optimize_model()
+    if args.multi_slack:
+        mm_model = MultiSlackMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
+    else:
+        mm_model = MaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
+    mm_model.C = args.C
+    mm_model.optimize_model()
+    mm_model.save_weights_to_file(args.weightfile)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument('--C', '-c', type=float, default=1)
+    parser.add_argument("--multi_slack", action="store_true")
 
     # build-constraints subparser
     parser_build_constraints = subparsers.add_parser('build-constraints')
