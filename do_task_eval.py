@@ -2,27 +2,27 @@
 
 import pprint
 import argparse
-usage="""
-To evaluate holdout set
-./do_task_eval.py /home/alex/rll/data/overhand/all.h5 --fake_data_segment=demo1-seg00 --animation=0 --simulation=1 --select_manual --results_outfile=expert_demos_test.h5
-or
-./do_task_eval.py /home/alex/rll/data/overhand/all.h5 --fake_data_segment=demo1-seg00 --animation=1 --simulation=1 --select_manual --results_outfile=expert_demos_test.h5
-"""
 
-parser = argparse.ArgumentParser(usage=usage)
-parser.add_argument("h5file", type=str)
+parser = argparse.ArgumentParser()
+# relevant options
+parser.add_argument('demofile', nargs='?', default='data/all.h5')
+parser.add_argument('actionfile', nargs='?', default='data/all.h5')
+parser.add_argument('holdoutfile', nargs='?', default='data/holdout_set.h5')
+parser.add_argument("weightfile", type=str)
+parser.add_argument("resultfile", type=str)
+parser.add_argument("--quad_features", action="store_true")
+parser.add_argument("--fake_data_segment",type=str, default='demo1-seg00')
+parser.add_argument("--animation", type=int, default=0)
+parser.add_argument("--simulation", type=int, default=1)
+
 parser.add_argument("--cloud_proc_func", default="extract_red")
 parser.add_argument("--cloud_proc_mod", default="rapprentice.cloud_proc_funcs")
     
 parser.add_argument("--execution", type=int, default=0)
-parser.add_argument("--animation", type=int, default=0)
-parser.add_argument("--simulation", type=int, default=0)
 parser.add_argument("--parallel", type=int, default=1)
 
 parser.add_argument("--prompt", action="store_true")
-parser.add_argument("--select_manual", action="store_true")
 
-parser.add_argument("--fake_data_segment",type=str)
 parser.add_argument("--fake_data_transform", type=float, nargs=6, metavar=("tx","ty","tz","rx","ry","rz"),
     default=[0,0,0,0,0,0], help="translation=(tx,ty,tz), axis-angle rotation=(rx,ry,rz)")
 parser.add_argument("--sim_init_perturb_radius", type=float, default=None)
@@ -36,7 +36,6 @@ parser.add_argument("--only_examples_from_list", type=str)
 parser.add_argument("--lookahead", type=int, default=1)
 parser.add_argument("--interactive",action="store_true")
 parser.add_argument("--log", type=str, default="", help="")
-parser.add_argument("--results_outfile", type=str, default=None)
 
 args = parser.parse_args()
 
@@ -642,7 +641,7 @@ from rope_qlearn import *
 import matplotlib
 import pylab
 def main():
-    demofile = h5py.File(args.h5file, 'r')
+    demofile = h5py.File(args.demofile, 'r')
     
     trajoptpy.SetInteractive(args.interactive)
 
@@ -671,17 +670,16 @@ def main():
 
     #####################
 #     combine_expert_demo_files('data/expert_demos.h5', 'data/expert_demos_test.h5', 'data/combine_test.h5')
-    (feature_fn, num_features, act_file) = get_bias_feature_fn('data/all.h5')
-#     (margin_fn, act_file) = get_action_only_margin_fn(act_file)
-#     C = 1 # hyperparameter
-    
-#     mm_model = rope_max_margin_model(act_file, C, num_features, feature_fn, margin_fn, 'data/mm_constraints_1.h5')
-#     weights = mm_model.optimize_model()
+    if args.quad_features:
+        print 'Using quadratic features.'
+        feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile)
+    else:
+        print 'Using bias features.'
+        feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile)
 
-    #weight_file = h5py.File("data/mm_weights_1.npy", 'r')
-    weight_file = h5py.File("data/nearest_neighbor_weights.h5", 'r')
-    weights = weight_file['weights'][:]
-    weight_file.close()
+    weightfile = h5py.File(args.weightfile, 'r')
+    weights = weightfile['weights'][:]
+    weightfile.close()
     
     actions = act_file.keys()
     def best_action(s):
@@ -689,13 +687,12 @@ def main():
         return (besti, actions[besti])
     
     #####################
-    result_fname = "data/eval/baseline/holdout_result.h5"
-    holdout_file = h5py.File("data/holdout_set.h5", 'r')
+    holdoutfile = h5py.File(args.holdoutfile, 'r')
 
     num_steps = 5
             
     curr_step = 0
-    for i_task, demo_id_rope_nodes in holdout_file.iteritems():
+    for i_task, demo_id_rope_nodes in holdoutfile.iteritems():
         curr_step += 1
         rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
 
@@ -717,13 +714,13 @@ def main():
             if args.animation:
                 Globals.viewer.Step()
 
-        result_file = h5py.File(result_fname, 'a')
+        result_file = h5py.File(args.resultfile, 'a')
         if i_task in result_file:
             del result_file[i_task]
         result_file.create_group(i_task)
         
         for i_step in range(num_steps):
-            print "step ", i_step
+            print "task ", curr_step, " step ", i_step
             
             new_xyz = Globals.sim.observe_cloud()
     
@@ -733,7 +730,7 @@ def main():
             ################################    
             redprint("Finding closest demonstration")
     
-            seg_name = best_action(new_xyz)[1]
+            seg_name = best_action(("",new_xyz))[1] # TODO why is state a tuple?
             
             (success, result) = simulate_demo(new_xyz, demofile, seg_name, reset_rope=None, animate=args.animation, pause=False)
         
