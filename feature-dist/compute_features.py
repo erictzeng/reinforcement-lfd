@@ -37,16 +37,15 @@ def copy_indices(datafile, indices, outfname):
     print "Skipped {} endstates.".format(num_skipped)
 
 def pack_payload(conf):
-    path = conf['payload']
-    #tarname = conf['payload_tar']
+    info = conf['payload']
+    path = info['path']
     fnames = [os.path.join(path, fname) for fname in os.listdir(path)]
     tartemp = tempfile.NamedTemporaryFile(suffix='.tar')
-    #tartemp = open(tarname, 'wb')
-    print tartemp.name
     with tarfile.open(mode='w', fileobj=tartemp) as tar:
         for fname in fnames:
             tar.add(fname, arcname=os.path.relpath(fname, path))
-        tar.add(conf['actionfile'], arcname='data/all.h5')
+        for fileinfo in info['additional-files']:
+            tar.add(fileinfo['path'], arcname=fileinfo['archive-name'])
     assert os.path.exists(tartemp.name)
     return tartemp
 
