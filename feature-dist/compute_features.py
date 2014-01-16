@@ -3,6 +3,8 @@ import h5py
 import paramiko
 import yaml
 
+import argparse
+from collections import defaultdict
 import errno
 import getpass
 import glob
@@ -15,6 +17,11 @@ def read_conf(confpath):
     with open(confpath, 'r') as conffile:
          conf = yaml.safe_load(conffile)
     return conf
+
+def read_logins(loginpath):
+    with open(loginpath, 'r') as loginfile:
+        loginconf = yaml.safe_load(loginfile)
+    return defaultdict(lambda: None, loginconf)
 
 def split_data(datafname, outfolder, n):
     if not os.path.exists(outfolder):
@@ -64,25 +71,31 @@ def rexists(sftp, path):
         raise
     return True
 
-def check_remote_overwrites(conf, password=None):
-    problems = []
+def check_remote_overwrites(conf, logins=None, password=None):
+    if logins is None:
+        logins = defaultdict(lambda: None)
+    hosts, paths = [], []
     for server in conf['servers']:
         client = paramiko.SSHClient()
         client.load_system_host_keys()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(server['host'], password=password)
+        username = logins[server['host']]
+        client.connect(server['host'], username=username, password=password)
         sftp = client.open_sftp()
         exists = rexists(sftp, server['path'])
         sftp.close()
         if exists:
-            problems.append((server['host'], server['path']))
-    return problems
+            hosts.append(server['host'])
+            paths.append(server['path'])
+    return hosts, paths
 
-def distribute_jobs(conf, password=None):
+def distribute_jobs(conf, logins=None, password=None, overwrite=False):
+    if logins is None:
+        logins = defaultdict(lambda: None)
     servers = conf['servers']
-    problems = check_remote_overwrites(conf, password)
-    if problems:
-        for host, path in problems:
+    problem_hosts, problem_paths = check_remote_overwrites(conf, logins=logins, password=password)
+    if problem_hosts and not overwrite:
+        for host, path in zip(problem_hosts, problem_paths):
             print 'ERROR: {} on {} already exists!'.format(path, host)
         print 'Terminating.'
         exit(1)
@@ -96,7 +109,11 @@ def distribute_jobs(conf, password=None):
         client = paramiko.SSHClient()
         client.load_system_host_keys()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(server['host'], password=password)
+        username = logins[server['host']]
+        client.connect(server['host'], username=username, password=password)
+        if server['host'] in problem_hosts and overwrite:
+            _, stdout, _ = client.exec_command('rm -rf {}'.format(server['path']))
+            stdout.readlines()
         _, stdout, _ = client.exec_command('mkdir -p {}'.format(server['path']))
         stdout.readlines()
         sftp = client.open_sftp()
@@ -117,9 +134,11 @@ def distribute_jobs(conf, password=None):
     print "Waiting for servers to finish..."
     [stdout.readlines() for stdout in stdouts]
     print "Done. Collecting results..."
-    collect_results(conf, password=password)
+    collect_results(conf, logins=logins, password=password)
 
-def collect_results(conf, password=None):
+def collect_results(conf, logins=None, password=None):
+    if logins is None:
+        logins = defaultdict(lambda: None)
     if not os.path.exists(conf['outfolder']):
         os.makedirs(conf['outfolder'])
     for server in conf['servers']:
@@ -127,7 +146,8 @@ def collect_results(conf, password=None):
         client = paramiko.SSHClient()
         client.load_system_host_keys()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(server['host'], password=password)
+        username = logins[server['host']]
+        client.connect(server['host'], username=username, password=password)
         sftp = client.open_sftp()
         fnames = sftp.listdir(os.path.join(server['path'], 'out'))
         for fname in fnames:
@@ -142,15 +162,16 @@ def collect_results(conf, password=None):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        print 'Distribute constraint computation across multiple machines.'
-        print
-        print 'python compute_features.py CONF'
-        print
-        print 'CONF should be a .yml file -- see servers.yml for an example.'
-        exit(1)
-    ymlfile = sys.argv[1]
-    conf = read_conf(ymlfile)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('serverconf')
+    parser.add_argument('loginconf', nargs='?', default='logins.yml')
+    parser.add_argument('--overwrite', action='store_true', default=False)
+    args = parser.parse_args()
+    logins = defaultdict(lambda: None)
+    if os.path.exists(args.loginconf):
+        print 'Using login information in {}.'.format(args.loginconf)
+        logins = read_logins(args.loginconf)
+    conf = read_conf(args.serverconf)
     pw = getpass.getpass()
-    distribute_jobs(conf, password=pw)
+    distribute_jobs(conf, logins=logins, password=pw, overwrite=args.overwrite)
 
