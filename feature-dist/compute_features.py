@@ -73,8 +73,8 @@ def rexists(sftp, path):
 
 def check_remote_overwrites(conf, logins=None, password=None):
     if logins is None:
-        logins = {}
-    problems = []
+        logins = defaultdict(lambda: None)
+    hosts, paths = [], []
     for server in conf['servers']:
         client = paramiko.SSHClient()
         client.load_system_host_keys()
@@ -85,16 +85,17 @@ def check_remote_overwrites(conf, logins=None, password=None):
         exists = rexists(sftp, server['path'])
         sftp.close()
         if exists:
-            problems.append((server['host'], server['path']))
-    return problems
+            hosts.append(server['host'])
+            paths.append(server['path'])
+    return hosts, paths
 
-def distribute_jobs(conf, logins=None, password=None):
+def distribute_jobs(conf, logins=None, password=None, overwrite=False):
     if logins is None:
-        logins = {}
+        logins = defaultdict(lambda: None)
     servers = conf['servers']
-    problems = check_remote_overwrites(conf, logins=logins, password=password)
-    if problems:
-        for host, path in problems:
+    problem_hosts, problem_paths = check_remote_overwrites(conf, logins=logins, password=password)
+    if problem_hosts and not overwrite:
+        for host, path in zip(problem_hosts, problem_paths):
             print 'ERROR: {} on {} already exists!'.format(path, host)
         print 'Terminating.'
         exit(1)
@@ -110,6 +111,9 @@ def distribute_jobs(conf, logins=None, password=None):
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         username = logins[server['host']]
         client.connect(server['host'], username=username, password=password)
+        if server['host'] in problem_hosts and overwrite:
+            _, stdout, _ = client.exec_command('rm -rf {}'.format(server['path']))
+            stdout.readlines()
         _, stdout, _ = client.exec_command('mkdir -p {}'.format(server['path']))
         stdout.readlines()
         sftp = client.open_sftp()
@@ -134,7 +138,7 @@ def distribute_jobs(conf, logins=None, password=None):
 
 def collect_results(conf, logins=None, password=None):
     if logins is None:
-        logins = {}
+        logins = defaultdict(lambda: None)
     if not os.path.exists(conf['outfolder']):
         os.makedirs(conf['outfolder'])
     for server in conf['servers']:
@@ -161,12 +165,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('serverconf')
     parser.add_argument('loginconf', nargs='?', default='logins.yml')
+    parser.add_argument('--overwrite', action='store_true', default=False)
     args = parser.parse_args()
-    logins = {}
+    logins = defaultdict(lambda: None)
     if os.path.exists(args.loginconf):
         print 'Using login information in {}.'.format(args.loginconf)
         logins = read_logins(args.loginconf)
     conf = read_conf(args.serverconf)
     pw = getpass.getpass()
-    distribute_jobs(conf, logins=logins, password=pw)
+    distribute_jobs(conf, logins=logins, password=pw, overwrite=args.overwrite)
 
