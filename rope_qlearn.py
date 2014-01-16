@@ -8,13 +8,14 @@ and action data
 
 import argparse
 
-import h5py
+import h5py, math
 import gurobipy as grb
 import IPython as ipy
 from max_margin import MaxMarginModel, MultiSlackMaxMarginModel
 from pdb import pm
 import numpy as np
 from joblib import Parallel, delayed
+import scipy.spatial as sp_spat
 import os.path
 import cProfile
 try:
@@ -26,12 +27,12 @@ except:
     use_rapprentice = False
 
 DS_SIZE = .025
-GRIPPER_OPEN_CLOSE_THRESH = 0.4
+GRIPPER_OPEN_CLOSE_THRESH = 0.04
 
 # constants for shape context
-R_MIN, P_MIN, T_MIN = 0.1, 1.3, -0.5
-R_MAX, P_MAX, T_MAX = 0.15, 2.2, 0.5
-R_BINS, P_BINS, T_BINS = 2, 4, 6
+R_MIN, P_MIN, T_MIN = 0, 0, np.pi/2.0
+R_MAX, P_MAX, T_MAX = 0.15, np.pi, np.pi
+R_BINS, P_BINS, T_BINS = 2, 4, 4
 DENSITY_RADIUS = .2
 
 
@@ -220,8 +221,6 @@ class ActionSet(object):
         return (self.action_only_margin(a1, a2) +
                 self.action_state_margin(a1, a2, state))
 
-
-
 #http://stackoverflow.com/questions/4116658/faster-numpy-cartesian-to-spherical-coordinate-conversion
 def cart2spherical(xyz):
     xyz = np.asarray(xyz)
@@ -229,8 +228,12 @@ def cart2spherical(xyz):
     xy = xyz[:,0]**2 + xyz[:,1]**2
     ptsnew[:,0] = np.sqrt(xy + xyz[:,2]**2)
     ptsnew[:,1] = np.arctan2(xyz[:,1], xyz[:,0])
+    ptsnew[ptsnew[:,1] < 0] += 2*np.pi
     ptsnew[:,2] = np.arctan2(np.sqrt(xy), xyz[:,2]) # for elevation angle defined from Z-axis down
     return ptsnew
+
+def get_sect_vol((r1, r2), (t1, t2), (p1, p2)):
+    return (r2**3 - r1**3)/3 * (t2 - t1) * (-math.cos(p2) + math.cos(p1))
 
 def gripper_frame_shape_context(xyz, hmat):
     h_inv = np.linalg.inv(hmat)
@@ -391,7 +394,13 @@ def select_feature_fn(args):
     actions = act_file.keys()
     return feature_fn, margin_fn, num_features, actions
 
+def test_sc_features(args):
+    feature_fn, num_features, act_file = get_sc_feature_fn(args.actionfile)
+    for name, seg_info in act_file.iteritems():
+        print feature_fn([name, clouds.downsample(seg_info['cloud_xyz'], DS_SIZE)], name)
+
 def build_constraints(args):
+    test_sc_features(args)
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Building constraints into {}.'.format(args.constraintfile)
     if args.multi_slack:
