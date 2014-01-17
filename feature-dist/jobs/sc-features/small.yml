@@ -2,18 +2,18 @@
 datafile: jobs/small/small_demos.h5
 
 # Output from each remote machine will be collected into this folder.
-outfolder: jobs/small/out
+outfolder: jobs/sc-features/out
 
 # The output file to create.
-outfile: jobs/small/small_constraints.h5
+outfile: jobs/sc-features/small_constraints.h5
 
 # This will be created if it doesn't exist. Used to store splits that are distributed to machines,
 # where a "split" is the subset of examples that a particular core runs on.
-splitsdir: jobs/small/splits
+splitsdir: jobs/sc-features/splits
 
 # This is the folder containing the scripts that will run on remote machines.
 payload:
-  path: jobs/small/payload
+  path: jobs/sc-features/payload
   additional-files:  # include additional files in the payload that aren't in the payload folder
     - path: ../data/all.h5  # path to file on disk
       archive-name: data/all.h5  # path inside the payload archive
@@ -22,13 +22,13 @@ payload:
 # will be created if necessary), and cores (the number of cores to run with).
 servers:
   - host: rll5.eecs.berkeley.edu
-    path: comp/small
+    path: comp/sc-features-small
     cores: 1
 
   - host: rll7.eecs.berkeley.edu
-    path: comp/small
+    path: comp/sc-features-small
     cores: 1
 
   - host: primus.banatao.berkeley.edu
-    path: comp/small
+    path: comp/sc-features-small
     cores: 1
