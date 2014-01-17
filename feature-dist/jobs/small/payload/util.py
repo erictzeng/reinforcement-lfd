@@ -5,31 +5,6 @@ import operator
 import types
 import numpy as np
 import h5py
-import IPython as ipy
-import os 
-
-# Define a context manager to suppress stdout
-class suppress_stdout(object):
-    '''
-    A context manager for doing a "deep suppression" of stdout in 
-    Python, i.e. will suppress all print, even if the print originates in a 
-    compiled C/Fortran sub-function.
-    '''
-    def __init__(self):
-        # Open a null file
-        self.null_fds =  os.open(os.devnull,os.O_RDWR)
-        # Save the actual stdout file descriptor
-        self.save_fds = os.dup(1)
-
-    def __enter__(self):
-        # Assign the null pointers to stdout
-        os.dup2(self.null_fds,1)
-
-    def __exit__(self, *_):
-        # Re-assign the real stdout back
-        os.dup2(self.save_fds,1)
-        # Close the null file
-        os.close(self.null_fds)
 
 class Transform(object):
     """
@@ -854,8 +829,6 @@ def pop(x):
             return None
 
 def isIterable(x):
-    if type(x) in (str, unicode):
-        return False
     try:
         x_iter = iter(x)
         return True

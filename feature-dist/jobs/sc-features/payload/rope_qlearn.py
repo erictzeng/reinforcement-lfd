@@ -52,7 +52,7 @@ def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=F
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
         print "adding constraints"
-    max = float('inf')
+    max = 1
     c = 0
     for key, group in expert_demofile.iteritems():
         if c > max: break
@@ -400,6 +400,7 @@ def test_sc_features(args):
         print feature_fn([name, clouds.downsample(seg_info['cloud_xyz'], DS_SIZE)], name)
 
 def build_constraints(args):
+    test_sc_features(args)
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Building constraints into {}.'.format(args.constraintfile)
     if args.multi_slack:
