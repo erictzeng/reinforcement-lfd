@@ -42,6 +42,8 @@ def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile
     """
     computes all the constraints associated with expert_demofile, output is consistent with files saved
     from max_margin.MultiSlackMaxMarginModel
+
+    still needs a little testing
     """
     if type(expert_demofile) is str:
         expert_demofile = h5py.File(expert_demofile, 'r')
