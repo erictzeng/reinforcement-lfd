@@ -400,6 +400,7 @@ def test_sc_features(args):
         print feature_fn([name, clouds.downsample(seg_info['cloud_xyz'], DS_SIZE)], name)
 
 def build_constraints(args):
+    test_sc_features(args)
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Building constraints into {}.'.format(args.constraintfile)
     if args.multi_slack:
