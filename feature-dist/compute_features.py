@@ -157,7 +157,7 @@ def collect_results(conf, logins=None, password=None):
     final_outfile = h5py.File(conf['outfile'], 'w')
     i = 0
     for outfile in outfiles:
-        i += add_to_end(final_outfile, h5py.File(outfile, 'r'), i)
+        i = add_to_end(final_outfile, h5py.File(outfile, 'r'), i)
     print "Final results in {}.".format(conf['outfile'])
 
 
