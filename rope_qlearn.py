@@ -52,7 +52,7 @@ def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=F
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
         print "adding constraints"
-    max = 1
+    max = float('inf')
     c = 0
     for key, group in expert_demofile.iteritems():
         if c > max: break
