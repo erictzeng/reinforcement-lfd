@@ -176,19 +176,10 @@ def simulate_demo(new_xyz, seg_info, animate=False):
     old_xyz = clouds.downsample(old_xyz, DS_SIZE)
     new_xyz = clouds.downsample(new_xyz, DS_SIZE)
     
-    scaled_old_xyz, src_params = registration.unit_boxify(old_xyz)
-    scaled_new_xyz, targ_params = registration.unit_boxify(new_xyz)        
-    f,_ = registration.tps_rpm_bij(scaled_old_xyz, scaled_new_xyz, plot_cb = tpsrpm_plot_cb,
-                                   plotting=5 if animate else 0,rot_reg=np.r_[1e-4,1e-4,1e-1], n_iter=50, reg_init=10, reg_final=.1)
-    f = registration.unscale_tps(f, src_params, targ_params)
+    link_names = ["%s_gripper_tool_frame"%lr for lr in ('lr')]
+    hmat_list = [(lr, seg_info[ln]['hmat']) for lr, ln in zip('lr', link_names)]
+    lr2eetraj = warp_hmats(old_xyz, new_xyz, hmat_list)[0]
 
-    link2eetraj = {}
-    for lr in 'lr':
-        link_name = "%s_gripper_tool_frame"%lr
-        old_ee_traj = asarray(seg_info[link_name]["hmat"])
-        new_ee_traj = f.transform_hmats(old_ee_traj)
-        link2eetraj[link_name] = new_ee_traj
-        
     miniseg_starts, miniseg_ends = split_trajectory_by_gripper(seg_info)    
     success = True
     print colorize.colorize("mini segments:", "red"), miniseg_starts, miniseg_ends
@@ -220,7 +211,7 @@ def simulate_demo(new_xyz, seg_info, animate=False):
             old_joint_traj_rs = mu.interp2d(timesteps_rs, np.arange(len(old_joint_traj)), old_joint_traj)
             
             ee_link_name = "%s_gripper_tool_frame"%lr
-            new_ee_traj = link2eetraj[ee_link_name][i_start:i_end+1]          
+            new_ee_traj = lr2eetraj[lr][i_start:i_end+1]          
             new_ee_traj_rs = resampling.interp_hmats(timesteps_rs, np.arange(len(new_ee_traj)), new_ee_traj)
             print "planning trajectory following"
             with util.suppress_stdout():
@@ -362,11 +353,10 @@ class Globals:
 if __name__ == "__main__":
     """
     example command:
-    ./do_task_eval.py data/multi_quad_weights_100005 --quad_features --animation=1 --old_features
+    ./do_task_eval.py data/multi_quad_weights_10000.h5 --quad_features --animation=1 --old_features
     """
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('demofile', nargs='?', default='data/all.h5')
     parser.add_argument('actionfile', nargs='?', default='data/all.h5')
     parser.add_argument('holdoutfile', nargs='?', default='data/holdout_set.h5')
     parser.add_argument("weightfile", type=str)
@@ -390,8 +380,6 @@ if __name__ == "__main__":
 
     if args.random_seed is not None: np.random.seed(args.random_seed)
 
-    demofile = h5py.File(args.demofile, 'r')
-    
     trajoptpy.SetInteractive(args.interactive)
 
     if not args.log:
@@ -408,7 +396,9 @@ if __name__ == "__main__":
     Globals.env.Load("robots/pr2-beta-static.zae")
     Globals.robot = Globals.env.GetRobots()[0]
 
-    init_rope_xyz, _ = load_fake_data_segment(demofile, args.fake_data_segment, args.fake_data_transform) # this also sets the torso (torso_lift_joint) to the height in the data
+    actionfile = h5py.File(args.actionfile, 'r')
+    
+    init_rope_xyz, _ = load_fake_data_segment(actionfile, args.fake_data_segment, args.fake_data_transform) # this also sets the torso (torso_lift_joint) to the height in the data
     table_height = init_rope_xyz[:,2].mean() - .02
     table_xml = make_table_xml(translation=[1, 0, table_height], extents=[.85, .55, .01])
     Globals.env.LoadData(table_xml)
@@ -429,26 +419,26 @@ if __name__ == "__main__":
     #####################
     if args.quad_features:
         print 'Using quadratic features.'
-        feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile, args.old_features)
+        feature_fn, num_features, _ = get_quad_feature_fn(actionfile, args.old_features)
     else:
         print 'Using bias features.'
-        feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile, args.old_features)
+        feature_fn, num_features, _ = get_bias_feature_fn(actionfile, args.old_features)
+    actions = actionfile.keys()
 
     weightfile = h5py.File(args.weightfile, 'r')
     weights = weightfile['weights'][:]
     weightfile.close()
-
     assert weights.shape[0] == num_features, "Dimensions of weights and features don't match. Make sure the right feature is being used"
     
-    save_results = args.resultfile is not None
-
-    actions = act_file.keys()
-    def best_action(s):
-        besti = np.argmax([np.dot(weights, feature_fn(s, a)) for a in actions])
-        return (besti, actions[besti])
-    
-    #####################
     holdoutfile = h5py.File(args.holdoutfile, 'r')
+
+    save_results = args.resultfile is not None
+    
+    unique_id = 0
+    def get_unique_id():
+        global unique_id
+        unique_id += 1
+        return unique_id-1
 
     tasks = [] if args.tasks is None else args.tasks
     if args.taskfile is not None:
@@ -481,12 +471,13 @@ if __name__ == "__main__":
 
             redprint("Observe point cloud")
             new_xyz = Globals.sim.observe_cloud()
+            state = ("eval_%i"%get_unique_id(), new_xyz)
     
             redprint("Finding closest demonstration")
-            seg_name = best_action(("",new_xyz))[1]
+            best_action = actions[np.argmax([np.dot(weights, feature_fn(state, action)) for action in actions])]
             
-            redprint("Simulating segment %s"%(seg_name))
-            success = simulate_demo(new_xyz, demofile[seg_name], animate=args.animation)
+            redprint("Simulating action %s"%(best_action))
+            success = simulate_demo(new_xyz, actionfile[best_action], animate=args.animation)
             
             if save_results:
                 result_file[i_task][str(i_step)] = Globals.sim.observe_cloud()

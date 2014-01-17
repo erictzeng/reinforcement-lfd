@@ -202,7 +202,7 @@ class ActionSet(object):
     def bias_features(self, state, action, old = False):
         feat = np.zeros(self.num_actions + 1)
         if old:
-            feat[0] = registration_cost(state[1], self.get_ds_cloud(action))
+            feat[0] = registration_cost_old(state[1], self.get_ds_cloud(action))
         else:
             (_, feat[0]) = self._warp_hmats(state, action)
         feat[self.action_to_ind[action]+1] = 1
@@ -211,7 +211,7 @@ class ActionSet(object):
     def quad_features(self, state, action, old = False):
         feat = np.zeros(2 + 2*self.num_actions)
         if old:
-            s = registration_cost(state[1], self.get_ds_cloud(action))
+            s = registration_cost_old(state[1], self.get_ds_cloud(action))
         else:
             (_, s) = self._warp_hmats(state, action)
         feat[0] = s**2
@@ -384,7 +384,7 @@ def get_downsampled_clouds(demofile):
 def get_clouds(demofile):
     return [seg["cloud_xyz"] for seg in demofile.values()]
 
-def registration_cost(xyz0, xyz1):
+def registration_cost_old(xyz0, xyz1):
     if not use_rapprentice:
         return 1
     scaled_xyz0, _ = registration.unit_boxify(xyz0)
