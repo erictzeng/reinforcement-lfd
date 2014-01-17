@@ -38,6 +38,44 @@ DENSITY_RADIUS = .2
 
 # rip rope_max_margin_model, you will not be missed --eric 1/14/2014
 
+def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile, outfile, verbose=False):
+    """
+    computes all the constraints associated with expert_demofile, output is consistent with files saved
+    from max_margin.MultiSlackMaxMarginModel
+    """
+    if type(expert_demofile) is str:
+        expert_demofile = h5py.File(expert_demofile, 'r')
+    if type(outfile) is str:
+        outfile = h5py.File(outfile, 'w')
+    if verbose:
+        print "adding constraints"
+    constraint_ctr = 0
+    for key, group in expert_demofile.iterkeys():
+        state = [key,group['cloud_xyz'][:]] # these are already downsampled
+        action = group['action'][()]
+        xi_name = str('xi_') + str(key)
+        if action.startswith('endstate'): # this is a knot
+            continue
+        if verbose:
+            print 'adding constraints for:\t', action        
+        lhs_phi = feature_fn(state, action)
+        for (i, other_a) in enumerate(actions):
+            if other_a == action:
+                continue
+            if verbose:
+                print "added {}/{}".format(i, len(actions))
+            rhs_phi = feature_fn(state, other_action)
+            margin = margin_fn(state, action, other_action)
+            g = outfile.create_group(str(constraint_ctr))
+            constraint_ctr += 1
+            g['exp_features'] = lhs_phi
+            g['rhs_phi'] = rhs_phi
+            g['margin'] = margin
+            g['xi'] = xi_name
+        outfile.flush()
+    outfile.close()
+
+
 def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=False):
     """
     takes all of the expert demonstrations from expert_demofile
@@ -52,10 +90,8 @@ def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=F
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
         print "adding constraints"
-    max = float('inf')
     c = 0
     for key, group in expert_demofile.iteritems():
-        if c > max: break
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
         action = group['action'][()]
         if action.startswith('endstate'): # this is a knot
