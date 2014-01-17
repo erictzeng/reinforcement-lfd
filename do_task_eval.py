@@ -360,6 +360,10 @@ class Globals:
     resample_rope = None
 
 if __name__ == "__main__":
+    """
+    example command:
+    ./do_task_eval.py data/multi_quad_weights_100005 --quad_features --animation=1 --old_features
+    """
     parser = argparse.ArgumentParser()
     
     parser.add_argument('demofile', nargs='?', default='data/all.h5')
@@ -368,6 +372,7 @@ if __name__ == "__main__":
     parser.add_argument("weightfile", type=str)
     parser.add_argument("--resultfile", type=str) # don't save results if this is not specified
     parser.add_argument("--quad_features", action="store_true")
+    parser.add_argument("--old_features", action="store_true")
     parser.add_argument("--animation", type=int, default=0)
     
     parser.add_argument("--tasks", nargs='+', type=int)
@@ -422,13 +427,12 @@ if __name__ == "__main__":
         Globals.viewer.Idle()
 
     #####################
-#     combine_expert_demo_files('data/expert_demos.h5', 'data/expert_demos_test.h5', 'data/combine_test.h5')
     if args.quad_features:
         print 'Using quadratic features.'
-        feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile)
+        feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile, args.old_features)
     else:
         print 'Using bias features.'
-        feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile)
+        feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile, args.old_features)
 
     weightfile = h5py.File(args.weightfile, 'r')
     weights = weightfile['weights'][:]

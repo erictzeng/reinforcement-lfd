@@ -124,17 +124,21 @@ def get_sc_feature_fn(actionfile):
     act_set = ActionSet(actionfile)
     return (act_set.sc_features, act_set.num_sc_features, actionfile)    
 
-def get_bias_feature_fn(actionfile):
+def get_bias_feature_fn(actionfile, old=False):
     if type(actionfile) is str:
         actionfile = h5py.File(actionfile, 'r')
     act_set = ActionSet(actionfile)
-    return (act_set.bias_features, act_set.num_actions + 1, actionfile)
+    def feature_fn(state, action):
+        return act_set.bias_features(state, action, old)
+    return (feature_fn, act_set.num_actions + 1, actionfile)
 
-def get_quad_feature_fn(actionfile):
+def get_quad_feature_fn(actionfile, old=False):
     if type(actionfile) is str:
         actionfile = h5py.File(actionfile, 'r')
     act_set = ActionSet(actionfile)
-    return (act_set.quad_features, 2 + 2*act_set.num_actions, actionfile)
+    def feature_fn(state, action):
+        return act_set.quad_features(state, action, old)
+    return (feature_fn, 2 + 2*act_set.num_actions, actionfile)
 
 def get_action_only_margin_fn(actionfile):
     if type(actionfile) is str:
@@ -193,15 +197,21 @@ class ActionSet(object):
                 feat_val[lr] = gripper_frame_shape_context(state[1], close_hmat)
         return np.r_[feat_val['l'], feat_val['r']]            
     
-    def bias_features(self, state, action):
+    def bias_features(self, state, action, old = False):
         feat = np.zeros(self.num_actions + 1)
-        (_, feat[0]) = self._warp_hmats(state, action)
+        if old:
+            feat[0] = registration_cost(state[1], self.get_ds_cloud(action))
+        else:
+            (_, feat[0]) = self._warp_hmats(state, action)
         feat[self.action_to_ind[action]+1] = 1
         return feat
     
-    def quad_features(self, state, action):
+    def quad_features(self, state, action, old = False):
         feat = np.zeros(2 + 2*self.num_actions)
-        s = registration_cost(state[1], self.get_ds_cloud(action))
+        if old:
+            s = registration_cost(state[1], self.get_ds_cloud(action))
+        else:
+            (_, s) = self._warp_hmats(state, action)
         feat[0] = s**2
         feat[1] = s
         feat[2+self.action_to_ind[action]] = s
@@ -371,6 +381,15 @@ def get_downsampled_clouds(demofile):
 
 def get_clouds(demofile):
     return [seg["cloud_xyz"] for seg in demofile.values()]
+
+def registration_cost(xyz0, xyz1):
+    if not use_rapprentice:
+        return 1
+    scaled_xyz0, _ = registration.unit_boxify(xyz0)
+    scaled_xyz1, _ = registration.unit_boxify(xyz1)
+    f,g = registration.tps_rpm_bij(scaled_xyz0, scaled_xyz1, rot_reg=1e-3, n_iter=10)
+    cost = registration.tps_reg_cost(f) + registration.tps_reg_cost(g)
+    return cost
 
 def combine_expert_demo_files(infile1, infile2, outfile):
     """
