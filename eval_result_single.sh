@@ -13,6 +13,8 @@ echo "Using result directory $result_dir and weight file $weight_file"
 mkdir $result_dir
 if echo $result_dir | grep -q "quad"; then
     ./do_task_eval.py $weight_file --resultfile=$result_dir/holdout_result.h5 --quad_features
+elif echo $result_dir | grep -q "sc"; then
+    ./do_task_eval.py $weight_file --resultfile=$result_dir/holdout_result.h5 --sc_features
 else
     ./do_task_eval.py $weight_file --resultfile=$result_dir/holdout_result.h5
 fi

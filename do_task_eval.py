@@ -362,7 +362,8 @@ if __name__ == "__main__":
     parser.add_argument("weightfile", type=str)
     parser.add_argument("--resultfile", type=str) # don't save results if this is not specified
     parser.add_argument("--quad_features", action="store_true")
-    parser.add_argument("--old_features", action="store_true")
+    parser.add_argument("--sc_features", action="store_true")
+    parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument("--animation", type=int, default=0)
     
     parser.add_argument("--tasks", nargs='+', type=int)
@@ -417,13 +418,7 @@ if __name__ == "__main__":
         Globals.viewer.Idle()
 
     #####################
-    if args.quad_features:
-        print 'Using quadratic features.'
-        feature_fn, num_features, _ = get_quad_feature_fn(actionfile, args.old_features)
-    else:
-        print 'Using bias features.'
-        feature_fn, num_features, _ = get_bias_feature_fn(actionfile, args.old_features)
-    actions = actionfile.keys()
+    feature_fn, _, num_features, actions = select_feature_fn(args)
 
     weightfile = h5py.File(args.weightfile, 'r')
     weights = weightfile['weights'][:]
