@@ -370,7 +370,7 @@ def warp_hmats(xyz_src, xyz_targ, hmat_list):
     scaled_xyz_targ, targ_params = registration.unit_boxify(xyz_targ)        
     f,g = registration.tps_rpm_bij(scaled_xyz_src, scaled_xyz_targ, plot_cb = None,
                                    plotting=0,rot_reg=np.r_[1e-4,1e-4,1e-1], 
-                                   n_iter=50, reg_init=10, reg_final=.1, outlierprior=1e-2)
+                                   n_iter=50, reg_init=10, reg_final=.1)
 #     f,g = registration.tps_rpm_bij(scaled_xyz_src, scaled_xyz_targ, rot_reg=1e-3, n_iter=10)
     cost = registration.tps_reg_cost(f) + registration.tps_reg_cost(g)
     f = registration.unscale_tps(f, src_params, targ_params)
