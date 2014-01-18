@@ -154,6 +154,7 @@ def collect_results(conf, logins=None, password=None):
             sftp.get(os.path.join(server['path'], 'out', fname),
                      os.path.join(conf['outfolder'], fname))
     outfiles = glob.glob(os.path.join(conf['outfolder'], '*.h5'))
+    outfiles.sort(key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
     final_outfile = h5py.File(conf['outfile'], 'w')
     i = 0
     for outfile in outfiles:
