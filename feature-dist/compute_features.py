@@ -37,9 +37,9 @@ def copy_indices(datafile, indices, outfname):
     num_skipped = 0
     with h5py.File(outfname, 'w') as outfile:
         for i, index in enumerate(indices):
-            if datafile[str(index)]['action'][()].startswith('endstate'):
-                num_skipped += 1
-                continue
+            # if datafile[str(index)]['action'][()].startswith('endstate'):
+            #     num_skipped += 1
+            #     continue
             outfile.copy(datafile[str(index)], str(i))
     print "Skipped {} endstates.".format(num_skipped)
 
