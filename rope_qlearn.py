@@ -196,6 +196,8 @@ class ActionSet(object):
             if closings:
                 first_close = closings[0]
                 close_hmat = warped_trajs[lr][first_close]
+#                 unwarped_hmat = self.actionfile[action]["%s_gripper_tool_frame"%lr]['hmat'][first_close]            
+#                 close_hmat = f.transform_hmats(np.array([unwarped_hmat]))[0]
                 feat_val[lr] = gripper_frame_shape_context(state[1], close_hmat)
         return np.r_[feat_val['l'], feat_val['r']]            
     
@@ -369,6 +371,7 @@ def warp_hmats(xyz_src, xyz_targ, hmat_list):
     f,g = registration.tps_rpm_bij(scaled_xyz_src, scaled_xyz_targ, plot_cb = None,
                                    plotting=0,rot_reg=np.r_[1e-4,1e-4,1e-1], 
                                    n_iter=50, reg_init=10, reg_final=.1, outlierprior=1e-2)
+#     f,g = registration.tps_rpm_bij(scaled_xyz_src, scaled_xyz_targ, rot_reg=1e-3, n_iter=10)
     cost = registration.tps_reg_cost(f) + registration.tps_reg_cost(g)
     f = registration.unscale_tps(f, src_params, targ_params)
     trajs = {}
