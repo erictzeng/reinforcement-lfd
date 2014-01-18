@@ -202,7 +202,7 @@ class ActionSet(object):
     def bias_features(self, state, action, old = False):
         feat = np.zeros(self.num_actions + 1)
         if old:
-            feat[0] = registration_cost(state[1], self.get_ds_cloud(action))
+            feat[0] = registration_cost_old(state[1], self.get_ds_cloud(action))
         else:
             (_, feat[0]) = self._warp_hmats(state, action)
         feat[self.action_to_ind[action]+1] = 1
@@ -211,7 +211,7 @@ class ActionSet(object):
     def quad_features(self, state, action, old = False):
         feat = np.zeros(2 + 2*self.num_actions)
         if old:
-            s = registration_cost(state[1], self.get_ds_cloud(action))
+            s = registration_cost_old(state[1], self.get_ds_cloud(action))
         else:
             (_, s) = self._warp_hmats(state, action)
         feat[0] = s**2
@@ -384,7 +384,7 @@ def get_downsampled_clouds(demofile):
 def get_clouds(demofile):
     return [seg["cloud_xyz"] for seg in demofile.values()]
 
-def registration_cost(xyz0, xyz1):
+def registration_cost_old(xyz0, xyz1):
     if not use_rapprentice:
         return 1
     scaled_xyz0, _ = registration.unit_boxify(xyz0)
@@ -439,14 +439,16 @@ def test_saving_model(mm_model):
 def select_feature_fn(args):
     if args.quad_features:
         print 'Using quadratic features.'
-        feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile)
+        feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile, args.old_features)
     elif args.sc_features:
         print 'Using sc and bias features.'
-        fns = [get_bias_feature_fn, get_sc_feature_fn]
+        def bias_feature_fn(actionfile):
+            return get_bias_feature_fn(actionfile, old=args.old_features)
+        fns = [bias_feature_fn, get_sc_feature_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     else:
         print 'Using bias features.'
-        feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile)
+        feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile, args.old_features)
     margin_fn, act_file = get_action_state_margin_fn(act_file)
     actions = act_file.keys()
     return feature_fn, margin_fn, num_features, actions
@@ -494,6 +496,7 @@ if __name__ == '__main__':
     subparsers = parser.add_subparsers()
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
+    parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument('--C', '-c', type=float, default=1)
     parser.add_argument("--multi_slack", action="store_true")
 
