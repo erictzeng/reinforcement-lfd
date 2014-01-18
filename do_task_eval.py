@@ -353,12 +353,12 @@ class Globals:
 if __name__ == "__main__":
     """
     example command:
-    ./do_task_eval.py data/multi_quad_weights_10000.h5 --quad_features --animation=1 --old_features
+    ./do_task_eval.py data/weights/multi_quad_weights_10000.h5 --quad_features --animation=1 --old_features
     """
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('actionfile', nargs='?', default='data/all.h5')
-    parser.add_argument('holdoutfile', nargs='?', default='data/holdout_set.h5')
+    parser.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
+    parser.add_argument('holdoutfile', nargs='?', default='data/misc/holdout_set.h5')
     parser.add_argument("weightfile", type=str)
     parser.add_argument("--resultfile", type=str) # don't save results if this is not specified
     parser.add_argument("--quad_features", action="store_true")
