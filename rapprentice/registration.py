@@ -228,7 +228,7 @@ def tps_rpm(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_init =
     return f
 
 def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_init = .1, rad_final = .005, rot_reg = 1e-3, 
-            plotting = False, plot_cb = None):
+            plotting = False, plot_cb = None, outlierfrac = 2e-1):
     """
     tps-rpm algorithm mostly as described by chui and rangaran
     reg_init/reg_final: regularization on curvature
@@ -257,7 +257,7 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
         
         r = rads[i]
         prob_nm = np.exp( -(fwddist_nm + invdist_nm) / (2*r) )
-        corr_nm, r_N, _ =  balance_matrix3(prob_nm, 10, 1e-1, 1e-2) # edit final value to change outlier percentage
+        corr_nm, r_N, _ =  balance_matrix3(prob_nm, 10, 1e-1, outlierfrac) # edit final value to change outlier percentage
         corr_nm += 1e-9
         
         wt_n = corr_nm.sum(axis=1)
