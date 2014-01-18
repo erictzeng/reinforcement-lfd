@@ -235,7 +235,6 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
     rad_init/rad_final: radius for correspondence calculation (meters)
     plotting: 0 means don't plot. integer n means plot every n iterations
     """
-    
     _,d=x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)
     rads = loglinspace(rad_init, rad_final, n_iter)
@@ -258,7 +257,7 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
         
         r = rads[i]
         prob_nm = np.exp( -(fwddist_nm + invdist_nm) / (2*r) )
-        corr_nm, r_N, _ =  balance_matrix3(prob_nm, 10, 1e-1, 2e-1)
+        corr_nm, r_N, _ =  balance_matrix3(prob_nm, 10, 1e-1, 1e-2) # edit final value to change outlier percentage
         corr_nm += 1e-9
         
         wt_n = corr_nm.sum(axis=1)
