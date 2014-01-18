@@ -383,14 +383,11 @@ if __name__ == "__main__":
 
     trajoptpy.SetInteractive(args.interactive)
 
-    if not args.log:
-        from datetime import datetime
-        args.log = "log_%s.pkl" % datetime.now().isoformat()
-    redprint("Writing log to file %s" % args.log)
-    Globals.exec_log = task_execution.ExecutionLog(args.log)
-    atexit.register(Globals.exec_log.close)
-
-    Globals.exec_log(0, "main.args", args)
+    if args.log:
+        redprint("Writing log to file %s" % args.log)
+        Globals.exec_log = task_execution.ExecutionLog(args.log)
+        atexit.register(Globals.exec_log.close)
+        Globals.exec_log(0, "main.args", args)
 
     Globals.env = openravepy.Environment()
     Globals.env.StopSimulation()

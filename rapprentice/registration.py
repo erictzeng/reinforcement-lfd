@@ -91,6 +91,7 @@ class ThinPlateSpline(Transformation):
     def transform_points(self, x_ma):
         y_ng = tps.tps_eval(x_ma, self.lin_ag, self.trans_g, self.w_ng, self.x_na)
         return y_ng
+
     def compute_jacobian(self, x_ma):
         grad_mga = tps.tps_grad(x_ma, self.lin_ag, self.trans_g, self.w_ng, self.x_na)
         return grad_mga
@@ -228,12 +229,13 @@ def tps_rpm(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_init =
     return f
 
 def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_init = .1, rad_final = .005, rot_reg = 1e-3, 
-            plotting = False, plot_cb = None, outlierprior = .1, outlierfrac = 2e-1):
+            plotting = False, plot_cb = None, x_interest_pts = None, y_interest_pts = None, outlierprior = .1, outlierfrac = 2e-1):
     """
     tps-rpm algorithm mostly as described by chui and rangaran
     reg_init/reg_final: regularization on curvature
     rad_init/rad_final: radius for correspondence calculation (meters)
     plotting: 0 means don't plot. integer n means plot every n iterations
+    interest_pts are points in either scene where we want a lower prior of outliers
     """
     _,d=x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)
@@ -245,6 +247,18 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
     g = ThinPlateSpline(d)
     g.trans_g = -f.trans_g
 
+    # set up outlier priors for source and target scenes
+    n, _ = x_nd.shape
+    m, _ = y_md.shape
+    if x_interest_pts:
+        x_interest_dists = outlierprior*np.exp( -1*ssd.cdist(x_interest_pts, x_nd, 'euclidean')/(rad_init))
+    else:
+        x_priors = np.ones(n)*outlierfrac
+
+    if y_interest_pts:
+        y_interest_dists = np.exp( -1*ssd.cdist(y_interest_pts, y_md, 'euclidean')/(rad_init))
+    else:
+        y_priors = np.ones(m)*outlierfrac    
 
     # r_N = None
     
@@ -257,7 +271,7 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
         
         r = rads[i]
         prob_nm = np.exp( -(fwddist_nm + invdist_nm) / (2*r) )
-        corr_nm, r_N, _ =  balance_matrix3(prob_nm, 10, outlierprior, outlierfrac) # edit final value to change outlier percentage
+        corr_nm, r_N, _ =  balance_matrix3(prob_nm, 10, x_priors, y_priors, outlierfrac) # edit final value to change outlier percentage
         corr_nm += 1e-9
         
         wt_n = corr_nm.sum(axis=1)
@@ -290,14 +304,14 @@ def logmap(m):
     return (1/(2*np.sin(theta))) * np.array([[m[2,1] - m[1,2], m[0,2]-m[2,0], m[1,0]-m[0,1]]]), theta
 
 
-def balance_matrix3(prob_nm, max_iter, p, outlierfrac, r_N = None):
+def balance_matrix3(prob_nm, max_iter, row_priors, col_priors, outlierfrac, r_N = None):
     
     n,m = prob_nm.shape
     prob_NM = np.empty((n+1, m+1), 'f4')
     prob_NM[:n, :m] = prob_nm
-    prob_NM[:n, m] = p
-    prob_NM[n, :m] = p
-    prob_NM[n, m] = p*np.sqrt(n*m)
+    prob_NM[:n, m] = row_priors
+    prob_NM[n, :m] = col_priors
+    prob_NM[n, m] = np.sqrt(np.sum(row_priors)*np.sum(col_priors)) # this can `be weighted bigger weight = fewer outliers
     a_N = np.ones((n+1),'f4')
     a_N[n] = m*outlierfrac
     b_M = np.ones((m+1),'f4')
