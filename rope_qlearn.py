@@ -507,21 +507,21 @@ if __name__ == '__main__':
     parser_build_constraints = subparsers.add_parser('build-constraints')
     parser_build_constraints.add_argument('demofile')
     parser_build_constraints.add_argument('constraintfile')
-    parser_build_constraints.add_argument('actionfile', nargs='?', default='data/all.h5')
+    parser_build_constraints.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser_build_constraints.set_defaults(func=build_constraints)
 
     # build-model subparser
     parser_build_model = subparsers.add_parser('build-model')
     parser_build_model.add_argument('constraintfile')
     parser_build_model.add_argument('modelfile')
-    parser_build_model.add_argument('actionfile', nargs='?', default='data/all.h5')
+    parser_build_model.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser_build_model.set_defaults(func=build_model)
 
     # optimize-model subparser
     parser_optimize = subparsers.add_parser('optimize-model')
     parser_optimize.add_argument('modelfile')
     parser_optimize.add_argument('weightfile')
-    parser_optimize.add_argument('actionfile', nargs='?', default='data/all.h5')
+    parser_optimize.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser_optimize.set_defaults(func=optimize_model)
 
     # parse args and call appropriate function
