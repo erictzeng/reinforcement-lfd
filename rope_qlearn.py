@@ -9,7 +9,6 @@ and action data
 import argparse
 
 import h5py, math
-import gurobipy as grb
 import IPython as ipy
 from max_margin import MaxMarginModel, MultiSlackMaxMarginModel
 from pdb import pm, set_trace
@@ -39,7 +38,7 @@ DENSITY_RADIUS = .2
 
 # rip rope_max_margin_model, you will not be missed --eric 1/14/2014
 
-def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile, outfile, verbose=False):
+def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile, outfile, start=0, end=-1, verbose=False):
     """
     computes all the constraints associated with expert_demofile, output is consistent with files saved
     from max_margin.MultiSlackMaxMarginModel
@@ -53,7 +52,11 @@ def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile
     if verbose:
         print "adding constraints"
     constraint_ctr = 0
-    for key, group in expert_demofile.iterkeys():
+    if end < 0:
+        end = len(expert_demofile.keys())
+    for demo_i in range(start, end):
+        key = str(demo_i)
+        group = expert_demofile[key]
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
         action = group['action'][()]
         xi_name = str('xi_') + str(key)
@@ -67,8 +70,8 @@ def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile
                 continue
             if verbose:
                 print "added {}/{}".format(i, len(actions))
-            rhs_phi = feature_fn(state, other_action)
-            margin = margin_fn(state, action, other_action)
+            rhs_phi = feature_fn(state, other_a)
+            margin = margin_fn(state, action, other_a)
             g = outfile.create_group(str(constraint_ctr))
             constraint_ctr += 1
             g['exp_features'] = lhs_phi
@@ -77,7 +80,6 @@ def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile
             g['xi'] = xi_name
         outfile.flush()
     outfile.close()
-
 
 def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=False):
     """
