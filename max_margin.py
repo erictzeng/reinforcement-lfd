@@ -1,11 +1,15 @@
 #!/usr/bin/env python
 
-import gurobipy as grb
+try:
+    import gurobipy as grb
+    USE_GUROBI = True
+    GRB = grb.GRB # constants for gurobi
+except ImportError:
+    USE_GUROBI = False
 import IPython as ipy
 import numpy as np
 import h5py, random, math, util
 from pdb import pm
-GRB = grb.GRB # constants for gurobi
 eps = 10**-8
 MAX_ITER=1000
 

@@ -9,7 +9,6 @@ and action data
 import argparse
 
 import h5py, math
-import gurobipy as grb
 import IPython as ipy
 from max_margin import MaxMarginModel, MultiSlackMaxMarginModel
 from pdb import pm
