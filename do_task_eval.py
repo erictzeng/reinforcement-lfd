@@ -353,12 +353,12 @@ class Globals:
 if __name__ == "__main__":
     """
     example command:
-    ./do_task_eval.py data/multi_quad_weights_10000.h5 --quad_features --animation=1 --old_features
+    ./do_task_eval.py data/weights/multi_quad_weights_10000.h5 --quad_features --animation=1 --old_features
     """
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('actionfile', nargs='?', default='data/all.h5')
-    parser.add_argument('holdoutfile', nargs='?', default='data/holdout_set.h5')
+    parser.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
+    parser.add_argument('holdoutfile', nargs='?', default='data/misc/holdout_set.h5')
     parser.add_argument("weightfile", type=str)
     parser.add_argument("--resultfile", type=str) # don't save results if this is not specified
     parser.add_argument("--quad_features", action="store_true")
@@ -383,14 +383,11 @@ if __name__ == "__main__":
 
     trajoptpy.SetInteractive(args.interactive)
 
-    if not args.log:
-        from datetime import datetime
-        args.log = "log_%s.pkl" % datetime.now().isoformat()
-    redprint("Writing log to file %s" % args.log)
-    Globals.exec_log = task_execution.ExecutionLog(args.log)
-    atexit.register(Globals.exec_log.close)
-
-    Globals.exec_log(0, "main.args", args)
+    if args.log:
+        redprint("Writing log to file %s" % args.log)
+        Globals.exec_log = task_execution.ExecutionLog(args.log)
+        atexit.register(Globals.exec_log.close)
+        Globals.exec_log(0, "main.args", args)
 
     Globals.env = openravepy.Environment()
     Globals.env.StopSimulation()
@@ -469,8 +466,17 @@ if __name__ == "__main__":
             state = ("eval_%i"%get_unique_id(), new_xyz)
     
             redprint("Finding closest demonstration")
+            start_time = time.time()
+            print "best action start"
             best_action = actions[np.argmax([np.dot(weights, feature_fn(state, action)) for action in actions])]
-            
+            elapsed_time = time.time() - start_time
+            print "best action took ", elapsed_time
+            # 7 bias_old
+            # 39 bias
+            # 33 bias_old+sc uncached
+            # 33 bias_old+sc cached
+            # 95 bias+sc cached
+            # 97 bias+sc cached traj (current)
             redprint("Simulating action %s"%(best_action))
             success = simulate_demo(new_xyz, actionfile[best_action], animate=args.animation)
             
