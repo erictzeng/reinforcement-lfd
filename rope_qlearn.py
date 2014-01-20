@@ -12,12 +12,13 @@ import h5py, math
 import gurobipy as grb
 import IPython as ipy
 from max_margin import MaxMarginModel, MultiSlackMaxMarginModel
-from pdb import pm
+from pdb import pm, set_trace
 import numpy as np
 from joblib import Parallel, delayed
 import scipy.spatial as sp_spat
 import os.path
 import cProfile
+import util as u
 try:
     from rapprentice import registration, clouds
     use_rapprentice = True
@@ -30,9 +31,9 @@ DS_SIZE = .025
 GRIPPER_OPEN_CLOSE_THRESH = 0.04
 
 # constants for shape context
-R_MIN, P_MIN, T_MIN = 0, 0, np.pi/2.0
-R_MAX, P_MAX, T_MAX = 0.15, np.pi, np.pi
-R_BINS, P_BINS, T_BINS = 2, 4, 4
+R_MIN, P_MIN, T_MIN = 0, 0, 0
+R_MAX, P_MAX, T_MAX = 0.15, np.pi, 2*np.pi
+R_BINS, P_BINS, T_BINS = 4, 1, 4
 DENSITY_RADIUS = .2
 
 
@@ -161,13 +162,19 @@ class ActionSet(object):
 
     state is assumed to be a list [<state_id>, <point_cloud>]
     """
+    caches = {}                 # will break if same processes use dif actionsets that have
+    # the same actions
+    
     def __init__(self, actionfile, use_cache = True):
         self.actionfile = actionfile
         self.actions = sorted(actionfile.keys())
         self.action_to_ind = dict((v, i) for i, v in enumerate(self.actions))
         self.num_actions = len(self.actions)
         self.num_sc_features = R_BINS*T_BINS*P_BINS*2
-        self.cache = {}
+        act_key = u.tuplify(self.actions)
+        if act_key not in ActionSet.caches:
+            ActionSet.caches[act_key] = {}
+        self.cache = ActionSet.caches[act_key]
         self.use_cache = use_cache
         self.link_names = ["%s_gripper_tool_frame"%lr for lr in ('lr')]
 
@@ -197,6 +204,10 @@ class ActionSet(object):
                 first_close = closings[0]
                 close_hmat = warped_trajs[lr][first_close]
                 feat_val[lr] = gripper_frame_shape_context(state[1], close_hmat)
+                feat_norm = np.linalg.norm(feat_val[lr], ord=2)
+                if feat_norm > 0:
+                    feat_val[lr] = feat_val[lr] / feat_norm
+                print np.linalg.norm(feat_val[lr])
         return np.r_[feat_val['l'], feat_val['r']]            
     
     def bias_features(self, state, action, old = False):
@@ -270,25 +281,49 @@ class ActionSet(object):
                 self.action_state_margin(a1, a2, state))
 
 #http://stackoverflow.com/questions/4116658/faster-numpy-cartesian-to-spherical-coordinate-conversion
+# returns (r, theta, phi) with positive r, theta in [0, 2*pi], and phi in [0, pi]
 def cart2spherical(xyz):
     xyz = np.asarray(xyz)
     ptsnew =  np.zeros(xyz.shape)
     xy = xyz[:,0]**2 + xyz[:,1]**2
     ptsnew[:,0] = np.sqrt(xy + xyz[:,2]**2)
     ptsnew[:,1] = np.arctan2(xyz[:,1], xyz[:,0])
-    ptsnew[ptsnew[:,1] < 0] += 2*np.pi
+    ptsnew[ptsnew[:,1] < 0, 1] += 2*np.pi
     ptsnew[:,2] = np.arctan2(np.sqrt(xy), xyz[:,2]) # for elevation angle defined from Z-axis down
+    #ptsnew[:,2] = np.arctan2(xyz[:,2], np.sqrt(xy)) # for elevation angle defined from XY-plane up
     return ptsnew
 
 def get_sect_vol((r1, r2), (t1, t2), (p1, p2)):
-    return (r2**3 - r1**3)/3 * (t2 - t1) * (-math.cos(p2) + math.cos(p1))
+    return float(r2**3 - r1**3)/3.0 * (t2 - t1) * (-math.cos(p2) + math.cos(p1))
 
 def gripper_frame_shape_context(xyz, hmat):
+    # Project gripper center onto the plane of the table --> then this point is
+    # the center of the shape context feature we compute
     h_inv = np.linalg.inv(hmat)
+    table_height = xyz[:,2].mean() - 0.02
+    fwd_axis = np.array([1, 0, 0, 1], 'float')  # homogeneous coord for e1
+                                                # (in coord system of PR2, x-axis is forward)
+    # Rotate forward axis to the frame of the gripper
+    fwd_axis_gripper = np.dot(h_inv, fwd_axis)[:3]
+    gripper_trans = hmat[:3, 3]
+
+    # calculation of projection of gripper center, gripper_proj:
+    # gripper_proj = gripper_trans + c * fwd_axis_gripper,
+    # where c is chosen so that gripper_proj is at the same elevation (z-axis) as the table
+    c = float(table_height - gripper_trans[2]) / fwd_axis_gripper[2]
+    gripper_proj = gripper_trans + c * fwd_axis_gripper
+
+    hmat_table = np.copy(hmat)
+    gripper_trans_homog = np.ones((1, 4), 'float')
+    gripper_trans_homog[0, :3] = gripper_proj
+    hmat_table[:,3] = gripper_trans_homog
+    h_inv_table = np.linalg.inv(hmat_table)
+
     xyz1 = np.ones((len(xyz),4),'float')  #homogeneous coord
     xyz1[:,:3] = xyz
-    xyz2 = [np.dot(h_inv, pt)[:3] for pt in xyz1] #bestpractices
+    xyz2 = [np.dot(h_inv_table, pt)[:3] for pt in xyz1] #bestpractices
     xyz3 = cart2spherical(xyz2)
+
     bin_volumes = {}
     bin_weights = {}
 
@@ -329,8 +364,11 @@ def gripper_frame_shape_context(xyz, hmat):
         bin_weights[(r_ind, t_ind, p_ind)] = orig_weight + new_pt_weight
 
     sc_features = np.zeros(R_BINS * T_BINS * P_BINS)
+    r_ind = 0 if R_BINS == 1 else T_BINS*P_BINS
+    p_ind = 0 if P_BINS == 1 else T_BINS
+
     for (r, p, t) in bin_weights.iterkeys():
-        sc_features[r*T_BINS*P_BINS + p*T_BINS + t] = bin_weights[(r, p, t)]
+        sc_features[r*r_ind + p*p_ind + t] = bin_weights[(r, p, t)]
     return sc_features
 
 
@@ -459,6 +497,7 @@ def test_sc_features(args):
         print feature_fn([name, clouds.downsample(seg_info['cloud_xyz'], DS_SIZE)], name)
 
 def build_constraints(args):
+    #test_sc_features(args)
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Building constraints into {}.'.format(args.constraintfile)
     if args.multi_slack:
