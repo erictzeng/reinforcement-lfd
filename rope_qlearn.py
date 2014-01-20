@@ -127,6 +127,12 @@ def get_sc_feature_fn(actionfile):
     act_set = ActionSet(actionfile)
     return (act_set.sc_features, act_set.num_sc_features, actionfile)    
 
+def get_rope_dist_feat_fn(actionfile):
+    if type(actionfile) is str:
+        actionfile = h5py.File(actionfile, 'r')
+    act_set = ActionSet(actionfile)
+    return (act_set.rope_dist_features, act_set.num_rope_dist_feat, actionfile)
+
 def get_bias_feature_fn(actionfile, old=False):
     if type(actionfile) is str:
         actionfile = h5py.File(actionfile, 'r')
@@ -171,6 +177,7 @@ class ActionSet(object):
         self.action_to_ind = dict((v, i) for i, v in enumerate(self.actions))
         self.num_actions = len(self.actions)
         self.num_sc_features = R_BINS*T_BINS*P_BINS*2
+        self.num_rope_dist_feat = 2
         act_key = u.tuplify(self.actions)
         if act_key not in ActionSet.caches:
             ActionSet.caches[act_key] = {}
@@ -183,11 +190,11 @@ class ActionSet(object):
         if hit:
             return value
         else:
-            [warped_trajs, rc] = warp_hmats(self.get_ds_cloud(action),
-                                      state[1],
-                                      [(lr, self.actionfile[action][ln]['hmat']) for lr, ln in zip('lr', self.link_names)])
-            self.store_cache(state, action, [warped_trajs, rc])
-            return [warped_trajs, rc]
+            [warped_trajs, rc, warped_rope_xyz] = warp_hmats(self.get_ds_cloud(action),
+                                                  state[1],
+                                                  [(lr, self.actionfile[action][ln]['hmat']) for lr, ln in zip('lr', self.link_names)])
+            self.store_cache(state, action, [warped_trajs, rc, warped_rope_xyz])
+            return [warped_trajs, rc, warped_rope_xyz]
 
     def get_ds_cloud(self, action):
         return clouds.downsample(self.actionfile[action]['cloud_xyz'], DS_SIZE)
@@ -195,7 +202,7 @@ class ActionSet(object):
     def sc_features(self, state, action):
         seg_info = self.actionfile[action]
 
-        warped_trajs, _ = self._warp_hmats(state, action)
+        warped_trajs, _, _ = self._warp_hmats(state, action)
         feat_val = dict((lr, np.zeros(self.num_sc_features/2.0)) for lr in 'lr')
         for lr in 'lr':
             grip = np.asarray(seg_info[lr + '_gripper_joint'])
@@ -209,15 +216,28 @@ class ActionSet(object):
                 feat_norm = np.linalg.norm(feat_val[lr], ord=2)
                 if feat_norm > 0:
                     feat_val[lr] = feat_val[lr] / feat_norm
-                print np.linalg.norm(feat_val[lr])
         return np.r_[feat_val['l'], feat_val['r']]            
+
+    def rope_dist_features(self, state, action):
+        # Feature 1 = sum of distances from each warped point of original rope to
+        # closest point in new rope
+        # Feature 2 = sum of distances from each point in new rope to closest
+        # point in warped original rope
+        feat = np.zeros(self.num_rope_dist_feat)
+        new_rope_xyz = state[1]
+        _, _, warped_rope_xyz = self._warp_hmats(state, action)
+        kd_new_rope = sp_spat.KDTree(new_rope_xyz)
+        kd_warped_rope = sp_spat.KDTree(warped_rope_xyz)
+        feat[0] = sum(kd_new_rope.query(warped_rope_xyz)[0])
+        feat[1] = sum(kd_warped_rope.query(new_rope_xyz)[0])
+        return feat
     
     def bias_features(self, state, action, old = False):
         feat = np.zeros(self.num_actions + 1)
         if old:
             feat[0] = registration_cost_old(state[1], self.get_ds_cloud(action))
         else:
-            (_, feat[0]) = self._warp_hmats(state, action)
+            _, feat[0], _ = self._warp_hmats(state, action)
         feat[self.action_to_ind[action]+1] = 1
         return feat
     
@@ -226,7 +246,7 @@ class ActionSet(object):
         if old:
             s = registration_cost_old(state[1], self.get_ds_cloud(action))
         else:
-            (_, s) = self._warp_hmats(state, action)
+            _, s, _ = self._warp_hmats(state, action)
         feat[0] = s**2
         feat[1] = s
         feat[2+self.action_to_ind[action]] = s
@@ -238,10 +258,10 @@ class ActionSet(object):
         warp both actions, compare the resulting trajectories:
         ex. warp a1 -> a2; use compare_hmats(warp(a1.traj), a2.traj)
         """
-        warped_a1_trajs = self._warp_hmats((a2, self.get_ds_cloud(a2)), a1)
+        warped_a1_trajs, _, _ = self._warp_hmats((a2, self.get_ds_cloud(a2)), a1)
         warped_a1_trajs = [warped_a1_trajs[lr] for lr in 'lr']
         a1_trajs = [self.actionfile[a1][ln]['hmat'][:] for ln in self.link_names]
-        warped_a2_trajs = self._warp_hmats((a1, self.get_ds_cloud(a1)), a2)
+        warped_a2_trajs, _, _ = self._warp_hmats((a1, self.get_ds_cloud(a1)), a2)
         warped_a2_trajs = [warped_a2_trajs[lr] for lr in 'lr']
         a2_trajs = [self.actionfile[a2][ln]['hmat'][:] for ln in self.link_names]
         ret_val = sum(compare_hmats(t1, t2) for (t1, t2) in 
@@ -274,8 +294,8 @@ class ActionSet(object):
         when we call this with a particular expert demo we will warp that trajectory
         once for each action we compare to -- issue is hashing point clouds effectively        
         """
-        warped_a1_trajs, _ = self._warp_hmats(state, a1)
-        warped_a2_trajs, _ = self._warp_hmats(state, a2)
+        warped_a1_trajs, _, _ = self._warp_hmats(state, a1)
+        warped_a2_trajs, _, _ = self._warp_hmats(state, a2)
         return sum(compare_hmats(warped_a1_trajs[lr], warped_a2_trajs[lr]) for lr in 'lr')
 
     def combined_margin(self, state, a1, a2):
@@ -413,9 +433,11 @@ def warp_hmats(xyz_src, xyz_targ, hmat_list):
     cost = registration.tps_reg_cost(f) + registration.tps_reg_cost(g)
     f = registration.unscale_tps(f, src_params, targ_params)
     trajs = {}
+    xyz_src_warped = np.zeros(xyz_src.shape)
     for k, hmats in hmat_list:
         trajs[k] = f.transform_hmats(hmats)
-    return [trajs, cost]
+    xyz_src_warped = f.transform_points(xyz_src)
+    return [trajs, cost, xyz_src_warped]
 
 def get_downsampled_clouds(demofile):
     if not use_rapprentice:
@@ -478,13 +500,17 @@ def test_saving_model(mm_model):
         print "PASSED: Model saved and reloaded correctly"
 
 def select_feature_fn(args):
+    def bias_feature_fn(actionfile):
+        return get_bias_feature_fn(actionfile, old=args.old_features)
     if args.quad_features:
         print 'Using quadratic features.'
         feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile, args.old_features)
+    elif args.rope_dist_features:
+        print 'Using sc, bias, and rope dist features.'
+        fns = [bias_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn]
+        feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     elif args.sc_features:
         print 'Using sc and bias features.'
-        def bias_feature_fn(actionfile):
-            return get_bias_feature_fn(actionfile, old=args.old_features)
         fns = [bias_feature_fn, get_sc_feature_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     else:
@@ -538,6 +564,7 @@ if __name__ == '__main__':
     subparsers = parser.add_subparsers()
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
+    parser.add_argument("--rope_dist_features", action="store_true")
     parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument('--C', '-c', type=float, default=1)
     parser.add_argument("--multi_slack", action="store_true")
