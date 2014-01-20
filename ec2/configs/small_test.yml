@@ -1,0 +1,14 @@
+keyfile: ~/.ssh/eric-east-nv.pem
+commit: HEAD
+output: jobs/small/small.h5
+workdir: jobs/small
+num_examples: 4
+num_instances: 2
+jobs_per_instance: 2
+command: python reinforcement-lfd/ec2_driver.py out/{id}-{num}.h5 {start} {end}
+instance_info:
+  image_id: ami-850c3eec
+  key_name: eric-east-nv
+  security_groups:
+    - reinforcement-lfd
+  instance_type: c3.large

@@ -47,14 +47,14 @@ def pack_payload(conf):
     info = conf['payload']
     path = info['path']
     fnames = [os.path.join(path, fname) for fname in os.listdir(path)]
-    tartemp = tempfile.NamedTemporaryFile(suffix='.tar')
-    with tarfile.open(mode='w', fileobj=tartemp) as tar:
+    _, tarfname = tempfile.mkstemp(suffix='.tar.gz')
+    with tarfile.open(name=tarfname, mode='w:gz') as tar:
         for fname in fnames:
             tar.add(fname, arcname=os.path.relpath(fname, path))
         for fileinfo in info['additional-files']:
             tar.add(fileinfo['path'], arcname=fileinfo['archive-name'])
-    assert os.path.exists(tartemp.name)
-    return tartemp
+    assert os.path.exists(tarfname)
+    return tarfname
 
 def add_to_end(final, new, i):
     for index in new.iterkeys():
@@ -118,9 +118,9 @@ def distribute_jobs(conf, logins=None, password=None, overwrite=False):
         stdout.readlines()
         sftp = client.open_sftp()
         print 'Copying scripts to {}...'.format(server['host'])
-        remote_path = os.path.join(server['path'], os.path.basename(payloadtar.name))
-        sftp.put(payloadtar.name, remote_path)
-        _, stdout, _ = client.exec_command('tar -xf {} -C {}'.format(remote_path, server['path']))
+        remote_path = os.path.join(server['path'], os.path.basename(payloadtar))
+        sftp.put(payloadtar, remote_path)
+        _, stdout, _ = client.exec_command('tar -xzf {} -C {}'.format(remote_path, server['path']))
         stdout.readlines()
         print 'Copying data files to {}...'.format(server['host'])
         _, stdout, _ = client.exec_command('mkdir -p {}'.format(os.path.join(server['path'], 'splits')))
@@ -154,6 +154,7 @@ def collect_results(conf, logins=None, password=None):
             sftp.get(os.path.join(server['path'], 'out', fname),
                      os.path.join(conf['outfolder'], fname))
     outfiles = glob.glob(os.path.join(conf['outfolder'], '*.h5'))
+    outfiles.sort(key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
     final_outfile = h5py.File(conf['outfile'], 'w')
     i = 0
     for outfile in outfiles:

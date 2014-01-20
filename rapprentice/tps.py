@@ -1,8 +1,6 @@
 """
 Functions for fitting and applying thin plate spline transformations
 """
-
-
 import numpy as np
 import scipy.spatial.distance as ssd
 import scipy.optimize as opt
