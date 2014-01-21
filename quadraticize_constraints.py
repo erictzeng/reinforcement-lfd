@@ -6,7 +6,7 @@ Generate holdout set with
 ./quadraticize_constraints.py <input_constraints_file> <output_constraints_file>
 
 Example
-./quadraticize_constraints.py "data/mm_constraints_1.h5" "data/mm_constraints_1_quadratic.h5"
+./quadraticize_constraints.py "data/constraints/bias_constraints.h5" "data/constraints/quad_constraints.h5"
 
 If the input constraint file has weights, those weights are ignored
 """

@@ -11,19 +11,10 @@ for C in 0.5 5 50 500 5000
 do    
     echo "Evaluating experiment $1 with C = ${C}"
 
-    result_dir=data/eval/$1_${C}
-    weight_file=data/$1_weights_${C}.h5
+    result_dir=data/results/$1_${C}
+    weight_file=data/weights/$1_weights_${C}.h5
 
     ./eval_result_single.sh $result_dir $weight_file
 
-#    mkdir data/eval/$1_${C}
-#    if echo $1 | grep -q "quad"; then
-#        ./do_task_eval.py --quad_features data/$1_weights_${C}.h5 data/eval/$1_${C}/holdout_result.h5
-#    else
-#        ./do_task_eval.py data/$1_weights_${C}.h5 data/eval/$1_${C}/holdout_result.h5
-#    fi
-
-#    mkdir data/eval/$1_${C}/images
-#    ./holdout_result.py data/eval/$1_${C}/holdout_result.h5 data/eval/$1_${C}/images
 done
 

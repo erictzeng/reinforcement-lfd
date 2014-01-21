@@ -48,7 +48,7 @@ def pack_payload(conf):
     path = info['path']
     fnames = [os.path.join(path, fname) for fname in os.listdir(path)]
     _, tarfname = tempfile.mkstemp(suffix='.tar.gz')
-    with tarfile.open(name=tarfname, mode='w:gz') as tar:
+    with tarfile.open(name=tarfname, mode='w:gz', dereference=True) as tar:
         for fname in fnames:
             tar.add(fname, arcname=os.path.relpath(fname, path))
         for fileinfo in info['additional-files']:
