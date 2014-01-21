@@ -24,12 +24,13 @@ class suppress_stdout(object):
     def __enter__(self):
         # Assign the null pointers to stdout
         os.dup2(self.null_fds,1)
+        os.close(self.null_fds)
 
     def __exit__(self, *_):
         # Re-assign the real stdout back
         os.dup2(self.save_fds,1)
         # Close the null file
-        os.close(self.null_fds)
+        os.close(self.save_fds)
 
 class Transform(object):
     """
