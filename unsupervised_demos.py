@@ -43,6 +43,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser.add_argument('examplesfile', nargs='?', default='data/misc/auto_labeled_examples.h5')
+    parser.add_argument('start', nargs='?', type=int, default=0)
+    parser.add_argument('end', nargs='?', type=int, default=-1)
     parser.add_argument('--animate', action='store_true', default=False)
     args = parser.parse_args()
 
@@ -50,30 +52,35 @@ if __name__ == "__main__":
     examplesfile = h5py.File(args.examplesfile, 'w')
     initialize_sim(actionfile)
 
+    if args.end < 0:
+        args.end = float('inf')
+
     # awesome simulation stuff
     example_i = 0
-    for i, action in actionfile.iteritems():
+    for ind, (action_name, action) in enumerate(actionfile.iteritems()):
+        if ind < args.start or ind >= args.end:
+            continue
         start = get_rope_nodes(np.squeeze(action['cloud_xyz']))
         target = try_action_on_state(start, action, animate=args.animate)
         if target is None: # this should never happen
-            print >>sys.stderr, 'Action {} failed on its own state!'.format(i)
+            print >>sys.stderr, 'Action {} failed on its own state!'.format(action_name)
             continue
         best_action, best_cost = None, float('inf')
-        for j, other_action in actionfile.iteritems():
-            if i == j:
+        for other_action_name, other_action in actionfile.iteritems():
+            if action_name == other_action_name:
                 continue
             result = try_action_on_state(start, other_action, animate=args.animate)
             if result is None: # this will probably happen a lot
                 continue
             _, _, _, _, cost = qlearn.registration_cost(result, target)
             if cost < best_cost:
-                best_action, best_cost = j, cost
+                best_action, best_cost = other_action_name, cost
         if best_action is None: # this should never happen either
-            print >>sys.stderr, 'Action {} had no working examples!'.format(i)
+            print >>sys.stderr, 'Action {} had no working examples!'.format(action_name)
             continue
         index = str(example_i)
         group = examplesfile.create_group(index)
         group['action'] = str(best_action)
-        group['orig_action'] = str(i)
+        group['orig_action'] = str(action_name)
         group['cloud_xyz'] = start
         example_i += 1
