@@ -557,6 +557,11 @@ def optimize_model(args):
         mm_model = MultiSlackMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
+    if args.save_memory:
+        mm_model.model.setParam('threads', 1)  # Use single thread instead of maximum
+        # barrier method (#2) is default for QP, but uses more memory and could lead to error
+        #mm_model.model.setParam('method', 1)  # Use dual simplex method to solve model
+        mm_model.model.setParam('method', 0)  # Use primal simplex method to solve model
     mm_model.C = args.C
     mm_model.optimize_model()
     mm_model.save_weights_to_file(args.weightfile)
@@ -570,6 +575,7 @@ if __name__ == '__main__':
     parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument('--C', '-c', type=float, default=1)
     parser.add_argument("--multi_slack", action="store_true")
+    parser.add_argument("--save_memory", action="store_true")
 
     # build-constraints subparser
     parser_build_constraints = subparsers.add_parser('build-constraints')
