@@ -132,7 +132,7 @@ def distribute_jobs(conf, logins=None, password=None, overwrite=False):
         stdin, stdout, stderr = client.exec_command("python {}".format(os.path.join(server['path'], 'driver.py')))
         stdouts.append(stdout)
     print "Waiting for servers to finish..."
-    [stdout.readlines() for stdout in stdouts]
+    [stdout.channel.recv_exit_status() for stdout in stdouts]
     print "Done. Collecting results..."
     collect_results(conf, logins=logins, password=password)
 
