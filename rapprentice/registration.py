@@ -16,8 +16,18 @@ index name conventions:
 from __future__ import division
 import numpy as np
 import scipy.spatial.distance as ssd
+import scipy.spatial as sp_spat
 from rapprentice import tps, svds, math_utils
+from collections import defaultdict
+import IPython as ipy
+from pdb import pm
 # from svds import svds
+DISCRETIZATION_LEVEL = 10
+MAX_CP_DIST = .05
+rot_matrices = [np.matrix([[np.cos(theta), -1*np.sin(theta), 0], 
+                           [np.sin(theta), np.cos(theta), 0], 
+                           [0, 0, 1]]) 
+                for theta in np.linspace(-1*np.pi, np.pi, DISCRETIZATION_LEVEL)]
 
 
 
@@ -228,6 +238,42 @@ def tps_rpm(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_init =
 
     return f
 
+def fit_rotation(tps_fn, src_pts, tgt_pts):
+    """
+    searches through several rotations of src
+
+    sets the linear transformation of tps_fn to be the 
+    one that minimizes icp between the two pt clouds
+
+    This works, but spends a lot of time querying. Not too sure
+    how we want to combat this. 
+    """
+    _, d = src_pts.shape
+    tps_local = ThinPlateSpline(d)
+    tps_local.trans_g = tps_fn.trans_g
+    src_median = np.median(src_pts, axis=0)
+    src_pts = src_pts - src_median # so we rotate around 0
+    tps_local.trans_g += src_median # this will translate the points back
+    tgt_kd = sp_spat.KDTree(tgt_pts)
+    results = []
+    for rot in rot_matrices:
+        tps_local.lin_ag = rot
+        rot_pts = tps_fn.transform_points(src_pts)
+        rot_kd = sp_spat.KDTree(rot_pts)
+        # compute bi_directional closest-point cost
+        dist_mat = rot_kd.sparse_distance_matrix(tgt_kd, MAX_CP_DIST)
+        min_tgt_dists = MAX_CP_DIST*np.ones(len(tgt_kd.data))
+        min_rot_dists = MAX_CP_DIST*np.ones(len(rot_kd.data))        
+        for (rot_pt, tgt_pt), dist in dist_mat.iteritems():
+            min_rot_dists[rot_pt] = min(min_rot_dists[rot_pt], dist)
+            min_tgt_dists[tgt_pt] = min(min_tgt_dists[tgt_pt], dist)
+        cost = np.linalg.norm(np.r_[min_tgt_dists, min_rot_dists])
+        results.append(cost)
+    tps_fn.lin_ag = rot_matrices[np.argmin(results)]
+    tps_fn.trans_g= np.dot(tps_fn.lin_ag, -1*src_median) \
+                             + tps_local.trans_g[None,:]
+    tps_fn.trans_g = np.asarray(tps_fn.trans_g)[0,:]
+
 def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_init = .1, rad_final = .005, rot_reg = 1e-3, 
             plotting = False, plot_cb = None, x_interest_pts = None, y_interest_pts = None, outlierprior = .1, outlierfrac = 2e-1):
     """
@@ -242,7 +288,9 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
     rads = loglinspace(rad_init, rad_final, n_iter)
 
     f = ThinPlateSpline(d)
-    f.trans_g = np.median(y_md,axis=0) - np.median(x_nd,axis=0)
+    f.trans_g = np.median(y_md,axis=0) - np.median(x_nd,axis=0) # align the medians
+    # do a coarse search through rotations
+    # fit_rotation(f, x_nd, y_md) removed b/c it is very slow and doesn't realy help
     
     g = ThinPlateSpline(d)
     g.trans_g = -f.trans_g
@@ -252,11 +300,13 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
     m, _ = y_md.shape
     if x_interest_pts:
         x_interest_dists = outlierprior*np.exp( -1*ssd.cdist(x_interest_pts, x_nd, 'euclidean')/(rad_init))
+        raise NotImplementedError
     else:
         x_priors = np.ones(n)*outlierfrac
 
     if y_interest_pts:
         y_interest_dists = np.exp( -1*ssd.cdist(y_interest_pts, y_md, 'euclidean')/(rad_init))
+        raise NotImplementedError
     else:
         y_priors = np.ones(m)*outlierfrac    
 
