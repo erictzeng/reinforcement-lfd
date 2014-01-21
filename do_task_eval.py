@@ -466,17 +466,8 @@ if __name__ == "__main__":
             state = ("eval_%i"%get_unique_id(), new_xyz)
     
             redprint("Finding closest demonstration")
-            start_time = time.time()
-            print "best action start"
             best_action = actions[np.argmax([np.dot(weights, feature_fn(state, action)) for action in actions])]
-            elapsed_time = time.time() - start_time
-            print "best action took ", elapsed_time
-            # 7 bias_old
-            # 39 bias
-            # 33 bias_old+sc uncached
-            # 33 bias_old+sc cached
-            # 95 bias+sc cached
-            # 97 bias+sc cached traj (current)
+
             redprint("Simulating action %s"%(best_action))
             success = simulate_demo(new_xyz, actionfile[best_action], animate=args.animation)
             
