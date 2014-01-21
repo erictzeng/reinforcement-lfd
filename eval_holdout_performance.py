@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Run this script with ./eval_holdout_performance.py images_folder failure file <output_file>
-#     e.g. ./eval_holdout_performance.py data/holdout_set_eval_50 holdout_failures.out holdout_results.out
+#     e.g. ./eval_holdout_performance.py data/images/baseline_new/images holdout_failures.out holdout_results.out
 #
 # The images in the folder must be named in the following format:
 #     task_##_step_##.png

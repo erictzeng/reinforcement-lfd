@@ -15,6 +15,8 @@ if echo $result_dir | grep -q "quad"; then
     ./do_task_eval.py $weight_file --resultfile=$result_dir/holdout_result.h5 --quad_features
 elif echo $result_dir | grep -q "sc"; then
     ./do_task_eval.py $weight_file --resultfile=$result_dir/holdout_result.h5 --sc_features
+elif echo $result_dir | grep -q "ropedist"; then
+    ./do_task_eval.py $weight_file --resultfile=$result_dir/holdout_result.h5 --rope_dist_features
 else
     ./do_task_eval.py $weight_file --resultfile=$result_dir/holdout_result.h5
 fi

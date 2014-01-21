@@ -363,6 +363,7 @@ if __name__ == "__main__":
     parser.add_argument("--resultfile", type=str) # don't save results if this is not specified
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
+    parser.add_argument("--rope_dist_features", action="store_true")
     parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument("--animation", type=int, default=0)
     
