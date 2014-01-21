@@ -426,13 +426,7 @@ def compare_hmats(traj1, traj2):
 def warp_hmats(xyz_src, xyz_targ, hmat_list):
     if not use_rapprentice:
         return hmat_list
-    scaled_xyz_src, src_params = registration.unit_boxify(xyz_src)
-    scaled_xyz_targ, targ_params = registration.unit_boxify(xyz_targ)        
-    f,g = registration.tps_rpm_bij(scaled_xyz_src, scaled_xyz_targ, plot_cb = None,
-                                   plotting=0,rot_reg=np.r_[1e-4,1e-4,1e-1], 
-                                   n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2)
-#     f,g = registration.tps_rpm_bij(scaled_xyz_src, scaled_xyz_targ, rot_reg=1e-3, n_iter=10)
-    cost = registration.tps_reg_cost(f) + registration.tps_reg_cost(g)
+    f, src_params, g, targ_params, cost = registration_cost(xyz_src, xyz_targ)
     f = registration.unscale_tps(f, src_params, targ_params)
     trajs = {}
     xyz_src_warped = np.zeros(xyz_src.shape)
@@ -448,6 +442,18 @@ def get_downsampled_clouds(demofile):
 
 def get_clouds(demofile):
     return [seg["cloud_xyz"] for seg in demofile.values()]
+
+def registration_cost(xyz_src, xyz_targ):
+    if not use_rapprentice:
+        return None
+    scaled_xyz_src, src_params = registration.unit_boxify(xyz_src)
+    scaled_xyz_targ, targ_params = registration.unit_boxify(xyz_targ)
+    f,g = registration.tps_rpm_bij(scaled_xyz_src, scaled_xyz_targ, plot_cb=None,
+                                   plotting=0, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
+                                   n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2)
+    cost = registration.tps_reg_cost(f) + registration.tps_reg_cost(g)
+    return f, src_params, g, targ_params, cost
+    
 
 def registration_cost_old(xyz0, xyz1):
     if not use_rapprentice:

@@ -48,7 +48,7 @@ def pack_payload(conf):
     path = info['path']
     fnames = [os.path.join(path, fname) for fname in os.listdir(path)]
     _, tarfname = tempfile.mkstemp(suffix='.tar.gz')
-    with tarfile.open(name=tarfname, mode='w:gz') as tar:
+    with tarfile.open(name=tarfname, mode='w:gz', dereference=True) as tar:
         for fname in fnames:
             tar.add(fname, arcname=os.path.relpath(fname, path))
         for fileinfo in info['additional-files']:
@@ -132,7 +132,7 @@ def distribute_jobs(conf, logins=None, password=None, overwrite=False):
         stdin, stdout, stderr = client.exec_command("python {}".format(os.path.join(server['path'], 'driver.py')))
         stdouts.append(stdout)
     print "Waiting for servers to finish..."
-    [stdout.readlines() for stdout in stdouts]
+    [stdout.channel.recv_exit_status() for stdout in stdouts]
     print "Done. Collecting results..."
     collect_results(conf, logins=logins, password=password)
 
