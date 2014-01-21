@@ -339,6 +339,12 @@ def mirror_arm_joints(x):
     "mirror image of joints (r->l or l->r)"
     return np.r_[-x[0],x[1],-x[2],x[3],-x[4],x[5],-x[6]]
 
+def reset_arms_to_side():
+    Globals.robot.SetDOFValues(PR2_L_POSTURES["side"],
+                               Globals.robot.GetManipulator("leftarm").GetArmIndices())
+    Globals.robot.SetDOFValues(mirror_arm_joints(PR2_L_POSTURES["side"]),
+                               Globals.robot.GetManipulator("rightarm").GetArmIndices())
+
 ###################
 
 class Globals:
@@ -404,9 +410,8 @@ if __name__ == "__main__":
     # create rope from rope in data
     rope_nodes = rope_initialization.find_path_through_point_cloud(init_rope_xyz)
     Globals.sim.create(rope_nodes)
-    # move arms to the side    
-    Globals.robot.SetDOFValues(PR2_L_POSTURES["side"], Globals.robot.GetManipulator("leftarm").GetArmIndices())
-    Globals.robot.SetDOFValues(mirror_arm_joints(PR2_L_POSTURES["side"]), Globals.robot.GetManipulator("rightarm").GetArmIndices())
+    # move arms to the side
+    reset_arms_to_side()
 
     if args.animation:
         Globals.viewer = trajoptpy.GetViewer(Globals.env)
@@ -439,8 +444,7 @@ if __name__ == "__main__":
             tasks.append(int(line[5:-1]))
 
     for i_task, demo_id_rope_nodes in (holdoutfile.iteritems() if not tasks else [(unicode(t),holdoutfile[unicode(t)]) for t in tasks]):
-        Globals.robot.SetDOFValues(PR2_L_POSTURES["side"], Globals.robot.GetManipulator("leftarm").GetArmIndices())
-        Globals.robot.SetDOFValues(mirror_arm_joints(PR2_L_POSTURES["side"]), Globals.robot.GetManipulator("rightarm").GetArmIndices())
+        reset_arms_to_side()
 
         redprint("Replace rope")
         rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
@@ -458,8 +462,7 @@ if __name__ == "__main__":
         for i_step in range(args.num_steps):
             print "task %s step %i" % (i_task, i_step)
 
-            Globals.robot.SetDOFValues(PR2_L_POSTURES["side"], Globals.robot.GetManipulator("leftarm").GetArmIndices())
-            Globals.robot.SetDOFValues(mirror_arm_joints(PR2_L_POSTURES["side"]), Globals.robot.GetManipulator("rightarm").GetArmIndices())
+            reset_arms_to_side()
 
             redprint("Observe point cloud")
             new_xyz = Globals.sim.observe_cloud()
