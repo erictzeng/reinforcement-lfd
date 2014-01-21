@@ -6,7 +6,7 @@ Generate holdout set with
 ./holdout_result.py <results_file> <images_dir>
 
 Example
-./holdout_result.py "data/holdout_result.h5" "eval"
+./holdout_result.py "data/results/multi_quad_100/holdout_result.h5" "data/results/multi_quad_100/images"
 """
 parser = argparse.ArgumentParser(usage=usage)
 parser.add_argument("results_file", type=str)

@@ -21,7 +21,7 @@ if __name__ == '__main__':
         logname = os.path.join(logdir, nameonly + '.txt')
         errname = os.path.join(logdir, nameonly + '.err')
         outname = os.path.join(outdir, nameonly)
-        subprocesses.append(subprocess.Popen('python do_task_eval.py all.h5 {} nearest_neighbor_weights.h5 --old_features --resultfile={}'.format(fname, outname),
+        subprocesses.append(subprocess.Popen('python do_task_eval.py data/misc/actions.h5 {} nearest_neighbor_weights.h5 --old_features --resultfile={}'.format(fname, outname),
                             stdout=open(logname, 'w'),
                             stderr=open(errname, 'w'),
                             shell=True))

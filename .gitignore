@@ -41,3 +41,7 @@ gurobi.log
 # Data files
 data
 *.pkl
+
+# Temporary files
+*~
+
