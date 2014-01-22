@@ -59,12 +59,12 @@ def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile
         group = expert_demofile[key]
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
         action = group['action'][()]
-        xi_name = str('xi_') + str(key)
         if action.startswith('endstate'): # this is a knot
             continue
         if verbose:
             print 'adding constraints for:\t', action        
         lhs_phi = feature_fn(state, action)
+        xi_name = str('xi_') + str(key)
         for (i, other_a) in enumerate(actions):
             if other_a == action:
                 continue
@@ -78,6 +78,65 @@ def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile
             g['rhs_phi'] = rhs_phi
             g['margin'] = margin
             g['xi'] = xi_name
+        outfile.flush()
+    outfile.close()
+
+def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile, outfile, start=0, end=-1, verbose=False):
+    if type(expert_demofile) is str:
+        expert_demofile = h5py.File(expert_demofile, 'r')
+    if type(outfile) is str:
+        outfile = h5py.File(outfile, 'w')
+    if verbose:
+        print "adding constraints"
+    constraint_ctr = 0
+    if end < 0:
+        end = len(expert_demofile.keys())
+    while int(expert_demofile[str(start)]['pred'][()]) != start:
+        start += 1
+    while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
+        end += 1
+    traj = []
+    for demo_i in range(start, end):
+        print "demo_i", demo_i
+        key = str(demo_i)
+        group = expert_demofile[key]
+        state = [key,group['cloud_xyz'][:]] # these are already downsampled
+        action = group['action'][()]
+        if action.startswith('endstate'): # this is a knot
+            continue
+        if verbose:
+            print 'adding constraints for:\t', action        
+        # add examples
+        lhs_phi = feature_fn(state, action)
+        xi_name = str('xi_') + str(key)
+        for (i, other_a) in enumerate(actions):
+            if other_a == action:
+                continue
+            if verbose:
+                print "added {}/{}".format(i, len(actions))
+            rhs_phi = feature_fn(state, other_a)
+            margin = margin_fn(state, action, other_a)
+            g = outfile.create_group(str(constraint_ctr))
+            constraint_ctr += 1
+            g['exp_features'] = lhs_phi
+            g['rhs_phi'] = rhs_phi
+            g['margin'] = margin
+            g['xi'] = xi_name
+        # add bellman_constraints
+        if group['pred'][()] == key:
+            for i in range(len(traj)-1):
+                curr_state, curr_action = traj[i]
+                next_state, next_action = traj[i+1]
+                lhs_action_phi = feature_fn(curr_state, curr_action)
+                rhs_action_phi = feature_fn(next_state, next_action)
+                g = outfile.create_group(str(constraint_ctr))
+                constraint_ctr += 1
+                g['exp_features'] = lhs_action_phi
+                g['rhs_phi'] = rhs_action_phi
+                g['margin'] = 0
+                g['xi'] = "bellman"
+            traj = []
+        traj.append([state, action])
         outfile.flush()
     outfile.close()
 
@@ -109,20 +168,13 @@ def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=F
         if outfile:
             mm_model.save_constraints_to_file(outfile)
 
-def add_bellman_constraints_from_demo(mm_model, expert_demofile, start_i, end_i, outfile=None, verbose=False):
+def add_bellman_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=False):
     if type(expert_demofile) is str:
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
         print "adding constraints"
-    c = 0
     traj = []
-    while int(expert_demofile[str(start_i)]['pred'][()]) != start_i:
-        start_i += 1
-    while int(expert_demofile[str(end_i)]['pred'][()]) != end_i:
-        end_i += 1
-    for i in range(start_i, end_i):
-        key = str(i)
-        group = expert_demofile[key]
+    for key, group in expert_demofile.iteritems():
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
         action = group['action'][()]
         print "key", key
@@ -136,8 +188,6 @@ def add_bellman_constraints_from_demo(mm_model, expert_demofile, start_i, end_i,
         traj.append([state, action])
         if verbose:
             print 'adding constraints for:\t', action
-        c += 1
-        #mm_model.clear_asm_cache()
 
 def concatenate_fns(fns, actionfile):
     if type(actionfile) is str:
@@ -563,6 +613,28 @@ def test_sc_features(args):
     for name, seg_info in act_file.iteritems():
         print feature_fn([name, clouds.downsample(seg_info['cloud_xyz'], DS_SIZE)], name)
 
+def build_constraints_no_model(args):
+    feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
+    print 'Building constraints using no model into {}.'.format(args.constraintfile)
+    if args.model == 'bellman':
+        compute_bellman_constraints_no_model(feature_fn,
+                                             margin_fn,
+                                             actions,
+                                             args.demofile,
+                                             outfile=args.constraintfile,
+                                             start=args.start,
+                                             end=args.end,
+                                             verbose=True)
+    else:
+        compute_constraints_no_model(feature_fn,
+                                     margin_fn,
+                                     actions,
+                                     args.demofile,
+                                     outfile=args.constraintfile,
+                                     start=args.start,
+                                     end=args.end,
+                                     verbose=True)
+
 def build_constraints(args):
     #test_sc_features(args)
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
@@ -576,7 +648,6 @@ def build_constraints(args):
     if args.model == 'bellman':
         add_bellman_constraints_from_demo(mm_model,
                                           args.demofile,
-                                          args.i_start, args.i_end,
                                           outfile=args.constraintfile,
                                           verbose=True)
     else:
@@ -595,7 +666,6 @@ def build_model(args):
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     mm_model.load_constraints_from_file(args.constraintfile)
-    ipy.embed()
     mm_model.save_model(args.modelfile)
 
 def optimize_model(args):
@@ -625,10 +695,17 @@ if __name__ == '__main__':
     parser.add_argument("--rope_dist_features", action="store_true")
     parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument('--C', '-c', type=float, default=1)
-    parser.add_argument("--i_start", type=int)
-    parser.add_argument("--i_end", type=int)
     parser.add_argument("--save_memory", action="store_true")
 
+    # build-constraints-no-model subparser
+    parser_build_constraints = subparsers.add_parser('build-constraints-no-model')
+    parser_build_constraints.add_argument('demofile')
+    parser_build_constraints.add_argument('constraintfile')
+    parser_build_constraints.add_argument('start', type=int)
+    parser_build_constraints.add_argument('end', type=int)
+    parser_build_constraints.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
+    parser_build_constraints.set_defaults(func=build_constraints_no_model)
+    
     # build-constraints subparser
     parser_build_constraints = subparsers.add_parser('build-constraints')
     parser_build_constraints.add_argument('demofile')

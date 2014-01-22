@@ -363,8 +363,8 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
     def read(fname, actions, feature_fn, margin_fn):
         mm_model = MultiSlackMaxMarginModel.__new__(MultiSlackMaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
-        self.action_cost = -1
-        self.gamma = 0.9 #bestpractices
+        mm_model.action_cost = -1
+        mm_model.gamma = 0.9 #bestpractices
         return mm_model
         
     def add_trajectory(self, states_actions):
@@ -525,7 +525,7 @@ def test_update_constraints():
     return not any(w1 - w2 > eps for w1, w2 in zip(msmm_loaded.weights, msmm_orig.weights))
 
 def test_bellman():
-    grid_dim=100
+    grid_dim=50
     goal_state = np.array([grid_dim,grid_dim])
     actions = {"n":np.array([0,1]), "e":np.array([1,0]), "s":np.array([0,-1]), "w":np.array([-1,0])}
     def feature_fn(state, action):
@@ -558,11 +558,11 @@ def test_bellman():
     gamma = 0.9
     N = 3
     model = BellmanMaxMarginModel(actions.keys(), C, gamma, N, feature_fn, margin_fn)
-    for i in range(100):
+    for i in range(50):
         print i
         model.add_trajectory(gen_trajectory())
     weights = model.optimize_model()
-    
+    print weights 
     return True
 
 if __name__ == '__main__':
