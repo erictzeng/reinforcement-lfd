@@ -288,8 +288,9 @@ class ActionSet(object):
     """
     caches = {}                 # will break if same processes use dif actionsets that have
     # the same actions
+    args = None
     
-    def __init__(self, actionfile, use_cache = True):
+    def __init__(self, actionfile, use_cache = True, args=None):
         self.actionfile = actionfile
         self.actions = sorted(actionfile.keys())
         self.action_to_ind = dict((v, i) for i, v in enumerate(self.actions))
@@ -302,18 +303,18 @@ class ActionSet(object):
         self.cache = ActionSet.caches[act_key]
         self.use_cache = use_cache
         self.link_names = ["%s_gripper_tool_frame"%lr for lr in ('lr')]
+        if args:
+            ActionSet.args = args
 
-    def _warp_hmats(self, state, action):
+    def _warp_hmats(self, state, action):        
         hit, value = self.check_cache(state, action)
         if hit:
             return value
         else:
-            closing_pts = self.get_closing_pts(state, action)
-            interest_pts = []
-            for lr in closing_pts:
-                if closing_pts[lr] != -1:
-                    hmat = self.actionfile[action]["%s_gripper_tool_frame"%lr]['hmat'][closing_pts[lr]]
-                    interest_pts.append(extract_point(hmat))
+            if ActionSet.args and args.gripper_weighting:
+                interest_pts = get_closing_pts(self.actionfile[action])
+            else:
+                interest_pts = None
             [warped_trajs, rc, warped_rope_xyz] = warp_hmats(self.get_ds_cloud(action),
                                                   state[1],
                                                   [(lr, self.actionfile[action][ln]['hmat']) for lr, ln in zip('lr', self.link_names)],
@@ -324,29 +325,12 @@ class ActionSet(object):
     def get_ds_cloud(self, action):
         return clouds.downsample(self.actionfile[action]['cloud_xyz'], DS_SIZE)
 
-    def get_closing_pts(self, state, action):
-        """
-        returns a dictionary mapping 'l', 'r' to the index in the corresponding trajectory
-        where the gripper first closes
-        """
-        seg_info = self.actionfile[action]
-        result = {}
-        for lr in 'lr':
-            grip = np.asarray(seg_info[lr + '_gripper_joint'])
-            closings = np.flatnonzero((grip[1:] < GRIPPER_OPEN_CLOSE_THRESH) \
-                                          & (grip[:-1] >= GRIPPER_OPEN_CLOSE_THRESH))
-            if closings:
-                result[lr] = closings[0]
-            else:
-                result[lr] = -1
-        return result
-
     def sc_features(self, state, action):
         seg_info = self.actionfile[action]
 
         warped_trajs, _, _ = self._warp_hmats(state, action)
         feat_val = dict((lr, np.zeros(self.num_sc_features/2.0)) for lr in 'lr')
-        closings = self.get_closing_pts(state, action)
+        closings = get_closing_inds(seg_info)
         for lr in 'lr':
             first_close = closings[lr]
             if first_close != -1:
@@ -589,12 +573,11 @@ def compute_weights(xyz, interest_pts):
     return 1+distances
 
 def registration_cost(xyz_src, xyz_targ, src_interest_pts):    
-    if src_interest_pts and args.gripper_weighting:
+    if src_interest_pts:
         weights = compute_weights(xyz_src, src_interest_pts)
     else:
         weights = None
     scaled_xyz_src, src_params = registration.unit_boxify(xyz_src)
-    scaled_src_interest_pts = src_interest_pts*src_params[0] + src_params[1]
     scaled_xyz_targ, targ_params = registration.unit_boxify(xyz_targ)
     f,g = registration.tps_rpm_bij(scaled_xyz_src, scaled_xyz_targ, plot_cb=None,
                                    plotting=0, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
@@ -635,6 +618,32 @@ def combine_expert_demo_files(infile1, infile2, outfile):
         if2.close()
         of.close()
 
+def get_closing_pts(seg_info):
+    closing_inds = get_closing_inds(seg_info)
+    closing_pts = []
+    for lr in closing_inds:
+        if closing_inds[lr] != -1:
+            hmat = seg_info["%s_gripper_tool_frame"%lr]['hmat'][closing_inds[lr]]
+            closing_pts.append(extract_point(hmat))
+    return closing_pts
+
+def get_closing_inds(seg_info):
+    """
+    returns a dictionary mapping 'l', 'r' to the index in the corresponding trajectory
+    where the gripper first closes
+    """
+    result = {}
+    for lr in 'lr':
+        grip = np.asarray(seg_info[lr + '_gripper_joint'])
+        closings = np.flatnonzero((grip[1:] < GRIPPER_OPEN_CLOSE_THRESH) \
+                                      & (grip[:-1] >= GRIPPER_OPEN_CLOSE_THRESH))
+        if closings:
+            result[lr] = closings[0]
+        else:
+            result[lr] = -1
+    return result
+
+
 def compute_action_margin(model, a1, a2):
     print 'done'
     return model.margin(None, a1, a2)
@@ -657,6 +666,7 @@ def test_saving_model(mm_model):
         print "PASSED: Model saved and reloaded correctly"
 
 def select_feature_fn(args):
+    ActionSet.args = args
     def bias_feature_fn(actionfile):
         return get_bias_feature_fn(actionfile, old=args.old_features)
     if args.quad_features:
