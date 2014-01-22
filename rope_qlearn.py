@@ -81,7 +81,7 @@ def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile
         outfile.flush()
     outfile.close()
 
-def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=False):
+def add_constraints_from_demo(mm_model, expert_demofile, start_i, end_i, outfile=None, verbose=False):
     """
     takes all of the expert demonstrations from expert_demofile
     and add all of the associated constrainted to mm_model
@@ -96,7 +96,9 @@ def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=F
     if verbose:
         print "adding constraints"
     c = 0
-    for key, group in expert_demofile.iteritems():
+    for i in range(start_i, end_i):  # Assumes example ids are strings of consecutive integers starting from 0
+        key = str(i)
+        group = expert_demofile[key]
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
         action = group['action'][()]
         if action.startswith('endstate'): # this is a knot
@@ -246,7 +248,6 @@ class ActionSet(object):
             else:
                 result[lr] = -1
         return result
-            
 
     def sc_features(self, state, action):
         seg_info = self.actionfile[action]
@@ -255,7 +256,7 @@ class ActionSet(object):
         feat_val = dict((lr, np.zeros(self.num_sc_features/2.0)) for lr in 'lr')
         closings = self.get_closing_pts(state, action)
         for lr in 'lr':
-            first_close = result[lr]
+            first_close = closings[lr]
             if first_close != -1:
                 close_hmat = warped_trajs[lr][first_close]
 #                 unwarped_hmat = self.actionfile[action]["%s_gripper_tool_frame"%lr]['hmat'][first_close]            
@@ -392,7 +393,12 @@ def gripper_frame_shape_context(xyz, hmat):
     xyz1 = np.ones((len(xyz),4),'float')  #homogeneous coord
     xyz1[:,:3] = xyz
     xyz2 = [np.dot(h_inv_table, pt)[:3] for pt in xyz1] #bestpractices
-    xyz3 = cart2spherical(xyz2)
+    rot_axes = np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]])
+    # Rotate so z-axis becomes y-axis, y becomes x, and x becomes z.
+    # Then theta is the angle we are interested in (since yz plane approximately
+    # corresponds to the plane of the table)
+    xyz2_rot = [np.dot(rot_axes, pt) for pt in xyz2]
+    xyz3 = cart2spherical(xyz2_rot)
 
     bin_volumes = {}
     bin_weights = {}
@@ -437,8 +443,8 @@ def gripper_frame_shape_context(xyz, hmat):
     r_ind = 0 if R_BINS == 1 else T_BINS*P_BINS
     p_ind = 0 if P_BINS == 1 else T_BINS
 
-    for (r, p, t) in bin_weights.iterkeys():
-        sc_features[r*r_ind + p*p_ind + t] = bin_weights[(r, p, t)]
+    for (r, t, p) in bin_weights.iterkeys():
+        sc_features[r*r_ind + p*p_ind + t] = bin_weights[(r, t, p)]
     return sc_features
 
 
@@ -598,6 +604,7 @@ def build_constraints(args):
     else:
         add_constraints_from_demo(mm_model,
                                   args.demofile,
+                                  args.i_start, args.i_end,
                                   outfile=args.constraintfile,
                                   verbose=True)
 
@@ -611,7 +618,6 @@ def build_model(args):
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     mm_model.load_constraints_from_file(args.constraintfile)
-    ipy.embed()
     mm_model.save_model(args.modelfile)
 
 def optimize_model(args):
