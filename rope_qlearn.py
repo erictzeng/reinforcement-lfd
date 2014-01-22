@@ -11,12 +11,13 @@ import argparse
 import h5py, math
 import IPython as ipy
 from max_margin import MaxMarginModel, MultiSlackMaxMarginModel, BellmanMaxMarginModel
-from pdb import pm
+from pdb import pm, set_trace
 import numpy as np
 from joblib import Parallel, delayed
 import scipy.spatial as sp_spat
 import os.path
 import cProfile
+import util as u
 try:
     from rapprentice import registration, clouds
     use_rapprentice = True
@@ -29,9 +30,9 @@ DS_SIZE = .025
 GRIPPER_OPEN_CLOSE_THRESH = 0.04
 
 # constants for shape context
-R_MIN, P_MIN, T_MIN = 0, 0, np.pi/2.0
-R_MAX, P_MAX, T_MAX = 0.15, np.pi, np.pi
-R_BINS, P_BINS, T_BINS = 2, 4, 4
+R_MIN, P_MIN, T_MIN = 0, 0, 0
+R_MAX, P_MAX, T_MAX = 0.15, np.pi, 2*np.pi
+R_BINS, P_BINS, T_BINS = 4, 1, 4
 DENSITY_RADIUS = .2
 
 
@@ -158,6 +159,12 @@ def get_sc_feature_fn(actionfile):
     act_set = ActionSet(actionfile)
     return (act_set.sc_features, act_set.num_sc_features, actionfile)    
 
+def get_rope_dist_feat_fn(actionfile):
+    if type(actionfile) is str:
+        actionfile = h5py.File(actionfile, 'r')
+    act_set = ActionSet(actionfile)
+    return (act_set.rope_dist_features, act_set.num_rope_dist_feat, actionfile)
+
 def get_bias_feature_fn(actionfile, old=False):
     if type(actionfile) is str:
         actionfile = h5py.File(actionfile, 'r')
@@ -193,13 +200,20 @@ class ActionSet(object):
 
     state is assumed to be a list [<state_id>, <point_cloud>]
     """
+    caches = {}                 # will break if same processes use dif actionsets that have
+    # the same actions
+    
     def __init__(self, actionfile, use_cache = True):
         self.actionfile = actionfile
         self.actions = sorted(actionfile.keys())
         self.action_to_ind = dict((v, i) for i, v in enumerate(self.actions))
         self.num_actions = len(self.actions)
         self.num_sc_features = R_BINS*T_BINS*P_BINS*2
-        self.cache = {}
+        self.num_rope_dist_feat = 2
+        act_key = u.tuplify(self.actions)
+        if act_key not in ActionSet.caches:
+            ActionSet.caches[act_key] = {}
+        self.cache = ActionSet.caches[act_key]
         self.use_cache = use_cache
         self.link_names = ["%s_gripper_tool_frame"%lr for lr in ('lr')]
 
@@ -208,11 +222,11 @@ class ActionSet(object):
         if hit:
             return value
         else:
-            [warped_trajs, rc] = warp_hmats(self.get_ds_cloud(action),
-                                      state[1],
-                                      [(lr, self.actionfile[action][ln]['hmat']) for lr, ln in zip('lr', self.link_names)])
-            self.store_cache(state, action, [warped_trajs, rc])
-            return [warped_trajs, rc]
+            [warped_trajs, rc, warped_rope_xyz] = warp_hmats(self.get_ds_cloud(action),
+                                                  state[1],
+                                                  [(lr, self.actionfile[action][ln]['hmat']) for lr, ln in zip('lr', self.link_names)])
+            self.store_cache(state, action, [warped_trajs, rc, warped_rope_xyz])
+            return [warped_trajs, rc, warped_rope_xyz]
 
     def get_ds_cloud(self, action):
         return clouds.downsample(self.actionfile[action]['cloud_xyz'], DS_SIZE)
@@ -220,7 +234,7 @@ class ActionSet(object):
     def sc_features(self, state, action):
         seg_info = self.actionfile[action]
 
-        warped_trajs, _ = self._warp_hmats(state, action)
+        warped_trajs, _, _ = self._warp_hmats(state, action)
         feat_val = dict((lr, np.zeros(self.num_sc_features/2.0)) for lr in 'lr')
         for lr in 'lr':
             grip = np.asarray(seg_info[lr + '_gripper_joint'])
@@ -231,14 +245,31 @@ class ActionSet(object):
 #                 unwarped_hmat = self.actionfile[action]["%s_gripper_tool_frame"%lr]['hmat'][first_close]            
 #                 close_hmat = f.transform_hmats(np.array([unwarped_hmat]))[0]
                 feat_val[lr] = gripper_frame_shape_context(state[1], close_hmat)
+                feat_norm = np.linalg.norm(feat_val[lr], ord=2)
+                if feat_norm > 0:
+                    feat_val[lr] = feat_val[lr] / feat_norm
         return np.r_[feat_val['l'], feat_val['r']]            
+
+    def rope_dist_features(self, state, action):
+        # Feature 1 = sum of distances from each warped point of original rope to
+        # closest point in new rope
+        # Feature 2 = sum of distances from each point in new rope to closest
+        # point in warped original rope
+        feat = np.zeros(self.num_rope_dist_feat)
+        new_rope_xyz = state[1]
+        _, _, warped_rope_xyz = self._warp_hmats(state, action)
+        kd_new_rope = sp_spat.KDTree(new_rope_xyz)
+        kd_warped_rope = sp_spat.KDTree(warped_rope_xyz)
+        feat[0] = sum(kd_new_rope.query(warped_rope_xyz)[0])
+        feat[1] = sum(kd_warped_rope.query(new_rope_xyz)[0])
+        return feat
     
     def bias_features(self, state, action, old = False):
         feat = np.zeros(self.num_actions + 1)
         if old:
             feat[0] = registration_cost_old(state[1], self.get_ds_cloud(action))
         else:
-            (_, feat[0]) = self._warp_hmats(state, action)
+            _, feat[0], _ = self._warp_hmats(state, action)
         feat[self.action_to_ind[action]+1] = 1
         return feat
     
@@ -247,7 +278,7 @@ class ActionSet(object):
         if old:
             s = registration_cost_old(state[1], self.get_ds_cloud(action))
         else:
-            (_, s) = self._warp_hmats(state, action)
+            _, s, _ = self._warp_hmats(state, action)
         feat[0] = s**2
         feat[1] = s
         feat[2+self.action_to_ind[action]] = s
@@ -259,10 +290,10 @@ class ActionSet(object):
         warp both actions, compare the resulting trajectories:
         ex. warp a1 -> a2; use compare_hmats(warp(a1.traj), a2.traj)
         """
-        warped_a1_trajs = self._warp_hmats((a2, self.get_ds_cloud(a2)), a1)
+        warped_a1_trajs, _, _ = self._warp_hmats((a2, self.get_ds_cloud(a2)), a1)
         warped_a1_trajs = [warped_a1_trajs[lr] for lr in 'lr']
         a1_trajs = [self.actionfile[a1][ln]['hmat'][:] for ln in self.link_names]
-        warped_a2_trajs = self._warp_hmats((a1, self.get_ds_cloud(a1)), a2)
+        warped_a2_trajs, _, _ = self._warp_hmats((a1, self.get_ds_cloud(a1)), a2)
         warped_a2_trajs = [warped_a2_trajs[lr] for lr in 'lr']
         a2_trajs = [self.actionfile[a2][ln]['hmat'][:] for ln in self.link_names]
         ret_val = sum(compare_hmats(t1, t2) for (t1, t2) in 
@@ -295,8 +326,8 @@ class ActionSet(object):
         when we call this with a particular expert demo we will warp that trajectory
         once for each action we compare to -- issue is hashing point clouds effectively        
         """
-        warped_a1_trajs, _ = self._warp_hmats(state, a1)
-        warped_a2_trajs, _ = self._warp_hmats(state, a2)
+        warped_a1_trajs, _, _ = self._warp_hmats(state, a1)
+        warped_a2_trajs, _, _ = self._warp_hmats(state, a2)
         return sum(compare_hmats(warped_a1_trajs[lr], warped_a2_trajs[lr]) for lr in 'lr')
 
     def combined_margin(self, state, a1, a2):
@@ -304,25 +335,49 @@ class ActionSet(object):
                 self.action_state_margin(a1, a2, state))
 
 #http://stackoverflow.com/questions/4116658/faster-numpy-cartesian-to-spherical-coordinate-conversion
+# returns (r, theta, phi) with positive r, theta in [0, 2*pi], and phi in [0, pi]
 def cart2spherical(xyz):
     xyz = np.asarray(xyz)
     ptsnew =  np.zeros(xyz.shape)
     xy = xyz[:,0]**2 + xyz[:,1]**2
     ptsnew[:,0] = np.sqrt(xy + xyz[:,2]**2)
     ptsnew[:,1] = np.arctan2(xyz[:,1], xyz[:,0])
-    ptsnew[ptsnew[:,1] < 0] += 2*np.pi
+    ptsnew[ptsnew[:,1] < 0, 1] += 2*np.pi
     ptsnew[:,2] = np.arctan2(np.sqrt(xy), xyz[:,2]) # for elevation angle defined from Z-axis down
+    #ptsnew[:,2] = np.arctan2(xyz[:,2], np.sqrt(xy)) # for elevation angle defined from XY-plane up
     return ptsnew
 
 def get_sect_vol((r1, r2), (t1, t2), (p1, p2)):
-    return (r2**3 - r1**3)/3 * (t2 - t1) * (-math.cos(p2) + math.cos(p1))
+    return float(r2**3 - r1**3)/3.0 * (t2 - t1) * (-math.cos(p2) + math.cos(p1))
 
 def gripper_frame_shape_context(xyz, hmat):
+    # Project gripper center onto the plane of the table --> then this point is
+    # the center of the shape context feature we compute
     h_inv = np.linalg.inv(hmat)
+    table_height = xyz[:,2].mean() - 0.02
+    fwd_axis = np.array([1, 0, 0, 1], 'float')  # homogeneous coord for e1
+                                                # (in coord system of PR2, x-axis is forward)
+    # Rotate forward axis to the frame of the gripper
+    fwd_axis_gripper = np.dot(h_inv, fwd_axis)[:3]
+    gripper_trans = hmat[:3, 3]
+
+    # calculation of projection of gripper center, gripper_proj:
+    # gripper_proj = gripper_trans + c * fwd_axis_gripper,
+    # where c is chosen so that gripper_proj is at the same elevation (z-axis) as the table
+    c = float(table_height - gripper_trans[2]) / fwd_axis_gripper[2]
+    gripper_proj = gripper_trans + c * fwd_axis_gripper
+
+    hmat_table = np.copy(hmat)
+    gripper_trans_homog = np.ones((1, 4), 'float')
+    gripper_trans_homog[0, :3] = gripper_proj
+    hmat_table[:,3] = gripper_trans_homog
+    h_inv_table = np.linalg.inv(hmat_table)
+
     xyz1 = np.ones((len(xyz),4),'float')  #homogeneous coord
     xyz1[:,:3] = xyz
-    xyz2 = [np.dot(h_inv, pt)[:3] for pt in xyz1] #bestpractices
+    xyz2 = [np.dot(h_inv_table, pt)[:3] for pt in xyz1] #bestpractices
     xyz3 = cart2spherical(xyz2)
+
     bin_volumes = {}
     bin_weights = {}
 
@@ -363,8 +418,11 @@ def gripper_frame_shape_context(xyz, hmat):
         bin_weights[(r_ind, t_ind, p_ind)] = orig_weight + new_pt_weight
 
     sc_features = np.zeros(R_BINS * T_BINS * P_BINS)
+    r_ind = 0 if R_BINS == 1 else T_BINS*P_BINS
+    p_ind = 0 if P_BINS == 1 else T_BINS
+
     for (r, p, t) in bin_weights.iterkeys():
-        sc_features[r*T_BINS*P_BINS + p*T_BINS + t] = bin_weights[(r, p, t)]
+        sc_features[r*r_ind + p*p_ind + t] = bin_weights[(r, p, t)]
     return sc_features
 
 
@@ -401,9 +459,11 @@ def warp_hmats(xyz_src, xyz_targ, hmat_list):
     f, src_params, g, targ_params, cost = registration_cost(xyz_src, xyz_targ)
     f = registration.unscale_tps(f, src_params, targ_params)
     trajs = {}
+    xyz_src_warped = np.zeros(xyz_src.shape)
     for k, hmats in hmat_list:
         trajs[k] = f.transform_hmats(hmats)
-    return [trajs, cost]
+    xyz_src_warped = f.transform_points(xyz_src)
+    return [trajs, cost, xyz_src_warped]
 
 def get_downsampled_clouds(demofile):
     if not use_rapprentice:
@@ -478,13 +538,17 @@ def test_saving_model(mm_model):
         print "PASSED: Model saved and reloaded correctly"
 
 def select_feature_fn(args):
+    def bias_feature_fn(actionfile):
+        return get_bias_feature_fn(actionfile, old=args.old_features)
     if args.quad_features:
         print 'Using quadratic features.'
         feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile, args.old_features)
+    elif args.rope_dist_features:
+        print 'Using sc, bias, and rope dist features.'
+        fns = [bias_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn]
+        feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     elif args.sc_features:
         print 'Using sc and bias features.'
-        def bias_feature_fn(actionfile):
-            return get_bias_feature_fn(actionfile, old=args.old_features)
         fns = [bias_feature_fn, get_sc_feature_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     else:
@@ -500,6 +564,7 @@ def test_sc_features(args):
         print feature_fn([name, clouds.downsample(seg_info['cloud_xyz'], DS_SIZE)], name)
 
 def build_constraints(args):
+    #test_sc_features(args)
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Building constraints into {}.'.format(args.constraintfile)
     if args.model == 'multi':
@@ -542,6 +607,11 @@ def optimize_model(args):
         mm_model = BellmanMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
+    if args.save_memory:
+        mm_model.model.setParam('threads', 1)  # Use single thread instead of maximum
+        # barrier method (#2) is default for QP, but uses more memory and could lead to error
+        #mm_model.model.setParam('method', 1)  # Use dual simplex method to solve model
+        mm_model.model.setParam('method', 0)  # Use primal simplex method to solve model
     mm_model.C = args.C
     mm_model.optimize_model()
     mm_model.save_weights_to_file(args.weightfile)
@@ -552,10 +622,12 @@ if __name__ == '__main__':
     parser.add_argument('model', choices=['single', 'multi', 'bellman'])
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
+    parser.add_argument("--rope_dist_features", action="store_true")
     parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument('--C', '-c', type=float, default=1)
     parser.add_argument("--i_start", type=int)
     parser.add_argument("--i_end", type=int)
+    parser.add_argument("--save_memory", action="store_true")
 
     # build-constraints subparser
     parser_build_constraints = subparsers.add_parser('build-constraints')
