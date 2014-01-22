@@ -311,7 +311,7 @@ class ActionSet(object):
         if hit:
             return value
         else:
-            if ActionSet.args and args.gripper_weighting:
+            if ActionSet.args and ActionSet.args.gripper_weighting:
                 interest_pts = get_closing_pts(self.actionfile[action])
             else:
                 interest_pts = None
