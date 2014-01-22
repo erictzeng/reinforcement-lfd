@@ -10,7 +10,7 @@ import argparse
 
 import h5py, math
 import IPython as ipy
-from max_margin import MaxMarginModel, MultiSlackMaxMarginModel
+from max_margin import MaxMarginModel, MultiSlackMaxMarginModel, BellmanMaxMarginModel
 from pdb import pm
 import numpy as np
 from joblib import Parallel, delayed
@@ -107,6 +107,36 @@ def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=F
         #mm_model.clear_asm_cache()
         if outfile:
             mm_model.save_constraints_to_file(outfile)
+
+def add_bellman_constraints_from_demo(mm_model, expert_demofile, start_i, end_i, outfile=None, verbose=False):
+    if type(expert_demofile) is str:
+        expert_demofile = h5py.File(expert_demofile, 'r')
+    if verbose:
+        print "adding constraints"
+    c = 0
+    traj = []
+    while int(expert_demofile[str(start_i)]['pred'][()]) != start_i:
+        start_i += 1
+    while int(expert_demofile[str(end_i)]['pred'][()]) != end_i:
+        end_i += 1
+    for i in range(start_i, end_i):
+        key = str(i)
+        group = expert_demofile[key]
+        state = [key,group['cloud_xyz'][:]] # these are already downsampled
+        action = group['action'][()]
+        print "key", key
+        if action.startswith('endstate'): # this is a knot
+            continue
+        if group['pred'][()] == key:
+            mm_model.add_trajectory(traj)
+            if outfile:
+                mm_model.save_constraints_to_file(outfile)
+            traj = []
+        traj.append([state, action])
+        if verbose:
+            print 'adding constraints for:\t', action
+        c += 1
+        #mm_model.clear_asm_cache()
 
 def concatenate_fns(fns, actionfile):
     if type(actionfile) is str:
@@ -472,30 +502,44 @@ def test_sc_features(args):
 def build_constraints(args):
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Building constraints into {}.'.format(args.constraintfile)
-    if args.multi_slack:
+    if args.model == 'multi':
         mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
+    elif args.model == 'bellman':
+        mm_model = BellmanMaxMarginModel(actions, args.C, .9, num_features, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
-    add_constraints_from_demo(mm_model,
-                              args.demofile,
-                              outfile=args.constraintfile,
-                              verbose=True)
+    if args.model == 'bellman':
+        add_bellman_constraints_from_demo(mm_model,
+                                          args.demofile,
+                                          args.i_start, args.i_end,
+                                          outfile=args.constraintfile,
+                                          verbose=True)
+    else:
+        add_constraints_from_demo(mm_model,
+                                  args.demofile,
+                                  outfile=args.constraintfile,
+                                  verbose=True)
 
 def build_model(args):
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Building model into {}.'.format(args.modelfile)
-    if args.multi_slack:
+    if args.model == 'multi':
         mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
+    elif args.model == 'bellman':
+        mm_model = BellmanMaxMarginModel(actions, args.C, .9, num_features, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     mm_model.load_constraints_from_file(args.constraintfile)
+    ipy.embed()
     mm_model.save_model(args.modelfile)
 
 def optimize_model(args):
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Found model: {}'.format(args.modelfile)
-    if args.multi_slack:
+    if args.model == 'multi':
         mm_model = MultiSlackMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
+    elif args.model == 'bellman':
+        mm_model = BellmanMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
     mm_model.C = args.C
@@ -505,11 +549,13 @@ def optimize_model(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
+    parser.add_argument('model', choices=['single', 'multi', 'bellman'])
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument('--C', '-c', type=float, default=1)
-    parser.add_argument("--multi_slack", action="store_true")
+    parser.add_argument("--i_start", type=int)
+    parser.add_argument("--i_end", type=int)
 
     # build-constraints subparser
     parser_build_constraints = subparsers.add_parser('build-constraints')
