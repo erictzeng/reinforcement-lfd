@@ -14,6 +14,7 @@ from max_margin import MaxMarginModel, MultiSlackMaxMarginModel, BellmanMaxMargi
 from pdb import pm, set_trace
 import numpy as np
 from joblib import Parallel, delayed
+import scipy.spatial.distance as ssd
 import scipy.spatial as sp_spat
 import os.path
 import cProfile
@@ -109,17 +110,28 @@ def add_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=F
         if outfile:
             mm_model.save_constraints_to_file(outfile)
 
-def add_bellman_constraints_from_demo(mm_model, expert_demofile, start_i, end_i, outfile=None, verbose=False):
+def add_bellman_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, outfile=None, verbose=False):
     if type(expert_demofile) is str:
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
         print "adding constraints"
     c = 0
     traj = []
-    while int(expert_demofile[str(start_i)]['pred'][()]) != start_i:
-        start_i += 1
-    while int(expert_demofile[str(end_i)]['pred'][()]) != end_i:
-        end_i += 1
+    if start_i != 0:
+        while int(expert_demofile[str(start_i)]['pred'][()]) != start_i:
+            start_i += 1
+    if end_i != -1:
+        while int(expert_demofile[str(end_i)]['pred'][()]) != end_i:
+            end_i += 1
+    else:
+        try:
+            end_i = 0
+            key_iter = expert_demofile.iterkeys()
+            while 1:
+                key_iter.next()
+                end_i += 1
+        except:
+            pass
     for i in range(start_i, end_i):
         key = str(i)
         group = expert_demofile[key]
@@ -222,9 +234,16 @@ class ActionSet(object):
         if hit:
             return value
         else:
+            closing_pts = self.get_closing_pts(state, action)
+            interest_pts = []
+            for lr in closing_pts:
+                if closing_pts[lr] != -1:
+                    hmat = self.actionfile[action]["%s_gripper_tool_frame"%lr]['hmat'][closing_pts[lr]]
+                    interest_pts.append(extract_point(hmat))
             [warped_trajs, rc, warped_rope_xyz] = warp_hmats(self.get_ds_cloud(action),
                                                   state[1],
-                                                  [(lr, self.actionfile[action][ln]['hmat']) for lr, ln in zip('lr', self.link_names)])
+                                                  [(lr, self.actionfile[action][ln]['hmat']) for lr, ln in zip('lr', self.link_names)],
+                                                             interest_pts)
             self.store_cache(state, action, [warped_trajs, rc, warped_rope_xyz])
             return [warped_trajs, rc, warped_rope_xyz]
 
@@ -240,13 +259,13 @@ class ActionSet(object):
         result = {}
         for lr in 'lr':
             grip = np.asarray(seg_info[lr + '_gripper_joint'])
-            closings = np.flatnonzero((grip[1:] < GRIPPER_OPEN_CLOSE_THRESH) & (grip[:-1] >= GRIPPER_OPEN_CLOSE_THRESH))
+            closings = np.flatnonzero((grip[1:] < GRIPPER_OPEN_CLOSE_THRESH) \
+                                          & (grip[:-1] >= GRIPPER_OPEN_CLOSE_THRESH))
             if closings:
                 result[lr] = closings[0]
             else:
                 result[lr] = -1
-        return result
-            
+        return result            
 
     def sc_features(self, state, action):
         seg_info = self.actionfile[action]
@@ -258,8 +277,6 @@ class ActionSet(object):
             first_close = result[lr]
             if first_close != -1:
                 close_hmat = warped_trajs[lr][first_close]
-#                 unwarped_hmat = self.actionfile[action]["%s_gripper_tool_frame"%lr]['hmat'][first_close]            
-#                 close_hmat = f.transform_hmats(np.array([unwarped_hmat]))[0]
                 feat_val[lr] = gripper_frame_shape_context(state[1], close_hmat)
                 feat_norm = np.linalg.norm(feat_val[lr], ord=2)
                 if feat_norm > 0:
@@ -469,10 +486,8 @@ def compare_hmats(traj1, traj2):
             DTW[i, j] = hmat_cost(hmat1, hmat2) + best_next
     return DTW[n, m]
 
-def warp_hmats(xyz_src, xyz_targ, hmat_list):
-    if not use_rapprentice:
-        return hmat_list
-    f, src_params, g, targ_params, cost = registration_cost(xyz_src, xyz_targ)
+def warp_hmats(xyz_src, xyz_targ, hmat_list, src_interest_pts = None):
+    f, src_params, g, targ_params, cost = registration_cost(xyz_src, xyz_targ, src_interest_pts)
     f = registration.unscale_tps(f, src_params, targ_params)
     trajs = {}
     xyz_src_warped = np.zeros(xyz_src.shape)
@@ -489,14 +504,23 @@ def get_downsampled_clouds(demofile):
 def get_clouds(demofile):
     return [seg["cloud_xyz"] for seg in demofile.values()]
 
-def registration_cost(xyz_src, xyz_targ):
-    if not use_rapprentice:
-        return None
+def compute_weights(xyz, interest_pts):
+    radius = np.max(ssd.cdist(xyz, xyz, 'euclidean'))/7.0
+    distances = np.exp(-np.min(ssd.cdist(xyz, interest_pts, 'euclidean'), axis=1)/radius)
+    return 1+distances
+
+def registration_cost(xyz_src, xyz_targ, src_interest_pts):    
+    if src_interest_pts and args.gripper_weighting:
+        weights = compute_weights(xyz_src, src_interest_pts)
+    else:
+        weights = None
     scaled_xyz_src, src_params = registration.unit_boxify(xyz_src)
+    scaled_src_interest_pts = src_interest_pts*src_params[0] + src_params[1]
     scaled_xyz_targ, targ_params = registration.unit_boxify(xyz_targ)
     f,g = registration.tps_rpm_bij(scaled_xyz_src, scaled_xyz_targ, plot_cb=None,
                                    plotting=0, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
-                                   n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2)
+                                   n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2,
+                                   x_weights=weights)
     cost = registration.tps_reg_cost(f) + registration.tps_reg_cost(g)
     return f, src_params, g, targ_params, cost
     
@@ -641,9 +665,10 @@ if __name__ == '__main__':
     parser.add_argument("--rope_dist_features", action="store_true")
     parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument('--C', '-c', type=float, default=1)
-    parser.add_argument("--i_start", type=int)
-    parser.add_argument("--i_end", type=int)
+    parser.add_argument("--i_start", type=int, default=0)
+    parser.add_argument("--i_end", type=int, default=-1)
     parser.add_argument("--save_memory", action="store_true")
+    parser.add_argument("--gripper_weighting", action="store_true")
 
     # build-constraints subparser
     parser_build_constraints = subparsers.add_parser('build-constraints')

@@ -22,7 +22,7 @@ from collections import defaultdict
 import IPython as ipy
 from pdb import pm
 # from svds import svds
-DISCRETIZATION_LEVEL = 10
+DISCRETIZATION_LEVEL = 40
 MAX_CP_DIST = .05
 rot_matrices = [np.matrix([[np.cos(theta), -1*np.sin(theta), 0], 
                            [np.sin(theta), np.cos(theta), 0], 
@@ -275,7 +275,7 @@ def fit_rotation(tps_fn, src_pts, tgt_pts):
     tps_fn.trans_g = np.asarray(tps_fn.trans_g)[0,:]
 
 def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_init = .1, rad_final = .005, rot_reg = 1e-3, 
-            plotting = False, plot_cb = None, x_interest_pts = None, y_interest_pts = None, outlierprior = .1, outlierfrac = 2e-1):
+            plotting = False, plot_cb = None, x_weights = None, y_weights = None, outlierprior = .1, outlierfrac = 2e-1):
     """
     tps-rpm algorithm mostly as described by chui and rangaran
     reg_init/reg_final: regularization on curvature
@@ -290,7 +290,7 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
     f = ThinPlateSpline(d)
     f.trans_g = np.median(y_md,axis=0) - np.median(x_nd,axis=0) # align the medians
     # do a coarse search through rotations
-    # fit_rotation(f, x_nd, y_md) removed b/c it is very slow and doesn't realy help
+    # fit_rotation(f, x_nd, y_md)
     
     g = ThinPlateSpline(d)
     g.trans_g = -f.trans_g
@@ -298,17 +298,9 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
     # set up outlier priors for source and target scenes
     n, _ = x_nd.shape
     m, _ = y_md.shape
-    if x_interest_pts:
-        x_interest_dists = outlierprior*np.exp( -1*ssd.cdist(x_interest_pts, x_nd, 'euclidean')/(rad_init))
-        raise NotImplementedError
-    else:
-        x_priors = np.ones(n)*outlierfrac
 
-    if y_interest_pts:
-        y_interest_dists = np.exp( -1*ssd.cdist(y_interest_pts, y_md, 'euclidean')/(rad_init))
-        raise NotImplementedError
-    else:
-        y_priors = np.ones(m)*outlierfrac    
+    x_priors = np.ones(n)*outlierfrac    
+    y_priors = np.ones(m)*outlierfrac    
 
     # r_N = None
     
@@ -336,7 +328,8 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
         
         f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = regs[i], wt_n=wt_n, rot_coef = rot_reg)
         g = fit_ThinPlateSpline(y_md, ytarg_md, bend_coef = regs[i], wt_n=wt_m, rot_coef = rot_reg)
-
+    if x_weights != None:
+        f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = regs[-1], wt_n = x_weights, rot_coef = rot_reg)
     f._cost = tps.tps_cost(f.lin_ag, f.trans_g, f.w_ng, f.x_na, xtarg_nd, regs[i], wt_n=wt_n)/wt_n.mean()
     g._cost = tps.tps_cost(g.lin_ag, g.trans_g, g.w_ng, g.x_na, ytarg_md, regs[i], wt_n=wt_m)/wt_m.mean()
     return f,g
