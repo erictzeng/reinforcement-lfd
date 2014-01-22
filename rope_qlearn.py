@@ -231,16 +231,32 @@ class ActionSet(object):
     def get_ds_cloud(self, action):
         return clouds.downsample(self.actionfile[action]['cloud_xyz'], DS_SIZE)
 
+    def get_closing_pts(self, state, action):
+        """
+        returns a dictionary mapping 'l', 'r' to the index in the corresponding trajectory
+        where the gripper first closes
+        """
+        seg_info = self.actionfile[action]
+        result = {}
+        for lr in 'lr':
+            grip = np.asarray(seg_info[lr + '_gripper_joint'])
+            closings = np.flatnonzero((grip[1:] < GRIPPER_OPEN_CLOSE_THRESH) & (grip[:-1] >= GRIPPER_OPEN_CLOSE_THRESH))
+            if closings:
+                result[lr] = closings[0]
+            else:
+                result[lr] = -1
+        return result
+            
+
     def sc_features(self, state, action):
         seg_info = self.actionfile[action]
 
         warped_trajs, _, _ = self._warp_hmats(state, action)
         feat_val = dict((lr, np.zeros(self.num_sc_features/2.0)) for lr in 'lr')
+        closings = self.get_closing_pts(state, action)
         for lr in 'lr':
-            grip = np.asarray(seg_info[lr + '_gripper_joint'])
-            closings = np.flatnonzero((grip[1:] < GRIPPER_OPEN_CLOSE_THRESH) & (grip[:-1] >= GRIPPER_OPEN_CLOSE_THRESH))
-            if closings:
-                first_close = closings[0]
+            first_close = result[lr]
+            if first_close != -1:
                 close_hmat = warped_trajs[lr][first_close]
 #                 unwarped_hmat = self.actionfile[action]["%s_gripper_tool_frame"%lr]['hmat'][first_close]            
 #                 close_hmat = f.transform_hmats(np.array([unwarped_hmat]))[0]
