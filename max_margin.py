@@ -9,7 +9,8 @@ except ImportError:
 import IPython as ipy
 import numpy as np
 import h5py, random, math, util
-from pdb import pm
+from numbers import Number
+from pdb import pm, set_trace
 eps = 10**-8
 MAX_ITER=1000
 
@@ -100,7 +101,10 @@ class MaxMarginModel(object):
         assert self.N == rhs_action_phi.shape[0], "failed adding constraint: size of rhs_action_phi is inconsistent with feature size"
 
         lhs_coeffs = [(p, w) for p, w in zip(expert_action_phi, self.w) if abs(p) >= eps]
-        lhs = grb.LinExpr(lhs_coeffs)
+        if not lhs_coeffs:
+            lhs = 0
+        else:
+            lhs = grb.LinExpr(lhs_coeffs)
         rhs_coeffs = [(p, w) for w, p in zip(self.w, rhs_action_phi) if abs(p) >= eps]
         rhs_coeffs.append((-1, self.xi))
         rhs = grb.LinExpr(rhs_coeffs)
@@ -237,7 +241,10 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         features and margins
         """
         lhs_coeffs = [(p, w) for p, w in zip(expert_action_phi, self.w) if abs(p) >= eps]
-        lhs = grb.LinExpr(lhs_coeffs)
+        if not lhs_coeffs:
+            lhs = 0
+        else:
+            lhs = grb.LinExpr(lhs_coeffs)
         rhs_coeffs = [(p, w) for w, p in zip(self.w, rhs_action_phi) if abs(p) >= eps]
         rhs_coeffs.append((-1, xi_var))
         rhs = grb.LinExpr(rhs_coeffs)
@@ -346,6 +353,76 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         except grb.GurobiError:
             raise RuntimeError, "issue with optimizing model, check gurobi optimizer output"
 
+class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
+    def __init__(self, actions, C, gamma, N, feature_fn, margin_fn):
+        MultiSlackMaxMarginModel.__init__(self, actions, C, N, feature_fn, margin_fn)
+        self.action_cost = -1#self.model.addVar(lb = -1*GRB.INFINITY, ub = 0, name = "action_cost")
+        self.gamma = gamma
+
+    @staticmethod
+    def read(fname, actions, feature_fn, margin_fn):
+        mm_model = MultiSlackMaxMarginModel.__new__(MultiSlackMaxMarginModel)
+        MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
+        self.action_cost = -1
+        self.gamma = 0.9 #bestpractices
+        return mm_model
+        
+    def add_trajectory(self, states_actions):
+        for state, action in states_actions:
+            self.add_example(state, action)
+        
+        for i in range(len(states_actions)-1):
+            state, action = states_actions[i]
+            next_state, next_action = states_actions[i+1]
+            lhs_action_phi = self.feature(state, action)
+            rhs_action_phi = self.feature(next_state, next_action)
+            self.add_bellman_constraint(lhs_action_phi, rhs_action_phi)
+            
+    def add_bellman_constraint(self, lhs_action_phi, rhs_action_phi):
+        lhs_coeffs = [(p, w) for w, p in zip(self.w, lhs_action_phi) if abs(p) >= eps]
+        if not lhs_coeffs:
+            lhs = 0
+        else:
+            lhs = grb.LinExpr(lhs_coeffs)
+        rhs_coeffs = [(self.gamma*p, w) for w, p in zip(self.w, rhs_action_phi) if abs(p) >= eps]
+#         rhs_coeffs.append((1, self.action_cost))
+        if not rhs_coeffs:
+            rhs = 0
+        else:
+            rhs = grb.LinExpr(rhs_coeffs)
+        rhs += self.action_cost
+        if not isinstance(rhs, Number) or not isinstance(rhs, Number):
+            self.model.addConstr(lhs <= rhs)
+        #store the constraint so we can store them to a file later
+        self.constraints_cache.add(util.tuplify((lhs_action_phi, rhs_action_phi, 0, "bellman")))
+        
+    def load_constraints_from_file(self, fname):
+        """
+        loads the contraints from the file indicated and adds them to the optimization problem
+        """
+        MultiSlackMaxMarginModel.update_constraints_file(fname)
+        infile = h5py.File(fname, 'r')
+        slack_names = {}
+        for key, constr in infile.iteritems():
+            if key in ('weights', 'xi'): continue
+            exp_phi = constr['exp_features'][:]
+            rhs_phi = constr['rhs_phi'][:]
+            margin = float(constr['margin'][()])
+            xi_name = constr['xi'][()]
+            if xi_name == "bellman":
+                self.add_bellman_constraint(exp_phi, rhs_phi) #it's actually lhs_phi and rhs_phi
+            else:
+                if xi_name not in slack_names:
+                    xi_var = self.add_xi(xi_name)
+                    slack_names[xi_name] = xi_var
+                self.add_constraint(exp_phi, rhs_phi, margin, slack_names[xi_name], update=False)
+        if 'weights' in infile:
+            self.weights = infile['weights'][:]
+        if 'xi' in infile:
+            self.xi_val = infile['xi'][:]
+        infile.close()
+        self.model.update()
+
 def grid_test_fns():
     """
     Test Example: 2d grid -- 
@@ -446,10 +523,52 @@ def test_update_constraints():
     msmm_loaded.optimize_model()
     msmm_orig.optimize_model()
     return not any(w1 - w2 > eps for w1, w2 in zip(msmm_loaded.weights, msmm_orig.weights))
+
+def test_bellman():
+    grid_dim=100
+    goal_state = np.array([grid_dim,grid_dim])
+    actions = {"n":np.array([0,1]), "e":np.array([1,0]), "s":np.array([0,-1]), "w":np.array([-1,0])}
+    def feature_fn(state, action):
+        action = actions[action]
+        next_state = state+action
+        diff = goal_state - next_state
+        return np.r_[np.abs(diff), np.linalg.norm(diff)]
+    def gen_trajectory():
+        traj = []
+        state = np.array([random.randint(0,grid_dim), random.randint(0,grid_dim)])
+        while all(state!=goal_state):
+            diff = goal_state - state
+            action = np.zeros(2)
+            action[np.argmax(np.abs(diff))] = 1
+            action = np.sign(diff)*action
+            for k in actions:
+                if np.linalg.norm(actions[k] - action) < eps:
+                    traj.append((state, k))
+            state = state + action
+        return traj
+    def margin_fn(state, action1, action2):
+        action1 = actions[action1]
+        action2 = actions[action2]
+        state1 = state + action1
+        state2 = state + action2
+        d1 = np.linalg.norm(goal_state - state1, 1)
+        d2 = np.linalg.norm(goal_state - state2, 1)
+        return abs(d1-d2)
+    C = 1
+    gamma = 0.9
+    N = 3
+    model = BellmanMaxMarginModel(actions.keys(), C, gamma, N, feature_fn, margin_fn)
+    for i in range(100):
+        print i
+        model.add_trajectory(gen_trajectory())
+    weights = model.optimize_model()
     
-    
+    return True
 
 if __name__ == '__main__':
+    print 'Testing out bellman model'
+    if not test_bellman(): print 'Unit Test Failed'
+    
     print 'Testing out single slack max margin model'
     if not test_model(MaxMarginModel): print 'Unit Test Failed'
 
