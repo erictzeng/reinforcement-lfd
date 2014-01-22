@@ -8,6 +8,7 @@ from math import ceil
 import os
 import time
 import socket
+from threading import Thread
 import yaml
 
 def read_jobfile(path):
@@ -45,6 +46,9 @@ def collect_results(client, conf):
         sftp.get(os.path.join('out', fname),
                  os.path.join(outdir, fname))
 
+def read_channel(channel):
+    channel.readlines()
+
 def start_job(instance, client, conf, start, end):
     streams = []
     jobs_remaining = conf['jobs_per_instance']
@@ -60,6 +64,9 @@ def start_job(instance, client, conf, start, end):
         _, stdout, stderr = client.exec_command(gitcmd)
         stdout.readlines()
         _, stdout, stderr = client.exec_command(conf['command'].format(**info))
+        t = Thread(target=read_channel, args=(stdout,))
+        t.daemon = True
+        t.start()
         write_log(conf, '{id}-{num} {start} {end}'.format(**info))
         streams.append((stdout, stderr))
         start += step
