@@ -178,7 +178,11 @@ def simulate_demo(new_xyz, seg_info, animate=False):
     
     link_names = ["%s_gripper_tool_frame"%lr for lr in ('lr')]
     hmat_list = [(lr, seg_info[ln]['hmat']) for lr, ln in zip('lr', link_names)]
-    lr2eetraj = warp_hmats(old_xyz, new_xyz, hmat_list)[0]
+    if args.gripper_weighting:
+        interest_pts = get_closing_pts(seg_info)
+    else:
+        interest_pts = None
+    lr2eetraj = warp_hmats(old_xyz, new_xyz, hmat_list, interest_pts)[0]
 
     miniseg_starts, miniseg_ends = split_trajectory_by_gripper(seg_info)    
     success = True
@@ -371,6 +375,7 @@ if __name__ == "__main__":
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--rope_dist_features", action="store_true")
     parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
+    parser.add_argument("--gripper_weighting", action="store_true")
     parser.add_argument("--animation", type=int, default=0)
     
     parser.add_argument("--tasks", nargs='+', type=int)
