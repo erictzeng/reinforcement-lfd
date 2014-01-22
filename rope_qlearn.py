@@ -568,7 +568,7 @@ def get_clouds(demofile):
     return [seg["cloud_xyz"] for seg in demofile.values()]
 
 def compute_weights(xyz, interest_pts):
-    radius = np.max(ssd.cdist(xyz, xyz, 'euclidean'))/7.0
+    radius = np.max(ssd.cdist(xyz, xyz, 'euclidean'))/10.0
     distances = np.exp(-np.min(ssd.cdist(xyz, interest_pts, 'euclidean'), axis=1)/radius)
     return 1+distances
 
