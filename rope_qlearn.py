@@ -588,8 +588,8 @@ def compute_weights(xyz, interest_pts):
     distances = np.exp(-np.min(ssd.cdist(xyz, interest_pts, 'euclidean'), axis=1)/radius)
     return 1+distances
 
-def registration_cost(xyz_src, xyz_targ, src_interest_pts):    
-    if src_interest_pts and args.gripper_weighting:
+def registration_cost(xyz_src, xyz_targ, src_interest_pts=None):
+    if src_interest_pts is not None:
         weights = compute_weights(xyz_src, src_interest_pts)
     else:
         weights = None
