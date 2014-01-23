@@ -176,10 +176,9 @@ def add_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1, outfil
     while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
         end += 1
 
-    c = 0
-    for i in range(start, end):  
+    for demo_i in range(start, end):  
         # Assumes example ids are strings of consecutive integers starting from 0
-        key = str(i)
+        key = str(demo_i)
         group = expert_demofile[key]
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
         action = group['action'][()]
@@ -187,8 +186,8 @@ def add_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1, outfil
             continue
         if verbose:
             print 'adding constraints for:\t', action
-        c += 1
-        mm_model.add_example(state, action, verbose)
+        xi_name = str('xi_') + str(key)
+        mm_model.add_example(state, action, xi_name=xi_name, verbose=verbose)
         #mm_model.clear_asm_cache()
         if outfile:
             mm_model.save_constraints_to_file(outfile)
@@ -217,7 +216,8 @@ def add_bellman_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1
             continue
         if verbose:
             print 'adding constraints for:\t', action
-        mm_model.add_example(state, action, verbose)
+        xi_name = str('xi_') + str(key)
+        mm_model.add_example(state, action, xi_name=xi_name, verbose=verbose)
         if group['pred'][()] == key:
             if traj:
                 trajectories.append(traj)

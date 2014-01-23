@@ -97,10 +97,11 @@ class MaxMarginModel(object):
     def margin(self, s, a1, a2):
         return self.margin_fn(s, a1, a2)
 
-    def add_constraint(self, expert_action_phi, rhs_action_phi, margin_value, update=True):
+    def add_constraint(self, expert_action_phi, rhs_action_phi, margin_value, xi_name, update=True):
         """
         function to add a constraint to the model with pre-computed
         features and margins
+        pass in xi_name so that the constraints are compatible with multi slack
         """
         # make sure the feature size is consistent with phi
         assert self.N == expert_action_phi.shape[0], "failed adding constraint: size of expert_action_phi is inconsistent with feature size"
@@ -117,11 +118,11 @@ class MaxMarginModel(object):
         rhs += margin_value
         self.model.addConstr(lhs >= rhs)
         #store the constraint so we can store them to a file later
-        self.constraints_cache.add(util.tuplify((expert_action_phi, rhs_action_phi, margin_value)))
+        self.constraints_cache.add(util.tuplify((expert_action_phi, rhs_action_phi, margin_value, xi_name)))
         if update:
             self.model.update()
 
-    def add_example(self, state, expert_action, verbose = False):
+    def add_example(self, state, expert_action, xi_name = None, verbose = False):
         """
         add the constraint that this action be preferred to all other actions in the action set
         to the optimization problem
@@ -133,18 +134,20 @@ class MaxMarginModel(object):
             # TODO: compute this for loop in parallel
             rhs_action_phi = self.feature(state, other_a)
             margin = self.margin(state, expert_action, other_a)
-            self.add_constraint(expert_action_phi, rhs_action_phi, margin, update=False)
+            self.add_constraint(expert_action_phi, rhs_action_phi, margin, xi_name, update=False)
             if verbose:
                 print "added {}/{}".format(i, len(self.actions))
         self.model.update()
 
     def save_constraints_to_file(self, fname, save_weights=False):
         outfile = h5py.File(fname, 'w')
-        for i, (exp_phi, rhs_phi, margin) in enumerate(self.constraints_cache):
+        for i, (exp_phi, rhs_phi, margin, xi_name) in enumerate(self.constraints_cache):
             g = outfile.create_group(str(i))
             g['exp_features'] = exp_phi
             g['rhs_phi'] = rhs_phi
             g['margin'] = margin
+            if xi_name:
+                g['xi'] = xi_name
         if save_weights:
             outfile['weights'] = self.weights
             outfile['xi'] = self.xi_val
@@ -160,7 +163,11 @@ class MaxMarginModel(object):
             exp_phi = constr['exp_features'][:]
             rhs_phi = constr['rhs_phi'][:]
             margin = float(constr['margin'][()])
-            self.add_constraint(exp_phi, rhs_phi, margin, update=False)
+            if 'xi' in constr.keys():
+                xi_name = constr['xi'][()]
+            else:
+                xi_name = None
+            self.add_constraint(exp_phi, rhs_phi, margin, xi_name, update=False)
         if 'weights' in infile:
             self.weights = infile['weights'][:]
         if 'xi' in infile:
@@ -266,13 +273,13 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         self.model.update()
         return new_xi
         
-    def add_example(self, state, expert_action, verbose = False):
+    def add_example(self, state, expert_action, xi_name = None, verbose = False):
         """
         add the constraint that this action be preferred to all other actions in the action set
         to the optimization problem
         """
         expert_action_phi = self.feature(state, expert_action)
-        cur_slack = self.add_xi()
+        cur_slack = self.add_xi(xi_name)
         for (i, other_a) in enumerate(self.actions):
             if other_a == expert_action:
                 continue
