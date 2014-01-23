@@ -89,16 +89,18 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
         outfile = h5py.File(outfile, 'w')
     if verbose:
         print "adding constraints"
-    constraint_ctr = 0
+    
     if end < 0:
         end = len(expert_demofile.keys())
     while int(expert_demofile[str(start)]['pred'][()]) != start:
         start += 1
     while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
         end += 1
+    
+    trajectories = []
     traj = []
+    constraint_ctr = 0
     for demo_i in range(start, end):
-        print "demo_i", demo_i
         key = str(demo_i)
         group = expert_demofile[key]
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
@@ -123,25 +125,36 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
             g['rhs_phi'] = rhs_phi
             g['margin'] = margin
             g['xi'] = xi_name
-        # add bellman_constraints
+        # trajectories for bellman_constraints
         if group['pred'][()] == key:
-            for i in range(len(traj)-1):
-                curr_state, curr_action = traj[i]
-                next_state, next_action = traj[i+1]
-                lhs_action_phi = feature_fn(curr_state, curr_action)
-                rhs_action_phi = feature_fn(next_state, next_action)
-                g = outfile.create_group(str(constraint_ctr))
-                constraint_ctr += 1
-                g['exp_features'] = lhs_action_phi
-                g['rhs_phi'] = rhs_action_phi
-                g['margin'] = 0
-                g['xi'] = "bellman"
-            traj = []
+            if traj:
+                trajectories.append(traj)
+                traj = []
         traj.append([state, action])
+        outfile.flush()
+        
+    if traj:
+        trajectories.append(traj)
+        traj = []
+    for traj in trajectories:
+        if verbose:
+            print "adding trajectory for trajectory with actions:\n", [a for [s,a] in traj]
+        # add bellman constraints
+        for i in range(len(traj)-1):
+            curr_state, curr_action = traj[i]
+            next_state, next_action = traj[i+1]
+            lhs_action_phi = feature_fn(curr_state, curr_action)
+            rhs_action_phi = feature_fn(next_state, next_action)
+            g = outfile.create_group(str(constraint_ctr))
+            constraint_ctr += 1
+            g['exp_features'] = lhs_action_phi
+            g['rhs_phi'] = rhs_action_phi
+            g['margin'] = 0
+            g['xi'] = "bellman"
         outfile.flush()
     outfile.close()
 
-def add_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, outfile=None, verbose=False):
+def add_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1, outfile=None, verbose=False):
     """
     takes all of the expert demonstrations from expert_demofile
     and add all of the associated constrainted to mm_model
@@ -155,23 +168,16 @@ def add_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, ou
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
         print "adding constraints"
+    
+    if end < 0:
+        end = len(expert_demofile.keys())
+    while int(expert_demofile[str(start)]['pred'][()]) != start:
+        start += 1
+    while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
+        end += 1
+
     c = 0
-    if start_i != 0:
-        while int(expert_demofile[str(start_i)]['pred'][()]) != start_i:
-            start_i += 1
-    if end_i != -1:
-        while int(expert_demofile[str(end_i)]['pred'][()]) != end_i:
-            end_i += 1
-    else:
-        try:
-            end_i = 0
-            key_iter = expert_demofile.iterkeys()
-            while 1:
-                key_iter.next()
-                end_i += 1
-        except:
-            pass
-    for i in range(start_i, end_i):  
+    for i in range(start, end):  
         # Assumes example ids are strings of consecutive integers starting from 0
         key = str(i)
         group = expert_demofile[key]
@@ -187,43 +193,47 @@ def add_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, ou
         if outfile:
             mm_model.save_constraints_to_file(outfile)
 
-def add_bellman_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, outfile=None, verbose=False):
+def add_bellman_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1, outfile=None, verbose=False):
     if type(expert_demofile) is str:
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
         print "adding constraints"
+
+    if end < 0:
+        end = len(expert_demofile.keys())
+    while int(expert_demofile[str(start)]['pred'][()]) != start:
+        start += 1
+    while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
+        end += 1
+
+    trajectories = []
     traj = []
-    if start_i != 0:
-        while int(expert_demofile[str(start_i)]['pred'][()]) != start_i:
-            start_i += 1
-    if end_i != -1:
-        while int(expert_demofile[str(end_i)]['pred'][()]) != end_i:
-            end_i += 1
-    else:
-        try:
-            end_i = 0
-            key_iter = expert_demofile.iterkeys()
-            while 1:
-                key_iter.next()
-                end_i += 1
-        except:
-            pass
-    for i in range(start_i, end_i):
-        key = str(i)
+    for demo_i in range(start, end):
+        key = str(demo_i)
         group = expert_demofile[key]
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
         action = group['action'][()]
-        print "key", key
         if action.startswith('endstate'): # this is a knot
             continue
-        if group['pred'][()] == key:
-            mm_model.add_trajectory(traj)
-            if outfile:
-                mm_model.save_constraints_to_file(outfile)
-            traj = []
-        traj.append([state, action])
         if verbose:
             print 'adding constraints for:\t', action
+        mm_model.add_example(state, action, verbose)
+        if group['pred'][()] == key:
+            if traj:
+                trajectories.append(traj)
+                traj = []
+        traj.append([state, action])
+        if outfile:
+            mm_model.save_constraints_to_file(outfile)
+    if traj:
+        trajectories.append(traj)
+        traj = []
+    for traj in trajectories:
+        if verbose:
+            print "adding trajectory for trajectory with actions:\n", [a for [s,a] in traj]
+        mm_model.add_trajectory(traj)
+        if outfile:
+            mm_model.save_constraints_to_file(outfile)
 
 def concatenate_fns(fns, actionfile):
     if type(actionfile) is str:
@@ -762,12 +772,13 @@ def build_constraints(args):
     if args.model == 'bellman':
         add_bellman_constraints_from_demo(mm_model,
                                           args.demofile,
+                                          args.start, args.end,
                                           outfile=args.constraintfile,
                                           verbose=True)
     else:
         add_constraints_from_demo(mm_model,
                                   args.demofile,
-                                  args.i_start, args.i_end,
+                                  args.start, args.end,
                                   outfile=args.constraintfile,
                                   verbose=True)
 
@@ -810,8 +821,6 @@ if __name__ == '__main__':
     parser.add_argument("--rope_dist_features", action="store_true")
     parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument('--C', '-c', type=float, default=1)
-    parser.add_argument("--i_start", type=int, default=0)
-    parser.add_argument("--i_end", type=int, default=-1)
     parser.add_argument("--save_memory", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
 
@@ -819,8 +828,8 @@ if __name__ == '__main__':
     parser_build_constraints = subparsers.add_parser('build-constraints-no-model')
     parser_build_constraints.add_argument('demofile')
     parser_build_constraints.add_argument('constraintfile')
-    parser_build_constraints.add_argument('start', type=int)
-    parser_build_constraints.add_argument('end', type=int)
+    parser_build_constraints.add_argument('--start', type=int, default=0)
+    parser_build_constraints.add_argument('--end', type=int, default=-1)
     parser_build_constraints.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser_build_constraints.set_defaults(func=build_constraints_no_model)
     
@@ -828,6 +837,8 @@ if __name__ == '__main__':
     parser_build_constraints = subparsers.add_parser('build-constraints')
     parser_build_constraints.add_argument('demofile')
     parser_build_constraints.add_argument('constraintfile')
+    parser_build_constraints.add_argument('--start', type=int, default=0)
+    parser_build_constraints.add_argument('--end', type=int, default=-1)
     parser_build_constraints.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser_build_constraints.set_defaults(func=build_constraints)
 

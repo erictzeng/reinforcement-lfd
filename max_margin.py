@@ -278,7 +278,7 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
             margin = self.margin(state, expert_action, other_a)
             self.add_constraint(expert_action_phi, rhs_action_phi, margin, cur_slack, update=False)
             if verbose:
-                print "added {}/{}".format(i, len(self.actions))
+                print "added {}/{}".format(i, len(self.actions)), cur_slack.VarName
         self.model.update()
 
     def save_constraints_to_file(self, fname, save_weights=False):
@@ -361,16 +361,14 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
 
     @staticmethod
     def read(fname, actions, feature_fn, margin_fn):
-        mm_model = MultiSlackMaxMarginModel.__new__(MultiSlackMaxMarginModel)
+        mm_model = BellmanMaxMarginModel.__new__(BellmanMaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
         mm_model.action_cost = -1
         mm_model.gamma = 0.9 #bestpractices
         return mm_model
-        
-    def add_trajectory(self, states_actions):
-        for state, action in states_actions:
-            self.add_example(state, action)
-        
+    
+    # this function doesn't add examples
+    def add_trajectory(self, states_actions):        
         for i in range(len(states_actions)-1):
             state, action = states_actions[i]
             next_state, next_action = states_actions[i+1]
@@ -560,7 +558,10 @@ def test_bellman():
     model = BellmanMaxMarginModel(actions.keys(), C, gamma, N, feature_fn, margin_fn)
     for i in range(50):
         print i
-        model.add_trajectory(gen_trajectory())
+        traj = gen_trajectory()
+        for state, action in traj:
+            model.add_example(state, action)
+        model.add_trajectory(traj)
     weights = model.optimize_model()
     print weights 
     return True
