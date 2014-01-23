@@ -377,7 +377,7 @@ if __name__ == "__main__":
     parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument("--gripper_weighting", action="store_true")
     parser.add_argument("--animation", type=int, default=0)
-    parser.add_argument("--i_start", type=int, default=0)
+    parser.add_argument("--i_start", type=int, default=-1)
     parser.add_argument("--i_end", type=int, default=-1)
     
     parser.add_argument("--tasks", nargs='+', type=int)
@@ -450,7 +450,7 @@ if __name__ == "__main__":
         file = open(args.taskfile, 'r')
         for line in file.xreadlines():
             tasks.append(int(line[5:-1]))
-    if args.i_start and args.i_end != -1:
+    if args.i_start != -1 and args.i_end != -1:
         tasks = range(args.i_start, args.i_end)
 
     for i_task, demo_id_rope_nodes in (holdoutfile.iteritems() if not tasks else [(unicode(t),holdoutfile[unicode(t)]) for t in tasks]):
