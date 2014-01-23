@@ -14,6 +14,7 @@ from max_margin import MaxMarginModel, MultiSlackMaxMarginModel, BellmanMaxMargi
 from pdb import pm, set_trace
 import numpy as np
 from joblib import Parallel, delayed
+import scipy.spatial.distance as ssd
 import scipy.spatial as sp_spat
 import os.path
 import cProfile
@@ -152,7 +153,7 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
         outfile.flush()
     outfile.close()
 
-def add_constraints_from_demo(mm_model, expert_demofile, start_i, end_i, outfile=None, verbose=False):
+def add_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, outfile=None, verbose=False):
     """
     takes all of the expert demonstrations from expert_demofile
     and add all of the associated constrainted to mm_model
@@ -167,7 +168,23 @@ def add_constraints_from_demo(mm_model, expert_demofile, start_i, end_i, outfile
     if verbose:
         print "adding constraints"
     c = 0
-    for i in range(start_i, end_i):  # Assumes example ids are strings of consecutive integers starting from 0
+    if start_i != 0:
+        while int(expert_demofile[str(start_i)]['pred'][()]) != start_i:
+            start_i += 1
+    if end_i != -1:
+        while int(expert_demofile[str(end_i)]['pred'][()]) != end_i:
+            end_i += 1
+    else:
+        try:
+            end_i = 0
+            key_iter = expert_demofile.iterkeys()
+            while 1:
+                key_iter.next()
+                end_i += 1
+        except:
+            pass
+    for i in range(start_i, end_i):  
+        # Assumes example ids are strings of consecutive integers starting from 0
         key = str(i)
         group = expert_demofile[key]
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
@@ -182,7 +199,7 @@ def add_constraints_from_demo(mm_model, expert_demofile, start_i, end_i, outfile
         if outfile:
             mm_model.save_constraints_to_file(outfile)
 
-def add_bellman_constraints_from_demo(mm_model, expert_demofile, outfile=None, verbose=False):
+def add_bellman_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, outfile=None, verbose=False):
     if type(expert_demofile) is str:
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
@@ -280,8 +297,9 @@ class ActionSet(object):
     """
     caches = {}                 # will break if same processes use dif actionsets that have
     # the same actions
+    args = None
     
-    def __init__(self, actionfile, use_cache = True):
+    def __init__(self, actionfile, use_cache = True, args=None):
         self.actionfile = actionfile
         self.actions = sorted(actionfile.keys())
         self.action_to_ind = dict((v, i) for i, v in enumerate(self.actions))
@@ -294,49 +312,38 @@ class ActionSet(object):
         self.cache = ActionSet.caches[act_key]
         self.use_cache = use_cache
         self.link_names = ["%s_gripper_tool_frame"%lr for lr in ('lr')]
+        if args:
+            ActionSet.args = args
 
-    def _warp_hmats(self, state, action):
+    def _warp_hmats(self, state, action):        
         hit, value = self.check_cache(state, action)
         if hit:
             return value
         else:
+            if ActionSet.args and ActionSet.args.gripper_weighting:
+                interest_pts = get_closing_pts(self.actionfile[action])
+            else:
+                interest_pts = None
             [warped_trajs, rc, warped_rope_xyz] = warp_hmats(self.get_ds_cloud(action),
                                                   state[1],
-                                                  [(lr, self.actionfile[action][ln]['hmat']) for lr, ln in zip('lr', self.link_names)])
+                                                  [(lr, self.actionfile[action][ln]['hmat']) for lr, ln in zip('lr', self.link_names)],
+                                                             interest_pts)
             self.store_cache(state, action, [warped_trajs, rc, warped_rope_xyz])
             return [warped_trajs, rc, warped_rope_xyz]
 
     def get_ds_cloud(self, action):
         return clouds.downsample(self.actionfile[action]['cloud_xyz'], DS_SIZE)
 
-    def get_closing_pts(self, state, action):
-        """
-        returns a dictionary mapping 'l', 'r' to the index in the corresponding trajectory
-        where the gripper first closes
-        """
-        seg_info = self.actionfile[action]
-        result = {}
-        for lr in 'lr':
-            grip = np.asarray(seg_info[lr + '_gripper_joint'])
-            closings = np.flatnonzero((grip[1:] < GRIPPER_OPEN_CLOSE_THRESH) & (grip[:-1] >= GRIPPER_OPEN_CLOSE_THRESH))
-            if closings:
-                result[lr] = closings[0]
-            else:
-                result[lr] = -1
-        return result
-
     def sc_features(self, state, action):
         seg_info = self.actionfile[action]
 
         warped_trajs, _, _ = self._warp_hmats(state, action)
         feat_val = dict((lr, np.zeros(self.num_sc_features/2.0)) for lr in 'lr')
-        closings = self.get_closing_pts(state, action)
+        closings = get_closing_inds(seg_info)
         for lr in 'lr':
             first_close = closings[lr]
             if first_close != -1:
                 close_hmat = warped_trajs[lr][first_close]
-#                 unwarped_hmat = self.actionfile[action]["%s_gripper_tool_frame"%lr]['hmat'][first_close]            
-#                 close_hmat = f.transform_hmats(np.array([unwarped_hmat]))[0]
                 feat_val[lr] = gripper_frame_shape_context(state[1], close_hmat)
                 feat_norm = np.linalg.norm(feat_val[lr], ord=2)
                 if feat_norm > 0:
@@ -551,10 +558,8 @@ def compare_hmats(traj1, traj2):
             DTW[i, j] = hmat_cost(hmat1, hmat2) + best_next
     return DTW[n, m]
 
-def warp_hmats(xyz_src, xyz_targ, hmat_list):
-    if not use_rapprentice:
-        return hmat_list
-    f, src_params, g, targ_params, cost = registration_cost(xyz_src, xyz_targ)
+def warp_hmats(xyz_src, xyz_targ, hmat_list, src_interest_pts = None):
+    f, src_params, g, targ_params, cost = registration_cost(xyz_src, xyz_targ, src_interest_pts)
     f = registration.unscale_tps(f, src_params, targ_params)
     trajs = {}
     xyz_src_warped = np.zeros(xyz_src.shape)
@@ -571,14 +576,22 @@ def get_downsampled_clouds(demofile):
 def get_clouds(demofile):
     return [seg["cloud_xyz"] for seg in demofile.values()]
 
-def registration_cost(xyz_src, xyz_targ):
-    if not use_rapprentice:
-        return None
+def compute_weights(xyz, interest_pts):
+    radius = np.max(ssd.cdist(xyz, xyz, 'euclidean'))/10.0
+    distances = np.exp(-np.min(ssd.cdist(xyz, interest_pts, 'euclidean'), axis=1)/radius)
+    return 1+distances
+
+def registration_cost(xyz_src, xyz_targ, src_interest_pts=None):
+    if src_interest_pts is not None:
+        weights = compute_weights(xyz_src, src_interest_pts)
+    else:
+        weights = None
     scaled_xyz_src, src_params = registration.unit_boxify(xyz_src)
     scaled_xyz_targ, targ_params = registration.unit_boxify(xyz_targ)
     f,g = registration.tps_rpm_bij(scaled_xyz_src, scaled_xyz_targ, plot_cb=None,
                                    plotting=0, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
-                                   n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2)
+                                   n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2,
+                                   x_weights=weights)
     cost = registration.tps_reg_cost(f) + registration.tps_reg_cost(g)
     return f, src_params, g, targ_params, cost
     
@@ -614,6 +627,32 @@ def combine_expert_demo_files(infile1, infile2, outfile):
         if2.close()
         of.close()
 
+def get_closing_pts(seg_info):
+    closing_inds = get_closing_inds(seg_info)
+    closing_pts = []
+    for lr in closing_inds:
+        if closing_inds[lr] != -1:
+            hmat = seg_info["%s_gripper_tool_frame"%lr]['hmat'][closing_inds[lr]]
+            closing_pts.append(extract_point(hmat))
+    return closing_pts
+
+def get_closing_inds(seg_info):
+    """
+    returns a dictionary mapping 'l', 'r' to the index in the corresponding trajectory
+    where the gripper first closes
+    """
+    result = {}
+    for lr in 'lr':
+        grip = np.asarray(seg_info[lr + '_gripper_joint'])
+        closings = np.flatnonzero((grip[1:] < GRIPPER_OPEN_CLOSE_THRESH) \
+                                      & (grip[:-1] >= GRIPPER_OPEN_CLOSE_THRESH))
+        if closings:
+            result[lr] = closings[0]
+        else:
+            result[lr] = -1
+    return result
+
+
 def compute_action_margin(model, a1, a2):
     print 'done'
     return model.margin(None, a1, a2)
@@ -636,6 +675,7 @@ def test_saving_model(mm_model):
         print "PASSED: Model saved and reloaded correctly"
 
 def select_feature_fn(args):
+    ActionSet.args = args
     def bias_feature_fn(actionfile):
         return get_bias_feature_fn(actionfile, old=args.old_features)
     if args.quad_features:
@@ -744,7 +784,10 @@ if __name__ == '__main__':
     parser.add_argument("--rope_dist_features", action="store_true")
     parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument('--C', '-c', type=float, default=1)
+    parser.add_argument("--i_start", type=int, default=0)
+    parser.add_argument("--i_end", type=int, default=-1)
     parser.add_argument("--save_memory", action="store_true")
+    parser.add_argument("--gripper_weighting", action="store_true")
 
     # build-constraints-no-model subparser
     parser_build_constraints = subparsers.add_parser('build-constraints-no-model')
