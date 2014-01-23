@@ -588,8 +588,6 @@ def registration_cost(xyz_src, xyz_targ, src_interest_pts=None):
     
 
 def registration_cost_old(xyz0, xyz1):
-    if not use_rapprentice:
-        return 1
     scaled_xyz0, _ = registration.unit_boxify(xyz0)
     scaled_xyz1, _ = registration.unit_boxify(xyz1)
     f,g = registration.tps_rpm_bij(scaled_xyz0, scaled_xyz1, rot_reg=1e-3, n_iter=10)
