@@ -89,17 +89,18 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
         outfile = h5py.File(outfile, 'w')
     if verbose:
         print "adding constraints"
-    constraint_ctr = 0
+    
     if end < 0:
         end = len(expert_demofile.keys())
     while int(expert_demofile[str(start)]['pred'][()]) != start:
         start += 1
     while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
         end += 1
+    
     trajectories = []
     traj = []
+    constraint_ctr = 0
     for demo_i in range(start, end):
-        print "demo_i", demo_i
         key = str(demo_i)
         group = expert_demofile[key]
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
@@ -115,7 +116,7 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
             if other_a == action:
                 continue
             if verbose:
-                print "added {}/{}".format(i, len(actions))
+                print "added {}/{}".format(i, len(actions)), xi_name
             rhs_phi = feature_fn(state, other_a)
             margin = margin_fn(state, action, other_a)
             g = outfile.create_group(str(constraint_ctr))
@@ -153,7 +154,7 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
         outfile.flush()
     outfile.close()
 
-def add_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, outfile=None, verbose=False):
+def add_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1, outfile=None, verbose=False):
     """
     takes all of the expert demonstrations from expert_demofile
     and add all of the associated constrainted to mm_model
@@ -167,23 +168,16 @@ def add_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, ou
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
         print "adding constraints"
+    
+    if end < 0:
+        end = len(expert_demofile.keys())
+    while int(expert_demofile[str(start)]['pred'][()]) != start:
+        start += 1
+    while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
+        end += 1
+
     c = 0
-    if start_i != 0:
-        while int(expert_demofile[str(start_i)]['pred'][()]) != start_i:
-            start_i += 1
-    if end_i != -1:
-        while int(expert_demofile[str(end_i)]['pred'][()]) != end_i:
-            end_i += 1
-    else:
-        try:
-            end_i = 0
-            key_iter = expert_demofile.iterkeys()
-            while 1:
-                key_iter.next()
-                end_i += 1
-        except:
-            pass
-    for i in range(start_i, end_i):  
+    for i in range(start, end):  
         # Assumes example ids are strings of consecutive integers starting from 0
         key = str(i)
         group = expert_demofile[key]
@@ -199,19 +193,26 @@ def add_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, ou
         if outfile:
             mm_model.save_constraints_to_file(outfile)
 
-def add_bellman_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, outfile=None, verbose=False):
+def add_bellman_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1, outfile=None, verbose=False):
     if type(expert_demofile) is str:
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
         print "adding constraints"
+
+    if end < 0:
+        end = len(expert_demofile.keys())
+    while int(expert_demofile[str(start)]['pred'][()]) != start:
+        start += 1
+    while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
+        end += 1
+
     trajectories = []
     traj = []
-    keys_sorted = sorted([k for k in expert_demofile.keys()], key = lambda k: int(k)) 
-    for key in keys_sorted:
+    for demo_i in range(start, end):
+        key = str(demo_i)
         group = expert_demofile[key]
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
         action = group['action'][()]
-        print "key", key
         if action.startswith('endstate'): # this is a knot
             continue
         if verbose:
@@ -260,20 +261,20 @@ def get_rope_dist_feat_fn(actionfile):
     act_set = ActionSet(actionfile)
     return (act_set.rope_dist_features, act_set.num_rope_dist_feat, actionfile)
 
-def get_bias_feature_fn(actionfile, old=False):
+def get_bias_feature_fn(actionfile):
     if type(actionfile) is str:
         actionfile = h5py.File(actionfile, 'r')
     act_set = ActionSet(actionfile)
     def feature_fn(state, action):
-        return act_set.bias_features(state, action, old)
+        return act_set.bias_features(state, action)
     return (feature_fn, act_set.num_actions + 1, actionfile)
 
-def get_quad_feature_fn(actionfile, old=False):
+def get_quad_feature_fn(actionfile):
     if type(actionfile) is str:
         actionfile = h5py.File(actionfile, 'r')
     act_set = ActionSet(actionfile)
     def feature_fn(state, action):
-        return act_set.quad_features(state, action, old)
+        return act_set.quad_features(state, action)
     return (feature_fn, 2 + 2*act_set.num_actions, actionfile)
 
 def get_action_only_margin_fn(actionfile):
@@ -305,7 +306,7 @@ class ActionSet(object):
         self.action_to_ind = dict((v, i) for i, v in enumerate(self.actions))
         self.num_actions = len(self.actions)
         self.num_sc_features = R_BINS*T_BINS*P_BINS*2
-        self.num_rope_dist_feat = 2
+        self.num_rope_dist_feat = 3
         act_key = u.tuplify(self.actions)
         if act_key not in ActionSet.caches:
             ActionSet.caches[act_key] = {}
@@ -351,34 +352,36 @@ class ActionSet(object):
         return np.r_[feat_val['l'], feat_val['r']]            
 
     def rope_dist_features(self, state, action):
-        # Feature 1 = sum of distances from each warped point of original rope to
-        # closest point in new rope
-        # Feature 2 = sum of distances from each point in new rope to closest
-        # point in warped original rope
+        """
+        Feature 1: sum of distances from each point in new rope to closest
+        point in warped original rope, weighted by the distance of the new
+        rope point to the closest gripper trajectory point
+        Feature 2: distance of closest new rope point to left gripper, at
+        its position right before closing
+        Feature 3: same as Feature 2, but for the right gripper
+        """
         feat = np.zeros(self.num_rope_dist_feat)
         new_rope_xyz = state[1]
         _, _, warped_rope_xyz = self._warp_hmats(state, action)
-        kd_new_rope = sp_spat.KDTree(new_rope_xyz)
         kd_warped_rope = sp_spat.KDTree(warped_rope_xyz)
-        feat[0] = sum(kd_new_rope.query(warped_rope_xyz)[0])
-        feat[1] = sum(kd_warped_rope.query(new_rope_xyz)[0])
+        weights = compute_weights(new_rope_xyz, get_traj_pts(self.actionfile[action]))
+        dist_btwn_ropes = kd_warped_rope.query(new_rope_xyz)[0]
+        feat[0] = np.dot(dist_btwn_ropes, weights)
+        gripper_closing_pts = get_closing_pts(self.actionfile[action], as_dict = True)
+        for ind, lr in enumerate('lr'):
+            if lr in gripper_closing_pts:
+                feat[1 + ind] = kd_warped_rope.query(gripper_closing_pts[lr])[0]
         return feat
     
-    def bias_features(self, state, action, old = False):
+    def bias_features(self, state, action):
         feat = np.zeros(self.num_actions + 1)
-        if old:
-            feat[0] = registration_cost_old(state[1], self.get_ds_cloud(action))
-        else:
-            _, feat[0], _ = self._warp_hmats(state, action)
+        feat[0] = registration_cost_cheap(state[1], self.get_ds_cloud(action))
         feat[self.action_to_ind[action]+1] = 1
         return feat
     
-    def quad_features(self, state, action, old = False):
+    def quad_features(self, state, action):
         feat = np.zeros(2 + 2*self.num_actions)
-        if old:
-            s = registration_cost_old(state[1], self.get_ds_cloud(action))
-        else:
-            _, s, _ = self._warp_hmats(state, action)
+        s = registration_cost_cheap(state[1], self.get_ds_cloud(action))
         feat[0] = s**2
         feat[1] = s
         feat[2+self.action_to_ind[action]] = s
@@ -530,7 +533,6 @@ def gripper_frame_shape_context(xyz, hmat):
         sc_features[r*r_ind + p*p_ind + t] = bin_weights[(r, t, p)]
     return sc_features
 
-
 def extract_point(hmat):
     return hmat[:3, 3]
 
@@ -594,9 +596,8 @@ def registration_cost(xyz_src, xyz_targ, src_interest_pts=None):
                                    x_weights=weights)
     cost = registration.tps_reg_cost(f) + registration.tps_reg_cost(g)
     return f, src_params, g, targ_params, cost
-    
 
-def registration_cost_old(xyz0, xyz1):
+def registration_cost_cheap(xyz0, xyz1):
     scaled_xyz0, _ = registration.unit_boxify(xyz0)
     scaled_xyz1, _ = registration.unit_boxify(xyz1)
     f,g = registration.tps_rpm_bij(scaled_xyz0, scaled_xyz1, rot_reg=1e-3, n_iter=10)
@@ -625,13 +626,30 @@ def combine_expert_demo_files(infile1, infile2, outfile):
         if2.close()
         of.close()
 
-def get_closing_pts(seg_info):
+def get_traj_pts(seg_info):
+    """
+    Returns locations of the gripper at all T time steps of the trajectory.
+    Returns 2*T x 3 Numpy array, with first T rows corresponding to left
+    gripper's positions and the next T corresponding to the right gripper's.
+    """
+    traj_pts = []
+    for lr in "lr":
+        hmats = seg_info["%s_gripper_tool_frame"%lr]['hmat']
+        for hmat in hmats:
+            traj_pts.append(extract_point(hmat))
+    return np.array(traj_pts)    
+
+def get_closing_pts(seg_info, as_dict = False):
     closing_inds = get_closing_inds(seg_info)
     closing_pts = []
+    if as_dict: closing_pts = {}
     for lr in closing_inds:
         if closing_inds[lr] != -1:
             hmat = seg_info["%s_gripper_tool_frame"%lr]['hmat'][closing_inds[lr]]
-            closing_pts.append(extract_point(hmat))
+            if not as_dict:
+                closing_pts.append(extract_point(hmat))
+            else:
+                closing_pts[lr] = extract_point(hmat)
     return closing_pts
 
 def get_closing_inds(seg_info):
@@ -649,7 +667,6 @@ def get_closing_inds(seg_info):
         else:
             result[lr] = -1
     return result
-
 
 def compute_action_margin(model, a1, a2):
     print 'done'
@@ -674,30 +691,39 @@ def test_saving_model(mm_model):
 
 def select_feature_fn(args):
     ActionSet.args = args
-    def bias_feature_fn(actionfile):
-        return get_bias_feature_fn(actionfile, old=args.old_features)
     if args.quad_features:
         print 'Using quadratic features.'
-        feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile, args.old_features)
+        feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile)
     elif args.rope_dist_features:
         print 'Using sc, bias, and rope dist features.'
-        fns = [bias_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn]
+        fns = [get_bias_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     elif args.sc_features:
         print 'Using sc and bias features.'
-        fns = [bias_feature_fn, get_sc_feature_fn]
+        fns = [get_bias_feature_fn, get_sc_feature_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     else:
         print 'Using bias features.'
-        feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile, args.old_features)
+        feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile)
     margin_fn, act_file = get_action_state_margin_fn(act_file)
     actions = act_file.keys()
     return feature_fn, margin_fn, num_features, actions
 
-def test_sc_features(args):
-    feature_fn, num_features, act_file = get_sc_feature_fn(args.actionfile)
+def test_features(args, feature_type):
+    """
+    Accepted values for feature_type: "sc" and "rope_dist"
+    """
+    if feature_type == "sc":
+        feature_fn, num_features, act_file = get_sc_feature_fn(args.actionfile)
+    elif feature_type == "rope_dist":
+        fns = [get_bias_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn]
+        feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
+    else:
+        print "Argument to test_features is not one of the accepted types: sc, rope_dist"
+        return
+
     for name, seg_info in act_file.iteritems():
-        print feature_fn([name, clouds.downsample(seg_info['cloud_xyz'], DS_SIZE)], name)
+        print feature_fn([name, clouds.downsample(seg_info['cloud_xyz'], DS_SIZE)], name), "\n"
 
 def build_constraints_no_model(args):
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
@@ -722,7 +748,8 @@ def build_constraints_no_model(args):
                                      verbose=True)
 
 def build_constraints(args):
-    #test_sc_features(args)
+    #test_features(args, "sc")
+    test_features(args, "rope_dist")
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Building constraints into {}.'.format(args.constraintfile)
     if args.model == 'multi':
@@ -734,12 +761,13 @@ def build_constraints(args):
     if args.model == 'bellman':
         add_bellman_constraints_from_demo(mm_model,
                                           args.demofile,
+                                          args.start, args.end,
                                           outfile=args.constraintfile,
                                           verbose=True)
     else:
         add_constraints_from_demo(mm_model,
                                   args.demofile,
-                                  args.i_start, args.i_end,
+                                  args.start, args.end,
                                   outfile=args.constraintfile,
                                   verbose=True)
 
@@ -780,10 +808,7 @@ if __name__ == '__main__':
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--rope_dist_features", action="store_true")
-    parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument('--C', '-c', type=float, default=1)
-    parser.add_argument("--i_start", type=int, default=0)
-    parser.add_argument("--i_end", type=int, default=-1)
     parser.add_argument("--save_memory", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
 
@@ -791,8 +816,8 @@ if __name__ == '__main__':
     parser_build_constraints = subparsers.add_parser('build-constraints-no-model')
     parser_build_constraints.add_argument('demofile')
     parser_build_constraints.add_argument('constraintfile')
-    parser_build_constraints.add_argument('start', type=int)
-    parser_build_constraints.add_argument('end', type=int)
+    parser_build_constraints.add_argument('--start', type=int, default=0)
+    parser_build_constraints.add_argument('--end', type=int, default=-1)
     parser_build_constraints.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser_build_constraints.set_defaults(func=build_constraints_no_model)
     
@@ -800,6 +825,8 @@ if __name__ == '__main__':
     parser_build_constraints = subparsers.add_parser('build-constraints')
     parser_build_constraints.add_argument('demofile')
     parser_build_constraints.add_argument('constraintfile')
+    parser_build_constraints.add_argument('--start', type=int, default=0)
+    parser_build_constraints.add_argument('--end', type=int, default=-1)
     parser_build_constraints.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser_build_constraints.set_defaults(func=build_constraints)
 

@@ -363,7 +363,7 @@ class Globals:
 if __name__ == "__main__":
     """
     example command:
-    ./do_task_eval.py data/weights/multi_quad_weights_10000.h5 --quad_features --animation=1 --old_features
+    ./do_task_eval.py data/weights/multi_quad_weights_10000.h5 --quad_features --animation=1
     """
     parser = argparse.ArgumentParser()
     
@@ -374,7 +374,6 @@ if __name__ == "__main__":
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--rope_dist_features", action="store_true")
-    parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument("--gripper_weighting", action="store_true")
     parser.add_argument("--animation", type=int, default=0)
     parser.add_argument("--i_start", type=int, default=-1)
