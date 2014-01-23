@@ -136,10 +136,12 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
     if traj:
         trajectories.append(traj)
         traj = []
-    for traj in trajectories:
+    for traj_i in range(len(trajectories)):
+        traj = trajectories[traj_i]
         if verbose:
             print "adding trajectory for trajectory with actions:\n", [a for [s,a] in traj]
         # add bellman constraints
+        yi_name = 'yi_%i'%traj_i
         for i in range(len(traj)-1):
             curr_state, curr_action = traj[i]
             next_state, next_action = traj[i+1]
@@ -150,7 +152,9 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
             g['exp_features'] = lhs_action_phi
             g['rhs_phi'] = rhs_action_phi
             g['margin'] = 0
-            g['xi'] = "bellman"
+            g['xi'] = yi_name
+            if verbose:
+                print "added bellman constraint {}/{}".format(i, len(traj)-1), yi_name
         outfile.flush()
     outfile.close()
 
@@ -228,10 +232,12 @@ def add_bellman_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1
     if traj:
         trajectories.append(traj)
         traj = []
-    for traj in trajectories:
+    for traj_i in range(len(trajectories)):
+        traj = trajectories[traj_i]
         if verbose:
             print "adding trajectory for trajectory with actions:\n", [a for [s,a] in traj]
-        mm_model.add_trajectory(traj)
+        yi_name = 'yi_%i'%traj_i
+        mm_model.add_trajectory(traj, yi_name, verbose)
         if outfile:
             mm_model.save_constraints_to_file(outfile)
 
@@ -755,7 +761,7 @@ def build_constraints(args):
     if args.model == 'multi':
         mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel(actions, args.C, .9, num_features, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, .9, num_features, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     if args.model == 'bellman':
@@ -777,7 +783,7 @@ def build_model(args):
     if args.model == 'multi':
         mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel(actions, args.C, .9, num_features, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, .9, num_features, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     mm_model.load_constraints_from_file(args.constraintfile)
@@ -790,6 +796,7 @@ def optimize_model(args):
         mm_model = MultiSlackMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
     elif args.model == 'bellman':
         mm_model = BellmanMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
+        mm_model.D = args.D
     else:
         mm_model = MaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
     if args.save_memory:
@@ -809,6 +816,7 @@ if __name__ == '__main__':
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--rope_dist_features", action="store_true")
     parser.add_argument('--C', '-c', type=float, default=1)
+    parser.add_argument('--D', '-d', type=float, default=1)
     parser.add_argument("--save_memory", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
 
