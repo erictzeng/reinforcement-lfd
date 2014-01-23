@@ -116,7 +116,7 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
             if other_a == action:
                 continue
             if verbose:
-                print "added {}/{}".format(i, len(actions))
+                print "added {}/{}".format(i, len(actions)), xi_name
             rhs_phi = feature_fn(state, other_a)
             margin = margin_fn(state, action, other_a)
             g = outfile.create_group(str(constraint_ctr))
@@ -261,20 +261,20 @@ def get_rope_dist_feat_fn(actionfile):
     act_set = ActionSet(actionfile)
     return (act_set.rope_dist_features, act_set.num_rope_dist_feat, actionfile)
 
-def get_bias_feature_fn(actionfile, old=False):
+def get_bias_feature_fn(actionfile):
     if type(actionfile) is str:
         actionfile = h5py.File(actionfile, 'r')
     act_set = ActionSet(actionfile)
     def feature_fn(state, action):
-        return act_set.bias_features(state, action, old)
+        return act_set.bias_features(state, action)
     return (feature_fn, act_set.num_actions + 1, actionfile)
 
-def get_quad_feature_fn(actionfile, old=False):
+def get_quad_feature_fn(actionfile):
     if type(actionfile) is str:
         actionfile = h5py.File(actionfile, 'r')
     act_set = ActionSet(actionfile)
     def feature_fn(state, action):
-        return act_set.quad_features(state, action, old)
+        return act_set.quad_features(state, action)
     return (feature_fn, 2 + 2*act_set.num_actions, actionfile)
 
 def get_action_only_margin_fn(actionfile):
@@ -365,21 +365,15 @@ class ActionSet(object):
         feat[1] = sum(kd_warped_rope.query(new_rope_xyz)[0])
         return feat
     
-    def bias_features(self, state, action, old = False):
+    def bias_features(self, state, action):
         feat = np.zeros(self.num_actions + 1)
-        if old:
-            feat[0] = registration_cost_old(state[1], self.get_ds_cloud(action))
-        else:
-            _, feat[0], _ = self._warp_hmats(state, action)
+        feat[0] = registration_cost_cheap(state[1], self.get_ds_cloud(action))
         feat[self.action_to_ind[action]+1] = 1
         return feat
     
-    def quad_features(self, state, action, old = False):
+    def quad_features(self, state, action):
         feat = np.zeros(2 + 2*self.num_actions)
-        if old:
-            s = registration_cost_old(state[1], self.get_ds_cloud(action))
-        else:
-            _, s, _ = self._warp_hmats(state, action)
+        s = registration_cost_cheap(state[1], self.get_ds_cloud(action))
         feat[0] = s**2
         feat[1] = s
         feat[2+self.action_to_ind[action]] = s
@@ -597,7 +591,7 @@ def registration_cost(xyz_src, xyz_targ, src_interest_pts=None):
     return f, src_params, g, targ_params, cost
     
 
-def registration_cost_old(xyz0, xyz1):
+def registration_cost_cheap(xyz0, xyz1):
     if not use_rapprentice:
         return 1
     scaled_xyz0, _ = registration.unit_boxify(xyz0)
@@ -678,10 +672,10 @@ def test_saving_model(mm_model):
 def select_feature_fn(args):
     ActionSet.args = args
     def bias_feature_fn(actionfile):
-        return get_bias_feature_fn(actionfile, old=args.old_features)
+        return get_bias_feature_fn(actionfile)
     if args.quad_features:
         print 'Using quadratic features.'
-        feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile, args.old_features)
+        feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile)
     elif args.rope_dist_features:
         print 'Using sc, bias, and rope dist features.'
         fns = [bias_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn]
@@ -692,7 +686,7 @@ def select_feature_fn(args):
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     else:
         print 'Using bias features.'
-        feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile, args.old_features)
+        feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile)
     margin_fn, act_file = get_action_state_margin_fn(act_file)
     actions = act_file.keys()
     return feature_fn, margin_fn, num_features, actions
@@ -784,7 +778,6 @@ if __name__ == '__main__':
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--rope_dist_features", action="store_true")
-    parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument('--C', '-c', type=float, default=1)
     parser.add_argument("--save_memory", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
