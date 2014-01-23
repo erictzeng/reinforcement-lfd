@@ -53,15 +53,17 @@ class MaxMarginModel(object):
         mm_model.actions = actions[:]
         grb_model = grb.read(fname)
         mm_model.model = grb_model
-        N = 0
         w = []
-        while grb_model.getVarByName(str(N)) is not None:
-            w.append(grb_model.getVarByName(str(N)))
-            N += 1
-        mm_model.N = N
+        for var in mm_model.model.getVars():
+            try:
+                int(var.VarName)
+                w.append(var)
+            except ValueError:
+                pass
+        mm_model.N = len(w)
         mm_model.w = np.asarray(w)
         mm_model.populate_xi()
-        mm_model.weights = np.zeros(N)
+        mm_model.weights = np.zeros(len(w))
         mm_model.feature_fn = feature_fn
         mm_model.margin_fn = margin_fn
         mm_model.constraints_cache = set()
@@ -70,10 +72,14 @@ class MaxMarginModel(object):
     def read(fname, actions, feature_fn, margin_fn):
         mm_model = MaxMarginModel.__new__(MaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
+        assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.w), "Number of Gurobi vars mismatches the MaxMarginModel vars"
         return mm_model
 
     def populate_xi(self):
-        self.xi = self.model.getVarByName('xi')
+        # makes sure that the model being read is a single slack one
+        xis = [var for var in self.model.getVars() if var.VarName.startswith('xi')]
+        assert len(xis) == 1, "There should only be a single xi in single slack MaxMarginModel"
+        self.xi = xis[0]
         self.xi_val = None
 
     @property
@@ -214,14 +220,11 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
     def read(fname, actions, feature_fn, margin_fn):
         mm_model = MultiSlackMaxMarginModel.__new__(MultiSlackMaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
+        assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.w), "Number of Gurobi vars mismatches the MultiSlackMaxMarginModel vars"
         return mm_model
 
     def populate_xi(self):
-        self.xi = []
-        next_xi = self.model.getVarByName('xi_0')
-        while next_xi is not None:
-            self.xi.append(next_xi)
-            next_xi = self.model.getVarByName('xi_{}'.format(len(self.xi)))
+        self.xi = [var for var in self.model.getVars() if var.VarName.startswith('xi')]
         self.xi_val = []
 
     @property
@@ -363,6 +366,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
     def read(fname, actions, feature_fn, margin_fn):
         mm_model = BellmanMaxMarginModel.__new__(BellmanMaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
+        assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.w), "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars"
         mm_model.action_cost = -1
         mm_model.gamma = 0.9 #bestpractices
         return mm_model
