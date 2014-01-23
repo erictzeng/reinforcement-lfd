@@ -167,6 +167,7 @@ if __name__ == '__main__':
     parser.add_argument('serverconf')
     parser.add_argument('loginconf', nargs='?', default='logins.yml')
     parser.add_argument('--overwrite', action='store_true', default=False)
+    parser.add_argument('--collect_only', action='store_true', default=False)
     args = parser.parse_args()
     logins = defaultdict(lambda: None)
     if os.path.exists(args.loginconf):
@@ -174,5 +175,7 @@ if __name__ == '__main__':
         logins = read_logins(args.loginconf)
     conf = read_conf(args.serverconf)
     pw = getpass.getpass()
-    distribute_jobs(conf, logins=logins, password=pw, overwrite=args.overwrite)
-
+    if args.collect_only:
+        collect_results(conf, logins=logins, password=pw)
+    else:
+        distribute_jobs(conf, logins=logins, password=pw, overwrite=args.overwrite)

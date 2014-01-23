@@ -46,6 +46,8 @@ if __name__ == '__main__':
         g['exp_features'] = reformat_vector(exp_phi)
         g['rhs_phi'] = reformat_vector(rhs_phi)
         g['margin'] = margin
+        if 'xi' in constr.keys():
+            g['xi'] = constr['xi'][()]
 
     outfile.close()
     infile.close()
