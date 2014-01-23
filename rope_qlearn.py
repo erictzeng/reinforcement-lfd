@@ -89,17 +89,18 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
         outfile = h5py.File(outfile, 'w')
     if verbose:
         print "adding constraints"
-    constraint_ctr = 0
+    
     if end < 0:
         end = len(expert_demofile.keys())
     while int(expert_demofile[str(start)]['pred'][()]) != start:
         start += 1
     while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
         end += 1
+    
     trajectories = []
     traj = []
+    constraint_ctr = 0
     for demo_i in range(start, end):
-        print "demo_i", demo_i
         key = str(demo_i)
         group = expert_demofile[key]
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
@@ -153,7 +154,7 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
         outfile.flush()
     outfile.close()
 
-def add_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, outfile=None, verbose=False):
+def add_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1, outfile=None, verbose=False):
     """
     takes all of the expert demonstrations from expert_demofile
     and add all of the associated constrainted to mm_model
@@ -167,23 +168,16 @@ def add_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, ou
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
         print "adding constraints"
+    
+    if end < 0:
+        end = len(expert_demofile.keys())
+    while int(expert_demofile[str(start)]['pred'][()]) != start:
+        start += 1
+    while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
+        end += 1
+
     c = 0
-    if start_i != 0:
-        while int(expert_demofile[str(start_i)]['pred'][()]) != start_i:
-            start_i += 1
-    if end_i != -1:
-        while int(expert_demofile[str(end_i)]['pred'][()]) != end_i:
-            end_i += 1
-    else:
-        try:
-            end_i = 0
-            key_iter = expert_demofile.iterkeys()
-            while 1:
-                key_iter.next()
-                end_i += 1
-        except:
-            pass
-    for i in range(start_i, end_i):  
+    for i in range(start, end):  
         # Assumes example ids are strings of consecutive integers starting from 0
         key = str(i)
         group = expert_demofile[key]
@@ -199,19 +193,26 @@ def add_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, ou
         if outfile:
             mm_model.save_constraints_to_file(outfile)
 
-def add_bellman_constraints_from_demo(mm_model, expert_demofile, start_i=0, end_i=-1, outfile=None, verbose=False):
+def add_bellman_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1, outfile=None, verbose=False):
     if type(expert_demofile) is str:
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
         print "adding constraints"
+
+    if end < 0:
+        end = len(expert_demofile.keys())
+    while int(expert_demofile[str(start)]['pred'][()]) != start:
+        start += 1
+    while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
+        end += 1
+
     trajectories = []
     traj = []
-    keys_sorted = sorted([k for k in expert_demofile.keys()], key = lambda k: int(k)) 
-    for key in keys_sorted:
+    for demo_i in range(start, end):
+        key = str(demo_i)
         group = expert_demofile[key]
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
         action = group['action'][()]
-        print "key", key
         if action.startswith('endstate'): # this is a knot
             continue
         if verbose:
@@ -736,12 +737,13 @@ def build_constraints(args):
     if args.model == 'bellman':
         add_bellman_constraints_from_demo(mm_model,
                                           args.demofile,
+                                          args.start, args.end,
                                           outfile=args.constraintfile,
                                           verbose=True)
     else:
         add_constraints_from_demo(mm_model,
                                   args.demofile,
-                                  args.i_start, args.i_end,
+                                  args.start, args.end,
                                   outfile=args.constraintfile,
                                   verbose=True)
 
@@ -784,8 +786,6 @@ if __name__ == '__main__':
     parser.add_argument("--rope_dist_features", action="store_true")
     parser.add_argument("--old_features", action="store_true") # tps_rpm_bij with default parameters
     parser.add_argument('--C', '-c', type=float, default=1)
-    parser.add_argument("--i_start", type=int, default=0)
-    parser.add_argument("--i_end", type=int, default=-1)
     parser.add_argument("--save_memory", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
 
@@ -793,8 +793,8 @@ if __name__ == '__main__':
     parser_build_constraints = subparsers.add_parser('build-constraints-no-model')
     parser_build_constraints.add_argument('demofile')
     parser_build_constraints.add_argument('constraintfile')
-    parser_build_constraints.add_argument('start', type=int)
-    parser_build_constraints.add_argument('end', type=int)
+    parser_build_constraints.add_argument('--start', type=int, default=0)
+    parser_build_constraints.add_argument('--end', type=int, default=-1)
     parser_build_constraints.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser_build_constraints.set_defaults(func=build_constraints_no_model)
     
@@ -802,6 +802,8 @@ if __name__ == '__main__':
     parser_build_constraints = subparsers.add_parser('build-constraints')
     parser_build_constraints.add_argument('demofile')
     parser_build_constraints.add_argument('constraintfile')
+    parser_build_constraints.add_argument('--start', type=int, default=0)
+    parser_build_constraints.add_argument('--end', type=int, default=-1)
     parser_build_constraints.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser_build_constraints.set_defaults(func=build_constraints)
 
