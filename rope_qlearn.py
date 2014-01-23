@@ -95,6 +95,7 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
         start += 1
     while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
         end += 1
+    trajectories = []
     traj = []
     for demo_i in range(start, end):
         print "demo_i", demo_i
@@ -122,21 +123,32 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
             g['rhs_phi'] = rhs_phi
             g['margin'] = margin
             g['xi'] = xi_name
-        # add bellman_constraints
+        # trajectories for bellman_constraints
         if group['pred'][()] == key:
-            for i in range(len(traj)-1):
-                curr_state, curr_action = traj[i]
-                next_state, next_action = traj[i+1]
-                lhs_action_phi = feature_fn(curr_state, curr_action)
-                rhs_action_phi = feature_fn(next_state, next_action)
-                g = outfile.create_group(str(constraint_ctr))
-                constraint_ctr += 1
-                g['exp_features'] = lhs_action_phi
-                g['rhs_phi'] = rhs_action_phi
-                g['margin'] = 0
-                g['xi'] = "bellman"
-            traj = []
+            if traj:
+                trajectories.append(traj)
+                traj = []
         traj.append([state, action])
+        outfile.flush()
+        
+    if traj:
+        trajectories.append(traj)
+        traj = []
+    for traj in trajectories:
+        if verbose:
+            print "adding trajectory for trajectory with actions:\n", [a for [s,a] in traj]
+        # add bellman constraints
+        for i in range(len(traj)-1):
+            curr_state, curr_action = traj[i]
+            next_state, next_action = traj[i+1]
+            lhs_action_phi = feature_fn(curr_state, curr_action)
+            rhs_action_phi = feature_fn(next_state, next_action)
+            g = outfile.create_group(str(constraint_ctr))
+            constraint_ctr += 1
+            g['exp_features'] = lhs_action_phi
+            g['rhs_phi'] = rhs_action_phi
+            g['margin'] = 0
+            g['xi'] = "bellman"
         outfile.flush()
     outfile.close()
 
@@ -175,21 +187,35 @@ def add_bellman_constraints_from_demo(mm_model, expert_demofile, outfile=None, v
         expert_demofile = h5py.File(expert_demofile, 'r')
     if verbose:
         print "adding constraints"
+    trajectories = []
     traj = []
-    for key, group in expert_demofile.iteritems():
+    keys_sorted = sorted([k for k in expert_demofile.keys()], key = lambda k: int(k)) 
+    for key in keys_sorted:
+        group = expert_demofile[key]
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
         action = group['action'][()]
         print "key", key
         if action.startswith('endstate'): # this is a knot
             continue
-        if group['pred'][()] == key:
-            mm_model.add_trajectory(traj)
-            if outfile:
-                mm_model.save_constraints_to_file(outfile)
-            traj = []
-        traj.append([state, action])
         if verbose:
             print 'adding constraints for:\t', action
+        mm_model.add_example(state, action, verbose)
+        if group['pred'][()] == key:
+            if traj:
+                trajectories.append(traj)
+                traj = []
+        traj.append([state, action])
+        if outfile:
+            mm_model.save_constraints_to_file(outfile)
+    if traj:
+        trajectories.append(traj)
+        traj = []
+    for traj in trajectories:
+        if verbose:
+            print "adding trajectory for trajectory with actions:\n", [a for [s,a] in traj]
+        mm_model.add_trajectory(traj)
+        if outfile:
+            mm_model.save_constraints_to_file(outfile)
 
 def concatenate_fns(fns, actionfile):
     if type(actionfile) is str:
