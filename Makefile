@@ -18,7 +18,7 @@ push:
 	@rsync -rlzP $(delflag) data/ $(PRIMUS):$(DATADIR)/data/
 
 drypull:
-	@rsync -rlvz --dry-run $(delflag) $(PRIMUS):$(DATADIR)/data/ data/ | grep -E '^deleting|[^/]$$'
+	@rsync -avz --dry-run $(delflag) $(PRIMUS):$(DATADIR)/data/ data/ | grep -E '^deleting|[^/]$$'
 
 pull:
-	@rsync -rlzP $(delflag) $(PRIMUS):$(DATADIR)/data/ data/
+	@rsync -azP $(delflag) $(PRIMUS):$(DATADIR)/data/ data/
