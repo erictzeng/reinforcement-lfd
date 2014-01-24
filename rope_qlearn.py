@@ -54,7 +54,7 @@ def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile
         print "adding constraints"
     constraint_ctr = 0
     if end < 0:
-        end = len(expert_demofile.keys())
+        end = len(expert_demofile)
     for demo_i in range(start, end):
         key = str(demo_i)
         group = expert_demofile[key]
@@ -91,10 +91,10 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
         print "adding constraints"
     
     if end < 0:
-        end = len(expert_demofile.keys())
-    while int(expert_demofile[str(start)]['pred'][()]) != start:
+        end = len(expert_demofile)
+    while start < len(expert_demofile) and int(expert_demofile[str(start)]['pred'][()]) != start:
         start += 1
-    while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
+    while end < len(expert_demofile) and int(expert_demofile[str(end)]['pred'][()]) != end:
         end += 1
     
     trajectories = []
@@ -136,12 +136,11 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
     if traj:
         trajectories.append(traj)
         traj = []
-    for traj_i in range(len(trajectories)):
-        traj = trajectories[traj_i]
+    for traj in trajectories:
         if verbose:
             print "adding trajectory for trajectory with actions:\n", [a for [s,a] in traj]
         # add bellman constraints
-        yi_name = 'yi_%i'%traj_i
+        yi_name = 'yi_%s'%traj[0][0][0] # use the state id of the first trajectory as the trajectory id
         for i in range(len(traj)-1):
             curr_state, curr_action = traj[i]
             next_state, next_action = traj[i+1]
@@ -174,10 +173,10 @@ def add_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1, outfil
         print "adding constraints"
     
     if end < 0:
-        end = len(expert_demofile.keys())
+        end = len(expert_demofile)
     while int(expert_demofile[str(start)]['pred'][()]) != start:
         start += 1
-    while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
+    while end < len(expert_demofile)-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
         end += 1
 
     for demo_i in range(start, end):  
@@ -203,10 +202,10 @@ def add_bellman_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1
         print "adding constraints"
 
     if end < 0:
-        end = len(expert_demofile.keys())
-    while int(expert_demofile[str(start)]['pred'][()]) != start:
+        end = len(expert_demofile)
+    while start < len(expert_demofile) and int(expert_demofile[str(start)]['pred'][()]) != start:
         start += 1
-    while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
+    while end < len(expert_demofile) and int(expert_demofile[str(end)]['pred'][()]) != end:
         end += 1
 
     trajectories = []
@@ -232,11 +231,10 @@ def add_bellman_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1
     if traj:
         trajectories.append(traj)
         traj = []
-    for traj_i in range(len(trajectories)):
-        traj = trajectories[traj_i]
+    for traj in trajectories:
         if verbose:
             print "adding trajectory for trajectory with actions:\n", [a for [s,a] in traj]
-        yi_name = 'yi_%i'%traj_i
+        yi_name = 'yi_%s'%traj[0][0][0] # use the state id of the first trajectory as the trajectory id
         mm_model.add_trajectory(traj, yi_name, verbose)
         if outfile:
             mm_model.save_constraints_to_file(outfile)

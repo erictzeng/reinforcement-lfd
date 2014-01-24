@@ -328,9 +328,16 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         """
         MultiSlackMaxMarginModel.update_constraints_file(fname)
         infile = h5py.File(fname, 'r')
+        n_other_keys = 0
+        if 'weights' in infile:
+            self.weights = infile['weights'][:]
+            n_other_keys += 1
+        if 'xi' in infile:
+            self.xi_val = infile['xi'][:]
+            n_other_keys += 1
         slack_names = {}
-        for key, constr in infile.iteritems():
-            if key in ('weights', 'xi'): continue
+        for key_i in range(len(infile) - n_other_keys):
+            constr = infile[str(key_i)]
             exp_phi = constr['exp_features'][:]
             rhs_phi = constr['rhs_phi'][:]
             margin = float(constr['margin'][()])
@@ -339,10 +346,6 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
                 xi_var = self.add_xi(xi_name)
                 slack_names[xi_name] = xi_var
             self.add_constraint(exp_phi, rhs_phi, margin, slack_names[xi_name], update=False)
-        if 'weights' in infile:
-            self.weights = infile['weights'][:]
-        if 'xi' in infile:
-            self.xi_val = infile['xi'][:]
         infile.close()
         self.model.update()
 
@@ -367,7 +370,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
     def __init__(self, actions, C, D, gamma, N, feature_fn, margin_fn):
         MultiSlackMaxMarginModel.__init__(self, actions, C, N, feature_fn, margin_fn)
         self._D = D
-        self.action_cost = -1#self.model.addVar(lb = -1*GRB.INFINITY, ub = 0, name = "action_cost")
+        self.action_reward = 1
         self.yi = []
         self.yi_val = []
         self.gamma = gamma
@@ -377,7 +380,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         mm_model = BellmanMaxMarginModel.__new__(BellmanMaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
         assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi) + len(mm_model.w), "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars"
-        mm_model.action_cost = -1
+        mm_model.action_reward = 1
         mm_model.gamma = 0.9 #bestpractices
         return mm_model
 
@@ -405,16 +408,14 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         else:
             lhs = grb.LinExpr(lhs_coeffs)
         rhs_coeffs = [(self.gamma*p, w) for w, p in zip(self.w, next_action_phi) if abs(p) >= eps]
-#         rhs_coeffs.append((1, self.action_cost))
-        rhs_coeffs.append((-1, yi_var))
+        rhs_coeffs.append((1, yi_var))
         rhs = grb.LinExpr(rhs_coeffs)
-        rhs += self.action_cost
+        rhs += self.action_reward
         # old version
-        # w'*next_phi <= -1 + gammma * w'*phi
-        # self.model.addConstr(lhs <= rhs)
+        # w'*curr_phi <= -1 + gammma * w'*next_phi
         # current version
-        # w'*next_phi + 1 >= -yi + gammma * w'*phi
-        self.model.addConstr(lhs >= rhs)
+        # w' * cur_phi <= 1 + yi + gamma * w'*next_phi
+        self.model.addConstr(lhs <= rhs)
         #store the constraint so we can store them to a file later
         self.constraints_cache.add(util.tuplify((curr_action_phi, next_action_phi, 0, yi_var.VarName)))
         if update:
@@ -447,10 +448,17 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         """
         MultiSlackMaxMarginModel.update_constraints_file(fname)
         infile = h5py.File(fname, 'r')
+        n_other_keys = 0
+        if 'weights' in infile:
+            self.weights = infile['weights'][:]
+            n_other_keys += 1
+        if 'xi' in infile:
+            self.xi_val = infile['xi'][:]
+            n_other_keys += 1
         xi_names = {}
         yi_names = {}
-        for key, constr in infile.iteritems():
-            if key in ('weights', 'xi'): continue
+        for key_i in range(len(infile) - n_other_keys):
+            constr = infile[str(key_i)]
             exp_phi = constr['exp_features'][:]
             rhs_phi = constr['rhs_phi'][:]
             margin = float(constr['margin'][()])
@@ -465,10 +473,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
                     xi_var = self.add_xi(slack_name)
                     xi_names[slack_name] = xi_var
                 self.add_constraint(exp_phi, rhs_phi, margin, xi_names[slack_name], update=False)
-        if 'weights' in infile:
-            self.weights = infile['weights'][:]
-        if 'xi' in infile:
-            self.xi_val = infile['xi'][:]
         infile.close()
         self.model.update()
 
