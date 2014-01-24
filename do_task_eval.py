@@ -478,12 +478,15 @@ if __name__ == "__main__":
             state = ("eval_%i"%get_unique_id(), new_xyz)
     
             redprint("Finding closest demonstration")
-            best_action = actions[np.argmax([np.dot(weights, feature_fn(state, action)) for action in actions])]
+            values = [np.dot(weights, feature_fn(state, action)) for action in actions]
+            best_action = actions[np.argmax(values)]
 
             redprint("Simulating action %s"%(best_action))
             success = simulate_demo(new_xyz, actionfile[best_action], animate=args.animation)
             
             if save_results:
-                result_file[i_task][str(i_step)] = Globals.sim.observe_cloud()
+                result_file[i_task].create_group(str(i_step))
+                result_file[i_task][str(i_step)]['rope_nodes'] = Globals.sim.observe_cloud()
+                result_file[i_task][str(i_step)]['values'] = values
         if save_results:
             result_file.close()
