@@ -369,7 +369,7 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
 class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
     def __init__(self, actions, C, D, gamma, N, feature_fn, margin_fn):
         MultiSlackMaxMarginModel.__init__(self, actions, C, N, feature_fn, margin_fn)
-        self.action_reward = 1
+        self.action_reward = -1
         self._D = D
         self.yi = []
         self.yi_val = []
@@ -380,7 +380,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         mm_model = BellmanMaxMarginModel.__new__(BellmanMaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
         assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi) + len(mm_model.w), "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars"
-        mm_model.action_reward = 1
+        mm_model.action_reward = -1
         mm_model.gamma = 0.9 #bestpractices
         return mm_model
 
@@ -411,10 +411,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         rhs_coeffs.append((1, yi_var))
         rhs = grb.LinExpr(rhs_coeffs)
         rhs += self.action_reward
-        # old version
-        # w'*curr_phi <= -1 + gammma * w'*next_phi
-        # current version
-        # w' * cur_phi <= 1 + yi + gamma * w'*next_phi
+        # w'*curr_phi <= -1 + yi gammma * w'*next_phi
         self.model.addConstr(lhs <= rhs)
         #store the constraint so we can store them to a file later
         self.constraints_cache.add(util.tuplify((curr_action_phi, next_action_phi, 0, yi_var.VarName)))

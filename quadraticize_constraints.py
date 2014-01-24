@@ -35,14 +35,20 @@ if __name__ == '__main__':
     outfile = h5py.File(args.outfile, 'w-') # fail if file already exists
     infile = h5py.File(args.infile, 'r')
 
-    for key, constr in infile.iteritems():
-        if key == 'weights': continue
-        
+    n_other_keys = 0
+    if 'weights' in infile:
+        n_other_keys += 1
+    if 'xi' in infile:
+        n_other_keys += 1
+
+    for key_i in range(len(infile) - n_other_keys):
+        constr = infile[str(key_i)]
+
         exp_phi = constr['exp_features'][:]
         rhs_phi = constr['rhs_phi'][:]
         margin = float(constr['margin'][()])
 
-        g = outfile.create_group(str(key))
+        g = outfile.create_group(str(key_i))
         g['exp_features'] = reformat_vector(exp_phi)
         g['rhs_phi'] = reformat_vector(rhs_phi)
         g['margin'] = margin
