@@ -472,6 +472,34 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
                 self.add_constraint(exp_phi, rhs_phi, margin, xi_names[slack_name], update=False)
         infile.close()
         self.model.update()
+        
+    def load_weights_from_file(self, fname):
+        infile = h5py.File(fname, 'r')
+        self.weights = infile['weights'][:]
+        if 'xi' in infile:
+            self.xi_val = infile['xi'][()]
+        if 'yi' in infile:
+            self.yi_val = infile['yi'][()]
+        infile.close()
+        
+    def save_weights_to_file(self, fname):
+        # changed to use h5py.File so file i/o is consistent
+        outfile = h5py.File(fname, 'w')
+        outfile['weights'] = self.weights
+        outfile['xi'] = self.xi_val
+        outfile['yi'] = self.yi_val
+        outfile.close()
+        
+    def optimize_model(self):
+        self.model.update()
+        self.model.optimize()
+        try:
+            self.weights = [x.X for x in self.w]
+            self.xi_val = self.xi.X
+            self.yi_val = self.yi.X
+            return self.weights
+        except grb.GurobiError:
+            raise RuntimeError, "issue with optimizing model, check gurobi optimizer output"
 
 def grid_test_fns():
     """
