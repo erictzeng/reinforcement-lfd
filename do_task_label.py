@@ -182,14 +182,31 @@ def write_flush(outfile, items, key=None):
         g[k] = v
     outfile.flush()
 
+def remove_last_example(outfile):
+    key = str(len(outfile) - 1)
+    try:
+        while True:
+            ## will loop until we get something that is its own pred
+            new_key = str(outfile[key]['pred'])
+            del outfile[key]
+            key = new_key
+    except:
+        key = str(len(outfile)-1)
+        if not outfile[key]['knot']:
+            raise Exception, "issue deleting examples, check your file"
+
 def get_input(start_state, action_name, next_state, outfile, pred):
     print "d accepts and resamples rope"
     print "i ignores and resamples rope"
+    print "r removes this entire example"
     print "you can C-c to quit safely"
-    response = raw_input("Use this demonstration?[y/N/d/i]")
+    response = raw_input("Use this demonstration?[y/N/d/i/r]")
     resample = False
     success = False
-    if response in ('I', 'i'):
+    if response in ('R', 'r'):
+        remove_last_example(outfile)
+        resample = True
+    elif response in ('I', 'i'):
         resample = True
     elif response in ('D', 'd'):
         resample = True
