@@ -356,7 +356,7 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
 class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
     def __init__(self, actions, C, gamma, N, feature_fn, margin_fn):
         MultiSlackMaxMarginModel.__init__(self, actions, C, N, feature_fn, margin_fn)
-        self.action_cost = -1#self.model.addVar(lb = -1*GRB.INFINITY, ub = 0, name = "action_cost")
+        self.action_cost = -1
         self.gamma = gamma
 
     @staticmethod
