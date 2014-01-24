@@ -32,6 +32,7 @@ import IPython as ipy
 import matplotlib.pyplot as plt
 import numpy as np
 import colorsys, os, re, sys
+import argparse
 
 class Application(Frame):
 
@@ -57,14 +58,14 @@ class Application(Frame):
         self.change_image(ex_index)
         
     def record_yes(self):
-        global ex_file, ex_index
-        update_predecessor(ex_file, example_ids[ex_index], example_ids[ex_index - 1])
+        global ex_file, ex_index, outfile
+        set_label(outfile, example_ids[ex_index], 0)
         self.next_image()
 
     def record_no(self):
-        global ex_file, ex_index
+        global ex_file, ex_index, outfile
         # Indicates this is the start of a sequence
-        update_predecessor(ex_file, example_ids[ex_index], example_ids[ex_index])
+        set_label(outfile, example_ids[ex_index], 1)
         self.next_image()
 
     def undo_record(self):
@@ -128,47 +129,49 @@ def image_from_point_cloud(output_folder, h5py_file, ex_index):
     plt.savefig(fname)
     print "saved ", fname
 
-if len(sys.argv) < 3:
-    print "Usage: ./label_sequences.py <labeled examples file> <output images folder>"
-    sys.exit(0)
 
-num_images_shown = 2
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('examples_file', type=str)
+    parser.add_argument('output_folder', type=str)
+        
+    num_images_shown = 1
+        
+    labelled_ex_file = args.examples_file
+    ex_file = h5py.File(labelled_ex_file, 'r+')
+    example_ids = natural_sort(ex_file.keys())
+    update_predecessor(ex_file, example_ids[0], example_ids[0])
+    
+    ex_index = 1
+    images_folder = args.output_folder    
+    if not os.path.exists(images_folder):
+        os.makedirs(images_folder)
+    print "Outputting images to: " , images_folder
+            
+    root = Tk()
+    root.wm_title("Knot or Not")
+    app = Application(master=root)
+    app.focus_set()
+    app.bind('y', lambda event: app.record_yes())
+    app.bind('n', lambda event: app.record_no())
+    app.bind('u', lambda event: app.undo_record())
+        
+    panels = {}
+    imgs = {}
 
-labelled_ex_file = sys.argv[1]
-ex_file = h5py.File(labelled_ex_file, 'r+')
-example_ids = natural_sort(ex_file.keys())
-update_predecessor(ex_file, example_ids[0], example_ids[0])
+    top_frame = Frame(root)
+    top_frame.pack()
 
-ex_index = 1
-images_folder = sys.argv[2]
-if images_folder[-1] is not '/':
-    images_folder = images_folder + "/"
-print "Outputting images to: " , images_folder
+    im_size = (root.winfo_screenwidth()-200) / num_images_shown
 
-root = Tk()
-root.wm_title("Label Predecessors")
-app = Application(master=root)
-app.focus_set()
-app.bind('y', lambda event: app.record_yes())
-app.bind('n', lambda event: app.record_no())
-app.bind('u', lambda event: app.undo_record())
+    for i in [ex_index - 1, ex_index]:
+        image_from_point_cloud(images_folder, ex_file, i)
+        im = Image.open(get_image_filename(images_folder, example_ids[i]))
+        im.thumbnail((im_size, im_size), Image.ANTIALIAS)
+        imgs[i] = ImageTk.PhotoImage(im)
+        panels[i] = Label(top_frame, image = imgs[i])
+        panels[i].pack(side = "left", fill = "both", expand = "yes")
 
-panels = {}
-imgs = {}
-
-top_frame = Frame(root)
-top_frame.pack()
-
-im_size = (root.winfo_screenwidth()-200) / num_images_shown
-
-for i in [ex_index - 1, ex_index]:
-    image_from_point_cloud(images_folder, ex_file, i)
-    im = Image.open(get_image_filename(images_folder, example_ids[i]))
-    im.thumbnail((im_size, im_size), Image.ANTIALIAS)
-    imgs[i] = ImageTk.PhotoImage(im)
-    panels[i] = Label(top_frame, image = imgs[i])
-    panels[i].pack(side = "left", fill = "both", expand = "yes")
-
-app.mainloop()
-ex_file.close()
-root.destroy()
+    app.mainloop()
+    ex_file.close()
+    root.destroy()

@@ -13,7 +13,14 @@ import yaml
 
 def read_jobfile(path):
     with open(path, 'r') as jobfile:
-        return yaml.safe_load(jobfile)
+        result = yaml.safe_load(jobfile)
+    if 'start' not in result:
+        result['start'] = 0
+    if 'end' not in result:
+        result['end'] = result['num_examples']
+    if 'files_to_copy' not in result:
+        result['files_to_copy'] = []
+    return result
 
 def launch_instances(connection, conf):
     info = dict(conf['instance_info'])
@@ -49,8 +56,14 @@ def collect_results(client, conf):
 def read_channel(channel):
     channel.readlines()
 
+def copy_files(client, conf):
+    sftp = client.open_sftp()
+    for file_info in conf['files_to_copy']:
+        sftp.put(file_info, os.path.basename(file_info))
+
 def start_job(instance, client, conf, start, end):
     streams = []
+    copy_files(client, conf)
     jobs_remaining = conf['jobs_per_instance']
     while jobs_remaining > 0:
         step = int(ceil(float(end - start) / jobs_remaining))
@@ -115,8 +128,8 @@ def main(args):
     statuses = {instance.id: 'pending' for instance in instances}
     clients = {}
     streams = {}
-    num_examples = conf['num_examples']
-    curr_ind = 0
+    num_examples = conf['end']
+    curr_ind = conf['start']
     num_unstarted = conf['num_instances']
     while not all(status == 'done' for status in statuses.values()):
         time.sleep(5)
