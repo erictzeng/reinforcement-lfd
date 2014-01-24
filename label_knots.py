@@ -29,6 +29,7 @@ import h5py
 from Tkinter import *
 from PIL import ImageTk, Image
 import IPython as ipy
+from pdb import pm, set_trace
 import matplotlib.pyplot as plt
 import numpy as np
 import colorsys, os, re, sys
@@ -36,44 +37,51 @@ import argparse
 
 class Application(Frame):
 
-    def change_image(self, ex_ind):
-        global ex_file
-        if ex_ind >= len(example_ids):
+    def __init__(self, infile, outfile, image_folder, im_size, master=None):
+        Frame.__init__(self, master)
+        self.pack(side = "bottom")
+        self.createWidgets()
+        self.infile = infile
+        self.outfile = outfile
+        self.ex_index = 0
+        self.num_examples = h5_len(infile)
+        self.image_folder = image_folder
+        self.im_size = im_size
+        self.img = None
+        self.panel = None
+
+    def set_panel(self, img, panel):
+        self.img = img
+        self.panel = panel
+
+    def change_image(self, ex_ind=None):
+        if not ex_ind: ex_ind = self.ex_index
+        if ex_ind >= self.num_examples:
             self.quit()
-        try:  # Check if image file already exists
-            f = open(get_image_filename(images_folder, example_ids[ex_ind]), 'r')
-            f.close()
-        except IOError:
-            image_from_point_cloud(images_folder, ex_file, ex_ind)
-        for idx, val in enumerate([ex_ind - 1, ex_ind]):
-            im = Image.open(get_image_filename(images_folder, example_ids[val]))
-            im.thumbnail((im_size, im_size), Image.ANTIALIAS)
-            imgs[idx] = ImageTk.PhotoImage(im)
-            panels[idx].configure(image = imgs[idx])
-            panels[idx].image = imgs[idx]
+        image_from_point_cloud(self.image_folder, self.infile, ex_ind)
+        im = Image.open(get_image_filename(self.image_folder, ex_ind))
+        im.thumbnail((self.im_size, self.im_size), Image.ANTIALIAS)
+        img = ImageTk.PhotoImage(im)
+        panel.configure(image = img)
+        panel.image = img
 
     def next_image(self):
-        global ex_index
-        ex_index += 1
-        self.change_image(ex_index)
+        self.ex_index += 1
+        self.change_image(self.ex_index)
         
     def record_yes(self):
-        global ex_file, ex_index, outfile
-        set_label(outfile, example_ids[ex_index], 0)
+        set_label(self.outfile, self.infile, self.ex_index, 1)
         self.next_image()
 
     def record_no(self):
-        global ex_file, ex_index, outfile
-        # Indicates this is the start of a sequence
-        set_label(outfile, example_ids[ex_index], 1)
+        set_label(self.outfile, self.infile, self.ex_index, 0)
         self.next_image()
 
     def undo_record(self):
-        global ex_index
-        if ex_index == 1:
+        if self.ex_index == 1:
             return
-        ex_index -= 1
-        self.change_image(ex_index)
+        self.ex_index -= 1
+        self.change_image(self.ex_index)
 
     def createWidgets(self):
         self.QUIT = Button(self)
@@ -97,10 +105,6 @@ class Application(Frame):
         self.undo["command"] = self.undo_record
         self.undo.pack({"side": "left"})
 
-    def __init__(self, master=None):
-        Frame.__init__(self, master)
-        self.pack(side = "bottom")
-        self.createWidgets()
 
 def natural_sort(l): 
     convert = lambda text: int(text) if text.isdigit() else text.lower() 
@@ -110,14 +114,21 @@ def natural_sort(l):
 def get_image_filename(images_folder, ex_id):
     return os.path.join(images_folder, "example_%s.png" % (str(ex_id)))
 
-def update_predecessor(h5py_file, ex_id, pred_id):
-    if 'pred' in h5py_file[ex_id].keys():
-        del h5py_file[ex_id]['pred']
-    h5py_file[ex_id]['pred'] = str(pred_id)
+def h5_len(f):
+    c = 0
+    for i in f.iterkeys():
+        c += 1
+    return c
 
+def set_label(outfile, infile, ex_id, value):
+    new_id = str(h5_len(outfile)) # takes care of adding 1 for us
+    g = outfile.create_group(new_id)
+    g['knot'] = value
+    g['cloud_xyz'] = infile[str(ex_id)]['cloud_xyz'][:]
+    
 def image_from_point_cloud(output_folder, h5py_file, ex_index):
     ex_id = example_ids[ex_index]
-    fname = get_image_filename(images_folder, ex_id)
+    fname = get_image_filename(output_folder, ex_id)
     cloud_xyz = h5py_file[ex_id]['cloud_xyz']
     plt.clf()
     plt.cla()
@@ -133,45 +144,42 @@ def image_from_point_cloud(output_folder, h5py_file, ex_index):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('examples_file', type=str)
-    parser.add_argument('output_folder', type=str)
+    parser.add_argument('output_file', type=str)
+    parser.add_argument('image_folder', type=str)    
+
+    args = parser.parse_args()
         
-    num_images_shown = 1
-        
-    labelled_ex_file = args.examples_file
-    ex_file = h5py.File(labelled_ex_file, 'r+')
-    example_ids = natural_sort(ex_file.keys())
-    update_predecessor(ex_file, example_ids[0], example_ids[0])
-    
-    ex_index = 1
-    images_folder = args.output_folder    
-    if not os.path.exists(images_folder):
-        os.makedirs(images_folder)
-    print "Outputting images to: " , images_folder
+    infile = h5py.File(args.examples_file, 'r')
+    example_ids = natural_sort(infile.keys())
+    outfile = h5py.File(args.output_file, 'a')
+
+    if not os.path.exists(args.image_folder):
+        os.makedirs(args.image_folder)
+    print "Outputting images to: " , args.image_folder
+
             
     root = Tk()
     root.wm_title("Knot or Not")
-    app = Application(master=root)
+    im_size = (root.winfo_screenwidth()-200)
+    app = Application(infile, outfile, args.image_folder, im_size, master=root)
     app.focus_set()
     app.bind('y', lambda event: app.record_yes())
     app.bind('n', lambda event: app.record_no())
     app.bind('u', lambda event: app.undo_record())
         
-    panels = {}
-    imgs = {}
-
     top_frame = Frame(root)
     top_frame.pack()
 
-    im_size = (root.winfo_screenwidth()-200) / num_images_shown
+    image_from_point_cloud(args.image_folder, infile, 0)
+    im = Image.open(get_image_filename(args.image_folder, example_ids[0]))
+    im.thumbnail((im_size, im_size), Image.ANTIALIAS)
+    img = ImageTk.PhotoImage(im)
+    panel = Label(top_frame, image = img)
+    panel.pack(side = "left", fill = "both", expand = "yes")
+    app.set_panel(img, panel)
 
-    for i in [ex_index - 1, ex_index]:
-        image_from_point_cloud(images_folder, ex_file, i)
-        im = Image.open(get_image_filename(images_folder, example_ids[i]))
-        im.thumbnail((im_size, im_size), Image.ANTIALIAS)
-        imgs[i] = ImageTk.PhotoImage(im)
-        panels[i] = Label(top_frame, image = imgs[i])
-        panels[i].pack(side = "left", fill = "both", expand = "yes")
 
     app.mainloop()
-    ex_file.close()
+    outfile.close()
+    infile.close()
     root.destroy()

@@ -369,8 +369,8 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
 class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
     def __init__(self, actions, C, D, gamma, N, feature_fn, margin_fn):
         MultiSlackMaxMarginModel.__init__(self, actions, C, N, feature_fn, margin_fn)
-        self._D = D
         self.action_reward = 1
+        self._D = D
         self.yi = []
         self.yi_val = []
         self.gamma = gamma
