@@ -174,6 +174,54 @@ def replace_rope(new_rope):
                                                Globals.sim.rope_params)
     return old_rope_nodes
 
+def check_outfile(outfile):
+    for k in outfile:        
+        if not all(sub_g in outfile[k] for sub_g in ('action', 'cloud_xyz', 'knot', 'pred')):
+            print "missing necessary groups"
+            outfile.close()
+            return False
+        pred = int(outfile[k]['pred'][()])
+        if pred != int(k) and pred != int(k) -1:            
+            print "predecessors not correct", k, pred            
+            outfile.close()
+            return False
+        knot = outfile[k]['knot'][()]
+        action = outfile[k]['action'][()]
+        if knot and not action.startswith('endstate'):
+            print "end states labelled improperly"
+            outfile.close()
+            return False
+    return True
+
+def concat_datafiles(in_f1, in_f2, ofname):
+    """ 
+    assumes both files are opened in append mode
+    puts the examples from of2 into of1
+    """
+    if not check_outfile(in_f1):
+        in_f2.close()
+        raise Exception, "input file 1 not formatted correctly"
+    if not check_outfile(in_f2):
+        in_f1.close()
+        raise Exception, "input file 2 not formatted correctly " + str(in_f2)
+    of = h5py.File(ofname, 'w')
+    for k, g in in_f1.iteritems():
+        write_flush(of, [['action', g['action'][()]],
+                         ['cloud_xyz', g['cloud_xyz'][:]],
+                         ['pred', g['pred'][()]],
+                         ['knot', g['knot'][()]]],
+                    key = k)        
+    offset = len(in_f1)
+    for k, g in of2.iteritems():
+        new_id = int(k) + offset  
+        new_pred = str(int(g['pred'][()]) + offset)
+        write_flush(of, [['action', g['action'][()]],
+                         ['cloud_xyz', g['cloud_xyz'][:]],
+                         ['knot', g['knot'][()]],
+                         ['pred', new_pred]],
+                    key = str(new_id))
+    return check_outfile(of)    # return False if something isn't formatted right
+
 def write_flush(outfile, items, key=None):
     if not key:
         key = str(len(outfile))
@@ -181,6 +229,14 @@ def write_flush(outfile, items, key=None):
     for k, v in items:
         g[k] = v
     outfile.flush()
+
+def h5_no_endstate_len(outfile):
+    ctr = 0
+    for k in outfile:
+        if not outfile[k]['knot'][()]:
+            ctr += 1
+    print "num examples in file:\t", ctr
+    return ctr
 
 def remove_last_example(outfile):
     key = str(len(outfile) - 1)
@@ -526,7 +582,7 @@ if __name__ == "__main__":
 
     #####################
     try:
-        pred = '0'
+        pred = str(len(outfile))
         while True:
             reset_arms_to_side()
             
@@ -537,8 +593,7 @@ if __name__ == "__main__":
             pred = manual_select_demo(xyz, actionfile, outfile, pred)
     except KeyboardInterrupt:
         actionfile.close()
-        for k in outfile:
-            if not all(sub_g in outfile[k] for sub_g in ('action', 'cloud_xyz', 'knot', 'pred')):
-                outfile.close()
-                raise Exception, args.outfile+" is not properly formatted, check it manually!!!!!"
-        outfile.close()
+        h5_no_endstate_len(outfile)
+        safe = check_outfile(outfile)
+        if not safe:
+            print args.outfile+" is not properly formatted, check it manually!!!!!"
