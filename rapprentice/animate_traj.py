@@ -11,5 +11,5 @@ def animate_traj(traj, robot, pause=True, step_viewer=1, restore=True, callback=
         if callback is not None: callback(i)
         robot.SetActiveDOFValues(dofs)
         if pause: viewer.Idle()
-        elif i%step_viewer==0: viewer.Step()
+        elif step_viewer!=0 and i%step_viewer==0: viewer.Step()
     sys.stdout.write("\n")
