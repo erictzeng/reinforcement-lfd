@@ -495,8 +495,8 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self.model.optimize()
         try:
             self.weights = [x.X for x in self.w]
-            self.xi_val = self.xi.X
-            self.yi_val = self.yi.X
+            self.xi_val = [x.X for x in self.xi]
+            self.yi_val = [x.X for x in self.yi]
             return self.weights
         except grb.GurobiError:
             raise RuntimeError, "issue with optimizing model, check gurobi optimizer output"
