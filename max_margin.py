@@ -140,6 +140,7 @@ class MaxMarginModel(object):
         self.model.update()
 
     def save_constraints_to_file(self, fname, save_weights=False):
+        raise NotImplementedError('deprecated')
         outfile = h5py.File(fname, 'w')
         for i, (exp_phi, rhs_phi, margin, xi_name) in enumerate(self.constraints_cache):
             g = outfile.create_group(str(i))
@@ -292,6 +293,7 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         self.model.update()
 
     def save_constraints_to_file(self, fname, save_weights=False):
+        raise NotImplementedError('deprecated')
         outfile = h5py.File(fname, 'w')
         for i, (exp_phi, rhs_phi, margin, xi_name) in enumerate(self.constraints_cache):
             g = outfile.create_group(str(i))

@@ -75,6 +75,7 @@ def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile
             margin = margin_fn(state, action, other_a)
             g = outfile.create_group(str(constraint_ctr))
             constraint_ctr += 1
+            g['example'] = key
             g['exp_features'] = lhs_phi
             g['rhs_phi'] = rhs_phi
             g['margin'] = margin
@@ -121,6 +122,7 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
             margin = margin_fn(state, action, other_a)
             g = outfile.create_group(str(constraint_ctr))
             constraint_ctr += 1
+            g['example'] = key
             g['exp_features'] = lhs_phi
             g['rhs_phi'] = rhs_phi
             g['margin'] = margin
@@ -148,6 +150,7 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
             rhs_action_phi = feature_fn(next_state, next_action)
             g = outfile.create_group(str(constraint_ctr))
             constraint_ctr += 1
+            g['example'] = '{}-{}-step{}'.format(curr_state[0], next_state[0], i)
             g['exp_features'] = lhs_action_phi
             g['rhs_phi'] = rhs_action_phi
             g['margin'] = 0
