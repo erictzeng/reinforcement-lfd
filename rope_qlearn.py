@@ -785,6 +785,8 @@ def build_model(args):
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     mm_model.load_constraints_from_file(args.constraintfile)
+    if args.model == 'bellman' and args.goal_constraints:
+        mm_model.add_goal_constraints(args.demofile)
     mm_model.save_model(args.modelfile)
 
 def optimize_model(args):
@@ -817,6 +819,7 @@ if __name__ == '__main__':
     parser.add_argument('--D', '-d', type=float, default=1)
     parser.add_argument("--save_memory", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
+    parser.add_argument("--goal_constraints", action="store_true")
 
     # build-constraints-no-model subparser
     parser_build_constraints = subparsers.add_parser('build-constraints-no-model')
