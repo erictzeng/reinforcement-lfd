@@ -204,15 +204,18 @@ def concat_datafiles(in_f1, in_f2, ofname):
     if not check_outfile(in_f2):
         in_f1.close()
         raise Exception, "input file 2 not formatted correctly " + str(in_f2)
-    of = h5py.File(ofname, 'w')
+    of = h5py.File(ofname, 'a')
+    offset = len(of)
     for k, g in in_f1.iteritems():
+        new_id = int(k) + offset  
+        new_pred = str(int(g['pred'][()]) + offset)
         write_flush(of, [['action', g['action'][()]],
                          ['cloud_xyz', g['cloud_xyz'][:]],
-                         ['pred', g['pred'][()]],
-                         ['knot', g['knot'][()]]],
-                    key = k)        
-    offset = len(in_f1)
-    for k, g in of2.iteritems():
+                         ['knot', g['knot'][()]],
+                         ['pred', new_pred]],
+                    key = str(new_id))
+    offset = len(of)
+    for k, g in in_f2.iteritems():
         new_id = int(k) + offset  
         new_pred = str(int(g['pred'][()]) + offset)
         write_flush(of, [['action', g['action'][()]],

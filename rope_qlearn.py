@@ -8,7 +8,7 @@ and action data
 
 import argparse
 
-import h5py, math
+import h5py, math, random
 import IPython as ipy
 from max_margin import MaxMarginModel, MultiSlackMaxMarginModel, BellmanMaxMarginModel
 from pdb import pm, set_trace
@@ -19,6 +19,7 @@ import scipy.spatial as sp_spat
 import os.path
 import cProfile
 import util as u
+import sys
 try:
     from rapprentice import registration, clouds
     use_rapprentice = True
@@ -679,6 +680,51 @@ def compute_action_margin(model, a1, a2):
     print 'done'
     return model.margin(None, a1, a2)
 
+def bellman_test_features(args):
+    if args.model != 'bellman':
+        raise Exception, 'wrong model for this'
+    (feature_fn, margin_fn, num_features, actions) = select_feature_fn(args)
+    demofile = h5py.File(args.demofile, 'r')
+    # get a random set of trajectories
+    trajectories = []
+    traj = []
+    for uid in range(len(demofile)):
+        key = str(uid)
+        group = demofile[key]
+        state = [key,group['cloud_xyz'][:]] # these are already downsampled
+        action = group['action'][()]
+        if action.startswith('endstate'): # this is a knot
+            continue
+        if group['pred'][()] == key:
+            if traj:
+                trajectories.append(traj)
+                traj = []
+        traj.append([state, action])
+    if traj:
+        trajectories.append(traj)
+    random.shuffle(trajectories)
+    constraint_trajs = trajectories[:args.num_constraints]
+    # put them into a Bellman model
+    mm_model = BellmanMaxMarginModel(action, 500, 1000, .9, num_features, feature_fn, margin_fn)
+    for i, t in enumerate(constraint_trajs):
+        mm_model.add_trajectory(t, str(i), True)
+    weights = mm_model.optimize_model()
+    # evaluate value fn performance
+    values = []
+    num_decreases = 0
+    for (i, t) in enumerate(trajectories):
+        cur_values = []            
+        for s, a in t:
+            cur_values.append(np.dot(mm_model.weights, mm_model.feature_fn(s, a)))
+        for j in range(len(cur_values)-1):
+            if cur_values[j] > cur_values[j+1]: num_decreases += 1
+        values.append(cur_values)
+        sys.stdout.write('computed values for trajectory {}\r'.format(i))
+        sys.stdout.flush()
+    sys.stdout.write('\n')
+    print "num decreases:\t", num_decreases
+    ipy.embed()    
+
 def test_saving_model(mm_model):
     # Use Gurobi to save the model in MPS format
     weights = mm_model.optimize_model()
@@ -823,6 +869,14 @@ if __name__ == '__main__':
     parser.add_argument("--save_memory", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
     parser.add_argument("--goal_constraints", action="store_true")
+    
+
+    # bellman test subparser
+    parser_test_bellman = subparsers.add_parser('test-bellman')
+    parser_test_bellman.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
+    parser_test_bellman.add_argument('demofile')
+    parser_test_bellman.add_argument("--num_constraints", type=int, default = 20)
+    parser_test_bellman.set_defaults(func=bellman_test_features)
 
     # build-constraints-no-model subparser
     parser_build_constraints = subparsers.add_parser('build-constraints-no-model')
