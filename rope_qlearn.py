@@ -263,7 +263,7 @@ def get_landmark_feature_fn(actionfile, landmarksfile):
     if type(landmarksfile) is str:
         landmarksfile = h5py.File(landmarksfile, 'r')
     act_set = ActionSet(actionfile, landmarks=landmarksfile)
-    return (act_set.landmark_features, act_set.num_sc_features, actionfile)    
+    return (act_set.landmark_features, act_set.num_landmark_features, actionfile)    
 
 def get_sc_feature_fn(actionfile):
     if type(actionfile) is str:
@@ -330,6 +330,7 @@ class ActionSet(object):
         self.use_cache = use_cache
         self.link_names = ["%s_gripper_tool_frame"%lr for lr in ('lr')]
         self.landmarks = landmarks if landmarks is not None else []
+        self.num_landmark_features = len(self.landmarks)
         self.landmark_cache = {}
         if args:
             ActionSet.args = args
