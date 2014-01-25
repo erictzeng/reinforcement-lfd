@@ -256,6 +256,14 @@ def concatenate_fns(fns, actionfile):
     N = sum(v[1] for v in fn_params)
     return (result_fn, N, actionfile)
 
+def get_landmark_feature_fn(actionfile, landmarksfile):
+    if type(actionfile) is str:
+        actionfile = h5py.File(actionfile, 'r')
+    if type(landmarksfile) is str:
+        landmarksfile = h5py.File(landmarksfile, 'r')
+    act_set = ActionSet(actionfile, landmarks=landmarksfile)
+    return (act_set.landmark_features, act_set.num_sc_features, actionfile)    
+
 def get_sc_feature_fn(actionfile):
     if type(actionfile) is str:
         actionfile = h5py.File(actionfile, 'r')
@@ -307,7 +315,7 @@ class ActionSet(object):
     # the same actions
     args = None
     
-    def __init__(self, actionfile, use_cache = True, args=None):
+    def __init__(self, actionfile, use_cache = True, args=None, landmarks=None):
         self.actionfile = actionfile
         self.actions = sorted(actionfile.keys())
         self.action_to_ind = dict((v, i) for i, v in enumerate(self.actions))
@@ -320,6 +328,8 @@ class ActionSet(object):
         self.cache = ActionSet.caches[act_key]
         self.use_cache = use_cache
         self.link_names = ["%s_gripper_tool_frame"%lr for lr in ('lr')]
+        self.landmarks = landmarks if landmarks is not None else []
+        self.landmark_cache = {}
         if args:
             ActionSet.args = args
 
@@ -341,6 +351,16 @@ class ActionSet(object):
 
     def get_ds_cloud(self, action):
         return clouds.downsample(self.actionfile[action]['cloud_xyz'], DS_SIZE)
+
+    def landmark_features(self, state, action):
+        if state[0] in self.landmark_cache:
+            return self.landmark_cache[state[0]]
+        feat = np.empty(len(self.landmarks))
+        for i in range(len(self.landmarks)):
+            landmark = self.landmarks[str(i)]
+            feat[i] = registration_cost_cheap(state[1], landmark['cloud_xyz'][()])
+        self.landmark_cache[state[0]] = feat
+        return feat
 
     def sc_features(self, state, action):
         seg_info = self.actionfile[action]
@@ -698,7 +718,13 @@ def test_saving_model(mm_model):
 
 def select_feature_fn(args):
     ActionSet.args = args
-    if args.quad_features:
+    if args.landmark_features:
+        print 'Using bias, quad, sc, ropedist, landmark ({}) features.'.format(args.landmark_features)
+        curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features)
+        fns = [get_bias_feature_fn, get_quad_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn,
+               curried_landmark_fn]
+        feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
+    elif args.quad_features:
         print 'Using quadratic features.'
         feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile)
     elif args.rope_dist_features:
@@ -815,6 +841,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
     parser.add_argument('model', choices=['single', 'multi', 'bellman'])
+    parser.add_argument('--landmark_features')
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--rope_dist_features", action="store_true")
