@@ -54,7 +54,7 @@ def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile
         print "adding constraints"
     constraint_ctr = 0
     if end < 0:
-        end = len(expert_demofile.keys())
+        end = len(expert_demofile)
     for demo_i in range(start, end):
         key = str(demo_i)
         group = expert_demofile[key]
@@ -91,10 +91,10 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
         print "adding constraints"
     
     if end < 0:
-        end = len(expert_demofile.keys())
-    while int(expert_demofile[str(start)]['pred'][()]) != start:
+        end = len(expert_demofile)
+    while start < len(expert_demofile) and int(expert_demofile[str(start)]['pred'][()]) != start:
         start += 1
-    while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
+    while end < len(expert_demofile) and int(expert_demofile[str(end)]['pred'][()]) != end:
         end += 1
     
     trajectories = []
@@ -140,6 +140,7 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
         if verbose:
             print "adding trajectory for trajectory with actions:\n", [a for [s,a] in traj]
         # add bellman constraints
+        yi_name = 'yi_%s'%traj[0][0][0] # use the state id of the first trajectory as the trajectory id
         for i in range(len(traj)-1):
             curr_state, curr_action = traj[i]
             next_state, next_action = traj[i+1]
@@ -150,7 +151,9 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
             g['exp_features'] = lhs_action_phi
             g['rhs_phi'] = rhs_action_phi
             g['margin'] = 0
-            g['xi'] = "bellman"
+            g['xi'] = yi_name
+            if verbose:
+                print "added bellman constraint {}/{}".format(i, len(traj)-1), yi_name
         outfile.flush()
     outfile.close()
 
@@ -170,10 +173,10 @@ def add_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1, outfil
         print "adding constraints"
     
     if end < 0:
-        end = len(expert_demofile.keys())
+        end = len(expert_demofile)
     while int(expert_demofile[str(start)]['pred'][()]) != start:
         start += 1
-    while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
+    while end < len(expert_demofile)-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
         end += 1
 
     for demo_i in range(start, end):  
@@ -199,10 +202,10 @@ def add_bellman_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1
         print "adding constraints"
 
     if end < 0:
-        end = len(expert_demofile.keys())
-    while int(expert_demofile[str(start)]['pred'][()]) != start:
+        end = len(expert_demofile)
+    while start < len(expert_demofile) and int(expert_demofile[str(start)]['pred'][()]) != start:
         start += 1
-    while end < len(expert_demofile.keys())-1 and int(expert_demofile[str(end)]['pred'][()]) != end:
+    while end < len(expert_demofile) and int(expert_demofile[str(end)]['pred'][()]) != end:
         end += 1
 
     trajectories = []
@@ -231,7 +234,8 @@ def add_bellman_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1
     for traj in trajectories:
         if verbose:
             print "adding trajectory for trajectory with actions:\n", [a for [s,a] in traj]
-        mm_model.add_trajectory(traj)
+        yi_name = 'yi_%s'%traj[0][0][0] # use the state id of the first trajectory as the trajectory id
+        mm_model.add_trajectory(traj, yi_name, verbose)
         if outfile:
             mm_model.save_constraints_to_file(outfile)
 
@@ -755,7 +759,7 @@ def build_constraints(args):
     if args.model == 'multi':
         mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel(actions, args.C, .9, num_features, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, .9, num_features, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     if args.model == 'bellman':
@@ -777,7 +781,7 @@ def build_model(args):
     if args.model == 'multi':
         mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel(actions, args.C, .9, num_features, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, .9, num_features, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     mm_model.load_constraints_from_file(args.constraintfile)
@@ -790,6 +794,7 @@ def optimize_model(args):
         mm_model = MultiSlackMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
     elif args.model == 'bellman':
         mm_model = BellmanMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
+        mm_model.D = args.D
     else:
         mm_model = MaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
     if args.save_memory:
@@ -809,6 +814,7 @@ if __name__ == '__main__':
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--rope_dist_features", action="store_true")
     parser.add_argument('--C', '-c', type=float, default=1)
+    parser.add_argument('--D', '-d', type=float, default=1)
     parser.add_argument("--save_memory", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
 

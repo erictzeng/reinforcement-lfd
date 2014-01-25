@@ -26,6 +26,9 @@ import importlib
 from itertools import combinations
 import IPython as ipy
 import random
+import sys
+
+from joblib import Parallel, delayed
 
 def redprint(msg):
     print colorize.colorize(msg, "red", bold=True)
@@ -142,7 +145,7 @@ def load_random_start_segment(demofile):
     seg_name = random.choice(start_keys)
     return demofile[seg_name]['cloud_xyz']
 
-def sample_rope_state(demofile, human_check=True, perturb_points=5, min_rad=0, max_rad=.15):
+def sample_rope_state(demofile, human_check=False, perturb_points=5, min_rad=0, max_rad=.15):
     success = False
     while not success:
         # TODO: pick a random rope initialization
@@ -159,6 +162,171 @@ def sample_rope_state(demofile, human_check=True, perturb_points=5, min_rad=0, m
             success = resp not in ('N', 'n')
         else:
             success = True
+
+def replace_rope(new_rope):
+    import bulletsimpy
+    old_rope_nodes = Globals.sim.rope.GetControlPoints()
+    if Globals.viewer:
+        Globals.viewer.RemoveKinBody(Globals.env.GetKinBody('rope'))
+    Globals.env.Remove(Globals.env.GetKinBody('rope'))
+    Globals.sim.bt_env.Remove(Globals.sim.bt_env.GetObjectByName('rope'))
+    Globals.sim.rope = bulletsimpy.CapsuleRope(Globals.sim.bt_env, 'rope', new_rope,
+                                               Globals.sim.rope_params)
+    return old_rope_nodes
+
+def check_outfile(outfile):
+    for k in outfile:        
+        if not all(sub_g in outfile[k] for sub_g in ('action', 'cloud_xyz', 'knot', 'pred')):
+            print "missing necessary groups"
+            outfile.close()
+            return False
+        pred = int(outfile[k]['pred'][()])
+        if pred != int(k) and pred != int(k) -1:            
+            print "predecessors not correct", k, pred            
+            outfile.close()
+            return False
+        knot = outfile[k]['knot'][()]
+        action = outfile[k]['action'][()]
+        if knot and not action.startswith('endstate'):
+            print "end states labelled improperly"
+            outfile.close()
+            return False
+    return True
+
+def concat_datafiles(in_f1, in_f2, ofname):
+    """ 
+    assumes both files are opened in append mode
+    puts the examples from of2 into of1
+    """
+    if not check_outfile(in_f1):
+        in_f2.close()
+        raise Exception, "input file 1 not formatted correctly"
+    if not check_outfile(in_f2):
+        in_f1.close()
+        raise Exception, "input file 2 not formatted correctly " + str(in_f2)
+    of = h5py.File(ofname, 'w')
+    for k, g in in_f1.iteritems():
+        write_flush(of, [['action', g['action'][()]],
+                         ['cloud_xyz', g['cloud_xyz'][:]],
+                         ['pred', g['pred'][()]],
+                         ['knot', g['knot'][()]]],
+                    key = k)        
+    offset = len(in_f1)
+    for k, g in of2.iteritems():
+        new_id = int(k) + offset  
+        new_pred = str(int(g['pred'][()]) + offset)
+        write_flush(of, [['action', g['action'][()]],
+                         ['cloud_xyz', g['cloud_xyz'][:]],
+                         ['knot', g['knot'][()]],
+                         ['pred', new_pred]],
+                    key = str(new_id))
+    return check_outfile(of)    # return False if something isn't formatted right
+
+def write_flush(outfile, items, key=None):
+    if not key:
+        key = str(len(outfile))
+    g = outfile.create_group(key)
+    for k, v in items:
+        g[k] = v
+    outfile.flush()
+
+def h5_no_endstate_len(outfile):
+    ctr = 0
+    for k in outfile:
+        if not outfile[k]['knot'][()]:
+            ctr += 1
+    print "num examples in file:\t", ctr
+    return ctr
+
+def remove_last_example(outfile):
+    key = str(len(outfile) - 1)
+    try:
+        while True:
+            ## will loop until we get something that is its own pred
+            new_key = str(outfile[key]['pred'])
+            del outfile[key]
+            key = new_key
+    except:
+        key = str(len(outfile)-1)
+        if not outfile[key]['knot']:
+            raise Exception, "issue deleting examples, check your file"
+
+def get_input(start_state, action_name, next_state, outfile, pred):
+    print "d accepts and resamples rope"
+    print "i ignores and resamples rope"
+    print "r removes this entire example"
+    print "you can C-c to quit safely"
+    response = raw_input("Use this demonstration?[y/N/d/i/r]")
+    resample = False
+    success = False
+    if response in ('R', 'r'):
+        remove_last_example(outfile)
+        resample = True
+    elif response in ('I', 'i'):
+        resample = True
+    elif response in ('D', 'd'):
+        resample = True
+        # write the demonstration
+        write_flush(outfile, 
+                    items=[['cloud_xyz', start_state],
+                           ['action', action_name],
+                           ['knot', 0], # additional flag to tell if this is a knot
+                           ['pred', pred]])
+        # write the end state
+        write_flush(outfile,
+                    items = [['cloud_xyz', next_state],
+                             ['action', 'endstate:' + action_name],
+                             ['knot', 1],
+                             ['pred', str(len(outfile)-1)]])
+        success = True
+    elif response in ('Y', 'y'):
+        write_flush(outfile, 
+                    items=[['cloud_xyz', start_state],
+                           ['action', action_name],
+                           ['knot', 0], # additional flag to tell if this is a knot
+                           ['pred', pred]]) 
+        success = True
+    return (success, resample)    
+
+
+def manual_select_demo(xyz, demofile, outfile, pred):
+    start_rope_state = Globals.sim.rope.GetControlPoints()    
+    ds_clouds = dict(zip(demofile.keys(), get_downsampled_clouds(demofile)))
+    if args.parallel:
+        ds_items = sorted(ds_clouds.items())
+        costs = Parallel(n_jobs=-1,verbose=100)(delayed(registration_cost_cheap)(ds_cloud, xyz) for (s_name, ds_cloud) in ds_items)
+        names_costs = [(ds_items[i][0], costs[i]) for i in range(len(ds_items))]
+        costs = dict(names_costs)
+    else:
+        costs = {}
+        for i, (seg_name, ds_cloud) in enumerate(ds_clouds.items()):
+            costs[seg_name] = registration_cost_cheap(ds_cloud, xyz)
+            sys.stdout.write("completed %i/%i\r"%(i+1, len(ds_clouds)))
+            sys.stdout.flush()        
+            sys.stdout.write('\n')
+    best_keys = sorted(costs, key=costs.get)
+    for seg_name in best_keys:
+        sim_success = simulate_demo(xyz, demofile[seg_name], animate=True)
+        new_xyz = Globals.sim.observe_cloud()
+        if not sim_success: 
+            replace_rope(start_rope_state)
+            continue # no point in going further with this one
+        (success, resample) = get_input(xyz, str(seg_name), new_xyz, outfile, pred)
+        if resample:
+            sample_rope_state(demofile)
+            break
+        elif success:
+            break
+        else:
+            replace_rope(start_rope_state)
+    if resample:
+        # return the key for the next sample we'll see (so it is its own pred)
+        return str(len(outfile))
+    else:
+        # return the key for the most recent addition
+        return str(len(outfile)-1)
+        
+
 
 DS_SIZE = .025
 
@@ -178,11 +346,7 @@ def simulate_demo(new_xyz, seg_info, animate=False):
     
     link_names = ["%s_gripper_tool_frame"%lr for lr in ('lr')]
     hmat_list = [(lr, seg_info[ln]['hmat']) for lr, ln in zip('lr', link_names)]
-    if args.gripper_weighting:
-        interest_pts = get_closing_pts(seg_info)
-    else:
-        interest_pts = None
-    lr2eetraj = warp_hmats(old_xyz, new_xyz, hmat_list, interest_pts)[0]
+    lr2eetraj = warp_hmats(old_xyz, new_xyz, hmat_list)[0]
 
     miniseg_starts, miniseg_ends = split_trajectory_by_gripper(seg_info)    
     success = True
@@ -236,7 +400,7 @@ def simulate_demo(new_xyz, seg_info, animate=False):
         if not success: break
 
         if len(bodypart2traj) > 0:
-            success &= sim_traj_maybesim(bodypart2traj, animate=animate)
+            success &= sim_traj_maybesim(bodypart2traj, animate=True)
 
         if not success: break
 
@@ -367,28 +531,16 @@ if __name__ == "__main__":
     """
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
-    parser.add_argument('holdoutfile', nargs='?', default='data/misc/holdout_set.h5')
-    parser.add_argument("weightfile", type=str)
-    parser.add_argument("--resultfile", type=str) # don't save results if this is not specified
-    parser.add_argument("--quad_features", action="store_true")
-    parser.add_argument("--sc_features", action="store_true")
-    parser.add_argument("--rope_dist_features", action="store_true")
-    parser.add_argument("--gripper_weighting", action="store_true")
-    parser.add_argument("--animation", type=int, default=0)
-    parser.add_argument("--i_start", type=int, default=-1)
-    parser.add_argument("--i_end", type=int, default=-1)
-    
-    parser.add_argument("--tasks", nargs='+', type=int)
-    parser.add_argument("--taskfile", type=str)
-    parser.add_argument("--num_steps", type=int, default=5)
-    
+    parser.add_argument('actionfile')
+    parser.add_argument('outfile')
+        
     parser.add_argument("--fake_data_segment",type=str, default='demo1-seg00')
     parser.add_argument("--fake_data_transform", type=float, nargs=6, metavar=("tx","ty","tz","rx","ry","rz"),
         default=[0,0,0,0,0,0], help="translation=(tx,ty,tz), axis-angle rotation=(rx,ry,rz)")
     parser.add_argument("--random_seed", type=int, default=None)
     parser.add_argument("--interactive",action="store_true")
     parser.add_argument("--log", type=str, default="", help="")
+    parser.add_argument("--parallel", action="store_true")
     
     args = parser.parse_args()
 
@@ -408,6 +560,7 @@ if __name__ == "__main__":
     Globals.robot = Globals.env.GetRobots()[0]
 
     actionfile = h5py.File(args.actionfile, 'r')
+    outfile = h5py.File(args.outfile, 'a')
     
     init_rope_xyz, _ = load_fake_data_segment(actionfile, args.fake_data_segment, args.fake_data_transform) # this also sets the torso (torso_lift_joint) to the height in the data
     table_height = init_rope_xyz[:,2].mean() - .02
@@ -420,73 +573,27 @@ if __name__ == "__main__":
     # move arms to the side
     reset_arms_to_side()
 
-    if args.animation:
-        Globals.viewer = trajoptpy.GetViewer(Globals.env)
-        print "move viewer to viewpoint that isn't stupid"
-        print "then hit 'p' to continue"
-        Globals.viewer.Idle()
+    Globals.viewer = trajoptpy.GetViewer(Globals.env)
+    print "move viewer to viewpoint that isn't stupid"
+    print "then hit 'p' to continue"
+    Globals.viewer.Idle()
+
+    sample_rope_state(actionfile)
 
     #####################
-    feature_fn, _, num_features, actions = select_feature_fn(args)
-
-    weightfile = h5py.File(args.weightfile, 'r')
-    weights = weightfile['weights'][:]
-    weightfile.close()
-    assert weights.shape[0] == num_features, "Dimensions of weights and features don't match. Make sure the right feature is being used"
-    
-    holdoutfile = h5py.File(args.holdoutfile, 'r')
-
-    save_results = args.resultfile is not None
-    
-    unique_id = 0
-    def get_unique_id():
-        global unique_id
-        unique_id += 1
-        return unique_id-1
-
-    tasks = [] if args.tasks is None else args.tasks
-    if args.taskfile is not None:
-        file = open(args.taskfile, 'r')
-        for line in file.xreadlines():
-            tasks.append(int(line[5:-1]))
-    if args.i_start != -1 and args.i_end != -1:
-        tasks = range(args.i_start, args.i_end)
-
-    for i_task, demo_id_rope_nodes in (holdoutfile.iteritems() if not tasks else [(unicode(t),holdoutfile[unicode(t)]) for t in tasks]):
-        reset_arms_to_side()
-
-        redprint("Replace rope")
-        rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
-        replace_rope(rope_nodes)
-        Globals.sim.settle()
-        if args.animation:
-            Globals.viewer.Step()
-
-        if save_results:
-            result_file = h5py.File(args.resultfile, 'a')
-            if i_task in result_file:
-                del result_file[i_task]
-            result_file.create_group(i_task)
-        
-        for i_step in range(args.num_steps):
-            print "task %s step %i" % (i_task, i_step)
-
+    try:
+        pred = str(len(outfile))
+        while True:
             reset_arms_to_side()
-
-            redprint("Observe point cloud")
-            new_xyz = Globals.sim.observe_cloud()
-            state = ("eval_%i"%get_unique_id(), new_xyz)
-    
-            redprint("Finding closest demonstration")
-            values = [np.dot(weights, feature_fn(state, action)) for action in actions]
-            best_action = actions[np.argmax(values)]
-
-            redprint("Simulating action %s"%(best_action))
-            success = simulate_demo(new_xyz, actionfile[best_action], animate=args.animation)
             
-            if save_results:
-                result_file[i_task].create_group(str(i_step))
-                result_file[i_task][str(i_step)]['rope_nodes'] = Globals.sim.observe_cloud()
-                result_file[i_task][str(i_step)]['values'] = values
-        if save_results:
-            result_file.close()
+            Globals.sim.settle()
+            Globals.viewer.Step()
+        
+            xyz = Globals.sim.observe_cloud()
+            pred = manual_select_demo(xyz, actionfile, outfile, pred)
+    except KeyboardInterrupt:
+        actionfile.close()
+        h5_no_endstate_len(outfile)
+        safe = check_outfile(outfile)
+        if not safe:
+            print args.outfile+" is not properly formatted, check it manually!!!!!"

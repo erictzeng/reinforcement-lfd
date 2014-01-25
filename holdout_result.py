@@ -26,8 +26,12 @@ if __name__ == '__main__':
 
     result_file = h5py.File(args.results_file, 'r')
 
-    for i_task, i_step_rope_nodes in result_file.iteritems():
-        for i_step, rope_nodes in i_step_rope_nodes.iteritems():
+    for i_task, task_info in result_file.iteritems():
+        for i_step, step_info in task_info.iteritems():
+            try:
+                rope_nodes = step_info['rope_nodes'][()]
+            except:
+                rope_nodes = step_info
             plt.clf()
             plt.cla()
             links_z = (rope_nodes[:-1,2] + rope_nodes[1:,2])/2.0
