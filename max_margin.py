@@ -392,9 +392,14 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         mm_model = BellmanMaxMarginModel.__new__(BellmanMaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
         assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi)+ len(mm_model.w), "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars"
-        mm_model.action_reward = -1
+        param_fname = self.get_param_fname(fname)
+        param_f = h5py.File(param_fname, 'r')
+        mm_model.action_reward = param_f['action_reward'][()]
         mm_model.goal_reward = 10
-        mm_model.gamma = 0.9 #bestpractices
+        mm_model.gamma = param_f['gamma'][()]
+        mm_model.f_sum_size = param_f['f_sum_size'][()]
+        mm_model.F_no_norm = param_f['F_no_norm'][()]
+        mm_model._F = mm_model.F_no_norm/float(mm_model.f_sum_size)
         return mm_model
 
     def populate_slacks(self):
@@ -587,6 +592,19 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         outfile['xi'] = self.xi_val
         outfile['yi'] = self.yi_val
         outfile.close()
+
+    def get_param_fname(self, fname):
+        fname_noext = os.path.splitext(fname)[0]
+        return fname_noext + '_param.h5'                
+
+    def save_model(self, fname):
+        MaxMarginModel.save_model(self, fname)
+        param_fname = self.get_param_fname(fname)
+        param_f = h5py.File(param_fname, 'w')
+        param_f['gamma'] = self.gamma
+        param_f['action_reward'] = self.action_reward
+        param_f['F_no_norm'] = self.F_no_norm
+        param_f['f_sum_size'] = self.f_sum_size
         
     def optimize_model(self):
         self.model.update()
