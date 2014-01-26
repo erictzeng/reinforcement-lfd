@@ -175,13 +175,25 @@ def replace_rope(new_rope):
     return old_rope_nodes
 
 def check_outfile(outfile):
-    for k in outfile:        
+    # Assumes keys in outfile are consecutive integers, starting with 0
+    prev_start = 0;
+    for i in range(len(outfile.keys())):
+        k = str(i)
         if not all(sub_g in outfile[k] for sub_g in ('action', 'cloud_xyz', 'knot', 'pred')):
             print "missing necessary groups"
             outfile.close()
             return False
         pred = int(outfile[k]['pred'][()])
-        if pred != int(k) and pred != int(k) -1:            
+        # Check that each trajectory has length at least 4 (including endstate)
+        if pred == i and i != 0:
+            if i - prev_start < 4:
+                print "trajectory has length less than 4 (including endstate); index: ", k, ", length: ", i - prev_start
+                outfile.close()
+                return False
+            if i - prev_start > 5:
+                print "possible mistake: trajectory has length greater than 5 (including endstate); index: ", k, ", length: ", i - prev_start
+            prev_start = i
+        if pred != int(k) and pred != int(k) - 1:
             print "predecessors not correct", k, pred            
             outfile.close()
             return False
