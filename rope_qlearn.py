@@ -848,7 +848,7 @@ def build_constraints(args):
     if args.model == 'multi':
         mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, .9, num_features, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, args.F, .9, num_features, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     if args.model == 'bellman':
@@ -870,7 +870,7 @@ def build_model(args):
     if args.model == 'multi':
         mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, .9, num_features, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, args.F, .9, num_features, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     mm_model.load_constraints_from_file(args.constraintfile)
@@ -886,6 +886,7 @@ def optimize_model(args):
     elif args.model == 'bellman':
         mm_model = BellmanMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
         mm_model.D = args.D
+        mm_model.F = args.F
     else:
         mm_model = MaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
     if args.save_memory:
@@ -908,6 +909,7 @@ if __name__ == '__main__':
     parser.add_argument("--rope_dist_features", action="store_true")
     parser.add_argument('--C', '-c', type=float, default=1)
     parser.add_argument('--D', '-d', type=float, default=1)
+    parser.add_argument('--F', '-f', type=float, default=1)
     parser.add_argument("--save_memory", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
     parser.add_argument("--goal_constraints", action="store_true")
