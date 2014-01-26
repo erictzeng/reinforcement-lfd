@@ -11,6 +11,7 @@ import numpy as np
 import h5py, random, math, util
 from numbers import Number
 from pdb import pm, set_trace
+import sys
 eps = 10**-8
 MAX_ITER=1000
 
@@ -368,8 +369,10 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         except grb.GurobiError:
             raise RuntimeError, "issue with optimizing model, check gurobi optimizer output"
 
-class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
-    def __init__(self, actions, C, D, gamma, N, feature_fn, margin_fn, E=100):
+
+class BellmanMaxMarginModel(MultiSlackMaxMarginModel):    
+    
+    def __init__(self, actions, C, D, F, gamma, N, feature_fn, margin_fn, E=100):
         MultiSlackMaxMarginModel.__init__(self, actions, C, N, feature_fn, margin_fn)
         self.action_reward = -1
         self.goal_reward = 10
@@ -380,15 +383,23 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self._E = E
         self.zi = []
         self.zi_val = []
+        self._F = F # weight on the sum of value fns
+        self.F_no_norm = F # keeps track of what we want the coefficient on the whole sum to be
+        self.f_sum_size = 0
 
     @staticmethod
     def read(fname, actions, feature_fn, margin_fn):
         mm_model = BellmanMaxMarginModel.__new__(BellmanMaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
-        assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi) + len(mm_model.zi) + len(mm_model.w), "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars"
-        mm_model.action_reward = -1
+        assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi)+ len(mm_model.w), "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars"
+        param_fname = self.get_param_fname(fname)
+        param_f = h5py.File(param_fname, 'r')
+        mm_model.action_reward = param_f['action_reward'][()]
         mm_model.goal_reward = 10
-        mm_model.gamma = 0.9 #bestpractices
+        mm_model.gamma = param_f['gamma'][()]
+        mm_model.f_sum_size = param_f['f_sum_size'][()]
+        mm_model.F_no_norm = param_f['F_no_norm'][()]
+        mm_model._F = mm_model.F_no_norm/float(mm_model.f_sum_size)
         return mm_model
 
     def populate_slacks(self):
@@ -396,8 +407,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self.xi_val = []
         self.yi = [var for var in self.model.getVars() if var.VarName.startswith('yi')]
         self.yi_val = []
-        self.zi = [var for var in self.model.getVars() if var.VarName.startswith('zi')]
-        self.zi_val = []
         
     @property
     def D(self):
@@ -408,6 +417,21 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self._D = value
         for yi_var in self.yi:
             yi_var.Obj = value
+        self.model.update()
+
+
+    @property
+    def F(self):
+        return self._F
+
+    @F.setter
+    def F(self, value):
+        for w in self.w:
+            w.Obj = w.Obj/float(self._F)
+        self.model.update()
+        self._F = value/float(self.f_sum_size)
+        for w in self.w:
+            w.Obj *= float(self._F)
         self.model.update()
 
     @property
@@ -428,11 +452,11 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         else:
             lhs = grb.LinExpr(lhs_coeffs)
         rhs_coeffs = [(self.gamma*p, w) for w, p in zip(self.w, next_action_phi) if abs(p) >= eps]
-        rhs_coeffs.append((1, yi_var))
+        rhs_coeffs.append((1, yi_var)) #flip
         rhs = grb.LinExpr(rhs_coeffs)
         rhs += self.action_reward
         # w'*curr_phi <= -1 + yi + gammma * w'*next_phi
-        self.model.addConstr(lhs <= rhs)
+        self.model.addConstr(lhs <= rhs) #flip
         #store the constraint so we can store them to a file later
         self.constraints_cache.add(util.tuplify((curr_action_phi, next_action_phi, 0, yi_var.VarName)))
         if update:
@@ -449,57 +473,54 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
     # this function doesn't add examples
     def add_trajectory(self, states_actions, yi_name, verbose=False):
         cur_slack = self.add_yi(yi_name)
+        features = range(len(states_actions))
         for i in range(len(states_actions)-1):
             state, action = states_actions[i]
             next_state, next_action = states_actions[i+1]
             curr_action_phi = self.feature(state, action)
             next_action_phi = self.feature(next_state, next_action)
+            features[i] = curr_action_phi
+            features[i+1] = next_action_phi #bestpractices
             self.add_bellman_constraint(curr_action_phi, next_action_phi, cur_slack, update=False)
             if verbose:
-                print "added bellman constraint {}/{}".format(i, len(states_actions)-1), cur_slack.VarName
+                sys.stdout.write("added bellman constraint {}/{} ".format(i, len(states_actions)-1) + str(cur_slack.VarName) + '\r')
+                sys.stdout.flush()
+        for feat in features:
+            for (i, w) in enumerate(self.w):
+                if abs(feat[i]) >= eps:
+                    w.Obj -= self.F*feat[i] #flip
+            self.f_sum_size += 1
         self.model.update()
+        self.F = self.F_no_norm        # this will update the coeffiencts to take into account num_values
 
-    def add_zi(self, zi_name):
-        new_zi = self.model.addVar(name = zi_name, obj = self.E)
-        # make sure new_zi is not already in self.zi
-        assert len([zi for zi in self.zi if zi is new_zi]) == 0
-        self.zi.append(new_zi)
-        self.model.update()
-        return new_zi
 
-    def add_goal_constraint(self, prev_state, prev_action, zi_name, update=True):
+    def add_goal_constraint(self, prev_state, prev_action, update=True):
         """
         Adds constraints specifying w'*phi = -1 + gamma * goal_reward + zi
         """
-        zi_var = self.add_zi(zi_name)
         prev_action_phi = self.feature(prev_state, prev_action)
         lhs_coeffs = [(p, w) for w, p in zip(self.w, prev_action_phi) if abs(p) >= eps]
         if not lhs_coeffs:
             lhs = 0
         else:
             lhs = grb.LinExpr(lhs_coeffs)
-        rhs_coeffs = [(1, zi_var)]
-        rhs = grb.LinExpr(rhs_coeffs)
-        rhs += self.action_reward + self.gamma * self.goal_reward
-        self.model.addConstr(lhs == rhs)
+        rhs = self.action_reward + self.gamma * self.goal_reward
+        self.model.addConstr(lhs <= rhs) #flip
         if update:
             self.model.update()
 
     def add_goal_constraints(self, fname):
         """
-        Adds constraints specifying w'*phi = -1 + gamma * goal_reward + zi
+        Adds constraints specifying w'*phi <= -1 + gamma * goal_reward
         fname must specify a file of labelled examples.
         NOTE: We assume the examples in fname have integer ids in consecutive order, starting from 0
         """
         demofile = h5py.File(fname, 'r')
-        z_counter = 0
         for k in range(len(f.keys())):
             if f[str(k)]['knot'][()] == 1:
-                zi_name = 'zi%i'%i
-                z_counter += 1
                 prev_state = f[str(k-1)]['cloud_xyz']
                 prev_action = f[str(k-1)]['action']
-                self.add_goal_constraint(prev_state, prev_action, zi_name, update=False)
+                self.add_goal_constraint(prev_state, prev_action, update=False)
         self.model.update()
 
     def load_constraints_from_file(self, fname):
@@ -517,23 +538,42 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             n_other_keys += 1
         xi_names = {}
         yi_names = {}
+        action_phis = {}
         for key_i in range(len(infile) - n_other_keys):
             constr = infile[str(key_i)]
-            exp_phi = constr['exp_features'][:]
-            rhs_phi = constr['rhs_phi'][:]
-            margin = float(constr['margin'][()])
             slack_name = constr['xi'][()]
             if slack_name.startswith('yi'):
+                curr_action_phi = constr['exp_features'][:]
+                next_action_phi = constr['rhs_phi'][:]
+                example = constr['example'][()]
                 if slack_name not in yi_names:
                     yi_var = self.add_yi(slack_name)
                     yi_names[slack_name] = yi_var
-                self.add_bellman_constraint(exp_phi, rhs_phi, yi_names[slack_name], update=False) #it's actually lhs_phi and rhs_phi
+                self.add_bellman_constraint(curr_action_phi, next_action_phi, yi_names[slack_name], update=False)
+                traj_i = slack_name[3:]
+                curr_state_i, next_state_i, _ = example.split('-')
+                if traj_i not in action_phis:
+                    action_phis[traj_i] = {}
+                action_phis[traj_i][curr_state_i] = curr_action_phi
+                action_phis[traj_i][next_state_i] = next_action_phi
             else:
+                exp_phi = constr['exp_features'][:]
+                rhs_phi = constr['rhs_phi'][:]
+                margin = float(constr['margin'][()])
                 if slack_name not in xi_names:
                     xi_var = self.add_xi(slack_name)
                     xi_names[slack_name] = xi_var
                 self.add_constraint(exp_phi, rhs_phi, margin, xi_names[slack_name], update=False)
         infile.close()
+        # add to the objective the values that are in the bellman constraint
+        for features in action_phis.values():
+            assert len(features) > 2, "Some trajectories has less than 3 steps. Did you fix the the constraints file?"
+            for feat in features.values():
+                for (i, w) in enumerate(self.w):
+                    if abs(feat[i]) >= eps:
+                        w.Obj -= self.F*feat[i] #flip
+                self.f_sum_size += 1
+        self.F = self.F_no_norm        # this will update the coeffiencts to take into account num_values
         self.model.update()
         
     def load_weights_from_file(self, fname):
@@ -543,8 +583,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             self.xi_val = infile['xi'][()]
         if 'yi' in infile:
             self.yi_val = infile['yi'][()]
-        if 'zi' in infile:
-            self.zi_val = infile['zi'][()]
         infile.close()
         
     def save_weights_to_file(self, fname):
@@ -553,8 +591,20 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         outfile['weights'] = self.weights
         outfile['xi'] = self.xi_val
         outfile['yi'] = self.yi_val
-        outfile['zi'] = self.zi_val
         outfile.close()
+
+    def get_param_fname(self, fname):
+        fname_noext = os.path.splitext(fname)[0]
+        return fname_noext + '_param.h5'                
+
+    def save_model(self, fname):
+        MaxMarginModel.save_model(self, fname)
+        param_fname = self.get_param_fname(fname)
+        param_f = h5py.File(param_fname, 'w')
+        param_f['gamma'] = self.gamma
+        param_f['action_reward'] = self.action_reward
+        param_f['F_no_norm'] = self.F_no_norm
+        param_f['f_sum_size'] = self.f_sum_size
         
     def optimize_model(self):
         self.model.update()
@@ -563,7 +613,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             self.weights = [x.X for x in self.w]
             self.xi_val = [x.X for x in self.xi]
             self.yi_val = [x.X for x in self.yi]
-            self.zi_val = [x.X for x in self.zi]
             return self.weights
         except grb.GurobiError:
             raise RuntimeError, "issue with optimizing model, check gurobi optimizer output"
@@ -712,10 +761,9 @@ def test_bellman():
         if len(traj) > 0:
             prev_state = traj[-1][0]
             prev_action = traj[-1][1]
-            model.add_goal_constraint(prev_state, prev_action, 'zi%i'%i)
+            model.add_goal_constraint(prev_state, prev_action)
     weights = model.optimize_model()
     print weights 
-    ipy.embed()
     return True
 
 if __name__ == '__main__':

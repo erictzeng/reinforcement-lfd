@@ -157,7 +157,9 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
             g['margin'] = 0
             g['xi'] = yi_name
             if verbose:
-                print "added bellman constraint {}/{}".format(i, len(traj)-1), yi_name
+                sys.stdout.write("added bellman constraint {}/{} ".format(i, len(traj)-1) + str(yi_name) + '\r')
+                sys.stdout.flush()
+        sys.stdout.write('\n')
         outfile.flush()
     outfile.close()
 
@@ -358,9 +360,14 @@ class ActionSet(object):
         if state[0] in self.landmark_cache:
             return self.landmark_cache[state[0]]
         feat = np.empty(len(self.landmarks))
-        for i in range(len(self.landmarks)):
-            landmark = self.landmarks[str(i)]
-            feat[i] = registration_cost_cheap(state[1], landmark['cloud_xyz'][()])
+        if ActionSet.args and ActionSet.args.parallel:
+            landmarks = [self.landmarks[str(i)]['cloud_xyz'][()] for i in range(len(self.landmarks))]
+            costs = Parallel(n_jobs=-1,verbose=0)(delayed(registration_cost_cheap)(state[1], l) for l in landmarks)
+            feat = np.asarray(costs)
+        else:
+            for i in range(len(self.landmarks)):
+                landmark = self.landmarks[str(i)]
+                feat[i] = registration_cost_cheap(state[1], landmark['cloud_xyz'][()])
         self.landmark_cache[state[0]] = feat
         return feat
 
@@ -726,21 +733,24 @@ def bellman_test_features(args):
     random.shuffle(trajectories)
     constraint_trajs = trajectories[:args.num_constraints]
     # put them into a Bellman model
-    mm_model = BellmanMaxMarginModel(action, 500, 1000, .9, num_features, feature_fn, margin_fn)
+    mm_model = BellmanMaxMarginModel(action, 500, 1000, 10, .9, num_features, feature_fn, margin_fn)
     for i, t in enumerate(constraint_trajs):
         mm_model.add_trajectory(t, str(i), True)
     weights = mm_model.optimize_model()
+    ipy.embed()
     # evaluate value fn performance
-    values = []
+    num_evals = len(trajectories) if args.num_evals < 0 else args.num_constraints + args.num_evals
+    trajectories = trajectories[args.num_constraints:num_evals]
+    values = np.zeros((len(trajectories), 6))
     num_decreases = 0
     for (i, t) in enumerate(trajectories):
-        cur_values = []            
-        for s, a in t:
-            cur_values.append(np.dot(mm_model.weights, mm_model.feature_fn(s, a)))
-        for j in range(len(cur_values)-1):
-            if cur_values[j] > cur_values[j+1]: num_decreases += 1
-        values.append(cur_values)
-        sys.stdout.write('computed values for trajectory {}\r'.format(i))
+        for j, (s, a) in enumerate(t):
+            values[i, j] = np.dot(mm_model.weights, mm_model.feature_fn(s, a))
+        for k in range(j):
+            if values[i, k] > values[i, k+1]: 
+                num_decreases += 1
+                print "DECREASE", values[i, k], values[i, k+1]
+        sys.stdout.write('num decreases:\t{} computed values for trajectory {}\r'.format(num_decreases, i))
         sys.stdout.flush()
     sys.stdout.write('\n')
     print "num decreases:\t", num_decreases
@@ -765,12 +775,15 @@ def test_saving_model(mm_model):
 
 def select_feature_fn(args):
     ActionSet.args = args
-    if args.landmark_features:
+    if args.landmark_features and not args.only_landmark:
         print 'Using bias, quad, sc, ropedist, landmark ({}) features.'.format(args.landmark_features)
         curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features)
-        fns = [get_bias_feature_fn, get_quad_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn,
+        fns = [get_quad_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn,
                curried_landmark_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
+    elif args.landmark_features:
+        print 'Using landmark {} features'.format(args.landmark_features)
+        feature_fn, num_features, act_file = get_landmark_feature_fn(args.actionfile, args.landmark_features)
     elif args.quad_features:
         print 'Using quadratic features.'
         feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile)
@@ -835,7 +848,7 @@ def build_constraints(args):
     if args.model == 'multi':
         mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, .9, num_features, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, args.F, .9, num_features, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     if args.model == 'bellman':
@@ -857,7 +870,7 @@ def build_model(args):
     if args.model == 'multi':
         mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, .9, num_features, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, args.F, .9, num_features, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     mm_model.load_constraints_from_file(args.constraintfile)
@@ -873,6 +886,7 @@ def optimize_model(args):
     elif args.model == 'bellman':
         mm_model = BellmanMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
         mm_model.D = args.D
+        mm_model.F = args.F
     else:
         mm_model = MaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
     if args.save_memory:
@@ -889,14 +903,17 @@ if __name__ == '__main__':
     subparsers = parser.add_subparsers()
     parser.add_argument('model', choices=['single', 'multi', 'bellman'])
     parser.add_argument('--landmark_features')
+    parser.add_argument('--only_landmark', action="store_true")
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--rope_dist_features", action="store_true")
     parser.add_argument('--C', '-c', type=float, default=1)
     parser.add_argument('--D', '-d', type=float, default=1)
+    parser.add_argument('--F', '-f', type=float, default=1)
     parser.add_argument("--save_memory", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
     parser.add_argument("--goal_constraints", action="store_true")
+    parser.add_argument('--parallel', action='store_true')
     
 
     # bellman test subparser
@@ -904,6 +921,7 @@ if __name__ == '__main__':
     parser_test_bellman.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser_test_bellman.add_argument('demofile')
     parser_test_bellman.add_argument("--num_constraints", type=int, default = 20)
+    parser_test_bellman.add_argument("--num_evals", type=int, default = -1) # defaults to all
     parser_test_bellman.set_defaults(func=bellman_test_features)
 
     # build-constraints-no-model subparser
