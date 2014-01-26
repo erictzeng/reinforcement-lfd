@@ -38,7 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('weightfile')
     parser.add_argument('extraflags', nargs=argparse.REMAINDER)
     parser.add_argument('--num_instances', type=int, default=1)
-    parser.add_argument('--copy', action='append')
+    parser.add_argument('--copy', default=[], action='append')
     args = parser.parse_args()
     all_found = True
     if not os.path.exists(args.weightfile):
