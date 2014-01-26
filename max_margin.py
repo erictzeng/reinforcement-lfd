@@ -11,7 +11,7 @@ import numpy as np
 import h5py, random, math, util
 from numbers import Number
 from pdb import pm, set_trace
-import sys
+import sys, os
 eps = 10**-8
 MAX_ITER=1000
 
@@ -392,7 +392,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         mm_model = BellmanMaxMarginModel.__new__(BellmanMaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
         assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi)+ len(mm_model.w), "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars"
-        param_fname = self.get_param_fname(fname)
+        param_fname = mm_model.get_param_fname(fname)
         param_f = h5py.File(param_fname, 'r')
         mm_model.action_reward = param_f['action_reward'][()]
         mm_model.goal_reward = 10
