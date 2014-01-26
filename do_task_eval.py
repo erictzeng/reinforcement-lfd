@@ -187,6 +187,7 @@ def simulate_demo(new_xyz, seg_info, animate=False):
     miniseg_starts, miniseg_ends = split_trajectory_by_gripper(seg_info)    
     success = True
     print colorize.colorize("mini segments:", "red"), miniseg_starts, miniseg_ends
+    bodypart2trajs = []
     for (i_miniseg, (i_start, i_end)) in enumerate(zip(miniseg_starts, miniseg_ends)):            
 
         ################################    
@@ -225,6 +226,48 @@ def simulate_demo(new_xyz, seg_info, animate=False):
             bodypart2traj[part_name] = new_joint_traj
             ################################    
             redprint("Executing joint trajectory for part %i using arms '%s'"%(i_miniseg, bodypart2traj.keys()))
+        bodypart2trajs.append(bodypart2traj)
+        
+        for lr in 'lr':
+            gripper_open = binarize_gripper(seg_info["%s_gripper_joint"%lr][i_start])
+            prev_gripper_open = binarize_gripper(seg_info["%s_gripper_joint"%lr][i_start-1]) if i_start != 0 else False
+            if not set_gripper_maybesim(lr, gripper_open, prev_gripper_open):
+                redprint("Grab %s failed" % lr)
+                success = False
+
+        if not success: break
+
+        if len(bodypart2traj) > 0:
+            success &= sim_traj_maybesim(bodypart2traj, animate=animate)
+
+        if not success: break
+
+    Globals.sim.settle(animate=animate)
+    Globals.robot.SetDOFValues(PR2_L_POSTURES["side"], Globals.robot.GetManipulator("leftarm").GetArmIndices())
+    Globals.robot.SetDOFValues(mirror_arm_joints(PR2_L_POSTURES["side"]), Globals.robot.GetManipulator("rightarm").GetArmIndices())
+
+    Globals.sim.release_rope('l')
+    Globals.sim.release_rope('r')
+    
+    return success, bodypart2trajs
+
+
+def simulate_demo_traj(new_xyz, seg_info, bodypart2trajs, animate=False):
+    Globals.robot.SetDOFValues(PR2_L_POSTURES["side"], Globals.robot.GetManipulator("leftarm").GetArmIndices())
+    Globals.robot.SetDOFValues(mirror_arm_joints(PR2_L_POSTURES["side"]), Globals.robot.GetManipulator("rightarm").GetArmIndices())
+    
+    handles = []
+    old_xyz = np.squeeze(seg_info["cloud_xyz"])
+    handles.append(Globals.env.plot3(old_xyz,5, (1,0,0)))
+    handles.append(Globals.env.plot3(new_xyz,5, (0,0,1)))
+    
+    miniseg_starts, miniseg_ends = split_trajectory_by_gripper(seg_info)    
+    success = True
+    print colorize.colorize("mini segments:", "red"), miniseg_starts, miniseg_ends
+    for (i_miniseg, (i_start, i_end)) in enumerate(zip(miniseg_starts, miniseg_ends)):            
+        if i_miniseg >= len(bodypart2trajs): break
+
+        bodypart2traj = bodypart2trajs[i_miniseg]
 
         for lr in 'lr':
             gripper_open = binarize_gripper(seg_info["%s_gripper_joint"%lr][i_start])
@@ -371,6 +414,7 @@ if __name__ == "__main__":
     parser.add_argument('holdoutfile', nargs='?', default='data/misc/holdout_set.h5')
     parser.add_argument("weightfile", type=str)
     parser.add_argument("--resultfile", type=str) # don't save results if this is not specified
+    parser.add_argument("--lookahead_branches", type=int, default=0)
     parser.add_argument('--landmark_features')
     parser.add_argument('--only_landmark', action="store_true")
     parser.add_argument("--quad_features", action="store_true")
@@ -434,7 +478,6 @@ if __name__ == "__main__":
     weightfile = h5py.File(args.weightfile, 'r')
     weights = weightfile['weights'][:]
     weightfile.close()
-    print weights.shape[0], num_features
     assert weights.shape[0] == num_features, "Dimensions of weights and features don't match. Make sure the right feature is being used"
     
     holdoutfile = h5py.File(args.holdoutfile, 'r')
@@ -454,6 +497,11 @@ if __name__ == "__main__":
             tasks.append(int(line[5:-1]))
     if args.i_start != -1 and args.i_end != -1:
         tasks = range(args.i_start, args.i_end)
+
+    def q_value_fn(state, action):
+        return np.dot(weights, feature_fn(state, action))
+    def value_fn(state):
+        raise NotImplementedError
 
     for i_task, demo_id_rope_nodes in (holdoutfile.iteritems() if not tasks else [(unicode(t),holdoutfile[unicode(t)]) for t in tasks]):
         reset_arms_to_side()
@@ -480,16 +528,45 @@ if __name__ == "__main__":
             new_xyz = Globals.sim.observe_cloud()
             state = ("eval_%i"%get_unique_id(), new_xyz)
     
-            redprint("Finding closest demonstration")
-            values = [np.dot(weights, feature_fn(state, action)) for action in actions]
-            best_action = actions[np.argmax(values)]
-
-            redprint("Simulating action %s"%(best_action))
-            success = simulate_demo(new_xyz, actionfile[best_action], animate=args.animation)
+            redprint("Choosing an action")
+            q_values = [q_value_fn(state, action) for action in actions]
+            if args.lookahead_branches > 1:
+                best_action_inds = sorted(range(len(q_values)), key=lambda i: -q_values[i])
+                best_actions = [actions[ind] for ind in best_action_inds[:args.lookahead_branches]] # first N actions in decreasing order of qvalues
+                state_values = []
+                trajectories = []
+                end_rope_states = []
+                start_rope_state = Globals.sim.rope.GetControlPoints()
+                for (i_lookahead, action) in zip(range(len(best_actions)), best_actions):
+                    redprint("looking ahead %i/%i\r"%(i_lookahead+1,args.lookahead_branches))
+                    replace_rope(start_rope_state)
+                    Globals.sim.settle()
+                    success, bodypart2trajs = simulate_demo(new_xyz, actionfile[action], animate=args.animation)
+                    next_xyz = Globals.sim.observe_cloud()
+                    state_values.append(value_fn(next_xyz))
+                    trajectories.append(bodypart2trajs)
+                    end_rope_states.append(Globals.sim.rope.GetControlPoints())
+                best_action_ind = np.argmax(state_values)
+                best_action = best_actions[best_action_ind]
+                if args.animation:
+                    redprint("Simulating best action %s"%(best_action))
+                    replace_rope(start_rope_state)
+                    Globals.sim.settle()
+                    simulate_demo_traj(new_xyz, actionfile[best_action], trajectories[best_action_ind], animate=args.animation)
+                replace_rope(end_rope_states[best_action_ind])
+                Globals.sim.settle()
+            else:
+                best_action = actions[np.argmax(q_values)]
+                redprint("Simulating best action %s"%(best_action))
+                replace_rope(Globals.sim.rope.GetControlPoints())
+                Globals.sim.settle()
+                success, _ = simulate_demo(new_xyz, actionfile[best_action], animate=args.animation)
+                replace_rope(Globals.sim.rope.GetControlPoints())
+                Globals.sim.settle()
             
             if save_results:
                 result_file[i_task].create_group(str(i_step))
-                result_file[i_task][str(i_step)]['rope_nodes'] = Globals.sim.observe_cloud()
-                result_file[i_task][str(i_step)]['values'] = values
+                result_file[i_task][str(i_step)]['rope_nodes'] = Globals.sim.rope.GetControlPoints()
+                result_file[i_task][str(i_step)]['values'] = q_values
         if save_results:
             result_file.close()
