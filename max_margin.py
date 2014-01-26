@@ -447,7 +447,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         else:
             lhs = grb.LinExpr(lhs_coeffs)
         rhs_coeffs = [(self.gamma*p, w) for w, p in zip(self.w, next_action_phi) if abs(p) >= eps]
-        rhs_coeffs.append((-1, yi_var)) #flip
+        rhs_coeffs.append((1, yi_var)) #flip
         rhs = grb.LinExpr(rhs_coeffs)
         rhs += self.action_reward
         # w'*curr_phi <= -1 + yi + gammma * w'*next_phi
@@ -522,7 +522,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         """
         loads the contraints from the file indicated and adds them to the optimization problem
         """
-        raise NotImplementedError, "in soviet russia model optimize you"
         MultiSlackMaxMarginModel.update_constraints_file(fname)
         infile = h5py.File(fname, 'r')
         n_other_keys = 0
@@ -534,23 +533,42 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             n_other_keys += 1
         xi_names = {}
         yi_names = {}
+        action_phis = {}
         for key_i in range(len(infile) - n_other_keys):
             constr = infile[str(key_i)]
-            exp_phi = constr['exp_features'][:]
-            rhs_phi = constr['rhs_phi'][:]
-            margin = float(constr['margin'][()])
             slack_name = constr['xi'][()]
             if slack_name.startswith('yi'):
+                curr_action_phi = constr['exp_features'][:]
+                next_action_phi = constr['rhs_phi'][:]
+                example = constr['example'][()]
                 if slack_name not in yi_names:
                     yi_var = self.add_yi(slack_name)
                     yi_names[slack_name] = yi_var
-                self.add_bellman_constraint(exp_phi, rhs_phi, yi_names[slack_name], update=False) #it's actually lhs_phi and rhs_phi
+                self.add_bellman_constraint(curr_action_phi, next_action_phi, yi_names[slack_name], update=False)
+                traj_i = slack_name[3:]
+                curr_state_i, next_state_i, _ = example.split('-')
+                if traj_i not in action_phis:
+                    action_phis[traj_i] = {}
+                action_phis[traj_i][curr_state_i] = curr_action_phi
+                action_phis[traj_i][next_state_i] = next_action_phi
             else:
+                exp_phi = constr['exp_features'][:]
+                rhs_phi = constr['rhs_phi'][:]
+                margin = float(constr['margin'][()])
                 if slack_name not in xi_names:
                     xi_var = self.add_xi(slack_name)
                     xi_names[slack_name] = xi_var
                 self.add_constraint(exp_phi, rhs_phi, margin, xi_names[slack_name], update=False)
         infile.close()
+        # add to the objective the values that are in the bellman constraint
+        for features in action_phis.values():
+            assert len(features) > 2, "Some trajectories has less than 3 steps. Did you fix the the constraints file?"
+            for feat in features.values():
+                for (i, w) in enumerate(self.w):
+                    if abs(feat[i]) >= eps:
+                        w.Obj -= self.F*feat[i] #flip
+                self.f_sum_size += 1
+        self.F = self.F_no_norm        # this will update the coeffiencts to take into account num_values
         self.model.update()
         
     def load_weights_from_file(self, fname):
