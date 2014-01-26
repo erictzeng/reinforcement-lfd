@@ -414,7 +414,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             yi_var.Obj = value
         self.model.update()
 
-<<<<<<< HEAD
+
     @property
     def F(self):
         return self._F
