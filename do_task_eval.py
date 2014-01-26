@@ -371,6 +371,8 @@ if __name__ == "__main__":
     parser.add_argument('holdoutfile', nargs='?', default='data/misc/holdout_set.h5')
     parser.add_argument("weightfile", type=str)
     parser.add_argument("--resultfile", type=str) # don't save results if this is not specified
+    parser.add_argument('--landmark_features')
+    parser.add_argument('--only_landmark', action="store_true")
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--rope_dist_features", action="store_true")
@@ -432,6 +434,7 @@ if __name__ == "__main__":
     weightfile = h5py.File(args.weightfile, 'r')
     weights = weightfile['weights'][:]
     weightfile.close()
+    print weights.shape[0], num_features
     assert weights.shape[0] == num_features, "Dimensions of weights and features don't match. Make sure the right feature is being used"
     
     holdoutfile = h5py.File(args.holdoutfile, 'r')

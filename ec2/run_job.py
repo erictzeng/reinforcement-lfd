@@ -11,6 +11,11 @@ import socket
 from threading import Thread
 import yaml
 
+def yesno():
+    YES = ('y', 'ye', 'yes')
+    typed = raw_input('[y/N]: ')
+    return typed.strip().lower() in YES
+
 def read_jobfile(path):
     with open(path, 'r') as jobfile:
         result = yaml.safe_load(jobfile)
@@ -100,15 +105,11 @@ def combine_results(conf):
     i = 0
     for key in read_log_names(conf):
         fname = os.path.join(conf['workdir'], 'out', key + '.h5')
-        j = 0
         f = h5py.File(fname, 'r')
-        while True:
-            try:
-                outfile.copy(f[str(j)], str(i))
-            except KeyError:
-                break
+        keys = sorted(f.keys(), key=lambda x: int(x))
+        for key in keys:
+            outfile.copy(f[key], str(i))
             i += 1
-            j += 1
 
 def done(streams):
     if all(stdout.channel.exit_status_ready() for stdout, stderr in streams):
@@ -118,8 +119,11 @@ def done(streams):
     return False
 
 def main(args):
-    conn = ec2.connect_to_region('us-east-1')
     conf = read_jobfile(args.jobfile)
+    run(conf)
+
+def run(conf):
+    conn = ec2.connect_to_region('us-east-1')
     if not os.path.exists(conf['workdir']):
         os.makedirs(conf['workdir'])
     reservation = launch_instances(conn, conf)

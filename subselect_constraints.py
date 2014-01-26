@@ -2,6 +2,8 @@
 #
 # Run this script with ./subselect_constraints <constraint_file> <output_constraint_file> <input_features> <output_features>
 #
+# Assumes that the ids in the input constraint_file are consecutive integers,
+# starting from 0.
 # Options for input features are {bias, quad, sc, rope_dist, landmark} and
 # options for output features are the types of features included in the type
 # of the input feature.
@@ -13,7 +15,8 @@
 # rope_dist     | bias, sc, rope_dist
 # landmark      | bias, quad, sc, rope_dist, landmark
 #
-# Note: Make sure the FEATURE_ORDERS and FEATURE_LENGTHS vectors are correct!!
+# Note: Make sure the FEATURE_ORDERS and FEATURE_LENGTHS vectors are correct
+# for your needs!
 
 import argparse, h5py
 
@@ -32,6 +35,13 @@ FEATURE_LENGTHS = {'reg_cost_sq': 1,
                    'rope_dist': 3,
                    'landmark': 70}
 
+# Set to [] if you want all landmark indices to be selected.
+# Otherwise, only the indices indicated in LANDMARK_INDICES are selected.
+# LANDMARK_INDICES = []
+LANDMARK_INDICES = [ 0,  1,  2,  3,  4,  5, 10, 12, 15, 17, 19, 20, 23, 24, 25, 28, 29,
+                    30, 32, 33, 34, 36, 37, 38, 42, 44, 50, 53, 56, 59, 61, 62, 63, 64,
+                    65, 66, 67]
+
 def subselect_feature(args, input_feature):
     start_index = 0
     output_start_indices = [0]*len(FEATURE_ORDERS[args.output_features])
@@ -43,14 +53,19 @@ def subselect_feature(args, input_feature):
     output_feature = []
     for idx, start_i in enumerate(output_start_indices):
         feature_length = FEATURE_LENGTHS[FEATURE_ORDERS[args.output_features][idx]]
-        output_feature.extend(input_feature[start_i:start_i + feature_length])
+        if FEATURE_ORDERS[args.output_features][idx] == 'landmark' and len(LANDMARK_INDICES) > 0:
+            all_landmark = input_feature[start_i:start_i + feature_length]
+            output_feature.extend([all_landmark[i] for i in LANDMARK_INDICES])
+        else:
+            output_feature.extend(input_feature[start_i:start_i + feature_length])
     return output_feature
 
 def subselect_features(args):
     input_constraints = h5py.File(args.constraintfile, 'r')
     output_constraints = h5py.File(args.output_constraintfile, 'w')
     counter = 0
-    for key in input_constraints.iterkeys():
+    for i in range(len(input_constraints)):
+        key = str(i)
         counter += 1
         if counter%10000 == 0:
             print "# Constraints Finished: ", counter
@@ -71,7 +86,9 @@ if __name__ == '__main__':
     parser.add_argument('output_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark'])
     args = parser.parse_args()
 
-    assert args.input_features != args.output_features, "Input and output features are the same, so there is nothing to be done"
+    # Commenting out this assert because we may need to pass in "landmark" for both input and output features, for subselecting
+    # from the landmark features.
+    #assert args.input_features != args.output_features, "Input and output features are the same, so there is nothing to be done"
 
     # Make sure the output features are compatible with the input
     if args.input_features == 'bias':
@@ -85,4 +102,5 @@ if __name__ == '__main__':
     if args.input_features == 'landmark':
         assert args.output_features in ['bias', 'quad', 'sc', 'rope_dist', 'landmark'], "For landmark input features, output must be either bias, quad, sc, or rope_dist"
 
-    subselect_features(args)
+    import profile
+    profile.run("subselect_features(args)")

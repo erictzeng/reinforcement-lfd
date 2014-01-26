@@ -9,5 +9,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     f = h5py.File(args.h5file, 'r')
-    print "File %s has %i keys"%(args.h5file, len(f.keys()))
+    print "File %s has %i keys"%(args.h5file, len(f))
     f.close()

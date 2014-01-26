@@ -11,7 +11,7 @@ import numpy as np
 import h5py, random, math, util
 from numbers import Number
 from pdb import pm, set_trace
-import sys
+import sys, os
 eps = 10**-8
 MAX_ITER=1000
 
@@ -344,11 +344,12 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
             exp_phi = constr['exp_features'][:]
             rhs_phi = constr['rhs_phi'][:]
             margin = float(constr['margin'][()])
-            xi_name = constr['xi'][()]
-            if xi_name not in slack_names:
-                xi_var = self.add_xi(xi_name)
-                slack_names[xi_name] = xi_var
-            self.add_constraint(exp_phi, rhs_phi, margin, slack_names[xi_name], update=False)
+            slack_name = constr['xi'][()]
+            if slack_name.startswith('xi'):
+                if slack_name not in slack_names:
+                    xi_var = self.add_xi(slack_name)
+                    slack_names[slack_name] = xi_var
+                self.add_constraint(exp_phi, rhs_phi, margin, slack_names[slack_name], update=False)
         infile.close()
         self.model.update()
 
@@ -392,7 +393,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         mm_model = BellmanMaxMarginModel.__new__(BellmanMaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
         assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi)+ len(mm_model.w), "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars"
-        param_fname = self.get_param_fname(fname)
+        param_fname = mm_model.get_param_fname(fname)
         param_f = h5py.File(param_fname, 'r')
         mm_model.action_reward = param_f['action_reward'][()]
         mm_model.goal_reward = 10
