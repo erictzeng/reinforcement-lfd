@@ -11,6 +11,11 @@ import socket
 from threading import Thread
 import yaml
 
+def yesno():
+    YES = ('y', 'ye', 'yes')
+    typed = raw_input('[y/N]: ')
+    return typed.strip().lower() in YES
+
 def read_jobfile(path):
     with open(path, 'r') as jobfile:
         result = yaml.safe_load(jobfile)

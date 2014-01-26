@@ -360,7 +360,7 @@ class ActionSet(object):
         if state[0] in self.landmark_cache:
             return self.landmark_cache[state[0]]
         feat = np.empty(len(self.landmarks))
-        if ActionSet.args and ActionSet.args.parallel:
+        if ActionSet.args and 'parallel' in ActionSet.args and ActionSet.args.parallel:
             landmarks = [self.landmarks[str(i)]['cloud_xyz'][()] for i in range(len(self.landmarks))]
             costs = Parallel(n_jobs=-1,verbose=0)(delayed(registration_cost_cheap)(state[1], l) for l in landmarks)
             feat = np.asarray(costs)
