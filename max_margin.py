@@ -329,7 +329,7 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         """
         loads the contraints from the file indicated and adds them to the optimization problem
         """
-        MultiSlackMaxMarginModel.update_constraints_file(fname)
+        #MultiSlackMaxMarginModel.update_constraints_file(fname)
         infile = h5py.File(fname, 'r')
         n_other_keys = 0
         if 'weights' in infile:
