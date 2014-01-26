@@ -77,10 +77,14 @@ class Application(Frame):
         set_label(self.outfile, self.infile, self.ex_index, 0)
         self.next_image()
 
+    def record_skip(self):
+        self.next_image()
+
     def undo_record(self):
         if self.ex_index == 1:
             return
         self.ex_index -= 1
+        del self.outfile[str(len(self.outfile)-1)]
         self.change_image(self.ex_index)
 
     def createWidgets(self):
@@ -103,6 +107,11 @@ class Application(Frame):
         self.undo = Button(self)
         self.undo["text"] = "Undo"
         self.undo["command"] = self.undo_record
+        self.undo.pack({"side": "left"})
+
+        self.skip = Button(self)
+        self.undo["text"] = "Skip"
+        self.undo["command"] = self.record_skip
         self.undo.pack({"side": "left"})
 
 
@@ -140,6 +149,14 @@ def image_from_point_cloud(output_folder, h5py_file, ex_index):
     plt.savefig(fname)
     print "saved ", fname
 
+def flatten_file(f1, tmp_folder):
+    from do_task_label import write_flush
+    outf = h5py.File(tmp_folder+'flat.h5', 'w')
+    for g in f1.itervalues():
+        for dset in g.itervalues(): 
+            write_flush(outf, [['cloud_xyz', dset[:]]])
+    f1.close()
+    return outf
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -157,6 +174,8 @@ if __name__ == '__main__':
         os.makedirs(args.image_folder)
     print "Outputting images to: " , args.image_folder
 
+    if 'cloud_xyz' not in iter(infile).next():
+        infile = flatten_file(infile, args.image_folder)
             
     root = Tk()
     root.wm_title("Knot or Not")
@@ -166,6 +185,7 @@ if __name__ == '__main__':
     app.bind('y', lambda event: app.record_yes())
     app.bind('n', lambda event: app.record_no())
     app.bind('u', lambda event: app.undo_record())
+    app.bind('s', lambda event: app.record_skip())
         
     top_frame = Frame(root)
     top_frame.pack()
@@ -178,8 +198,9 @@ if __name__ == '__main__':
     panel.pack(side = "left", fill = "both", expand = "yes")
     app.set_panel(img, panel)
 
-
-    app.mainloop()
-    outfile.close()
-    infile.close()
-    root.destroy()
+    try:
+        app.mainloop()
+    except:        
+        outfile.close()
+        infile.close()
+        root.destroy()
