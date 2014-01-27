@@ -485,6 +485,7 @@ if __name__ == "__main__":
 
     weightfile = h5py.File(args.weightfile, 'r')
     weights = weightfile['weights'][:]
+    w0 = weightfile['w0'][()] if 'w0' in weightfile else 0
     weightfile.close()
     assert weights.shape[0] == num_features, "Dimensions of weights and features don't match. Make sure the right feature is being used"
     
@@ -507,7 +508,7 @@ if __name__ == "__main__":
         tasks = range(args.i_start, args.i_end)
 
     def q_value_fn(state, action):
-        return np.dot(weights, feature_fn(state, action))
+        return np.dot(weights, feature_fn(state, action)) + w0
     def value_fn(state):
         state = state[:]
         return max(q_value_fn(state, action) for action in actions)
@@ -543,7 +544,7 @@ if __name__ == "__main__":
                 best_action_inds = sorted(range(len(q_values)), key=lambda i: -q_values[i])
                 best_actions = [actions[ind] for ind in best_action_inds[:args.lookahead_branches]] # first N actions in decreasing order of qvalues
                 if best_actions[0] == 'done':
-                    break
+                    best_actions = best_actions[1:]
                 state_values = []
                 trajectories = []
                 end_rope_tfs = []
@@ -565,9 +566,11 @@ if __name__ == "__main__":
                     simulate_demo_traj(new_xyz, actionfile[best_action], trajectories[best_action_ind], animate=args.animation)
                 set_rope_transforms(end_rope_tfs[best_action_ind])
             else:
-                best_action = actions[np.argmax(q_values)]
+                best_action_inds = sorted(range(len(q_values)), key=lambda i: -q_values[i])
+                best_actions = [actions[ind] for ind in best_action_inds] # first N actions in decreasing order of qvalues
+                best_action = best_actions[0]
                 if best_action == 'done':
-                    break
+                    best_action = best_actions[1]
                 redprint("Simulating best action %s"%(best_action))
                 set_rope_transforms(get_rope_transforms())
                 success, _ = simulate_demo(new_xyz, actionfile[best_action], animate=args.animation)
