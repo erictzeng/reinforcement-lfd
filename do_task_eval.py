@@ -539,12 +539,12 @@ if __name__ == "__main__":
             state = ("eval_%i"%get_unique_id(), new_xyz)
     
             redprint("Choosing an action")
-            q_values = [q_value_fn(state, action) for action in actions if action != 'done']
+            q_values = [q_value_fn(state, action) for action in actions]
             if args.lookahead_branches > 1:
                 best_action_inds = sorted(range(len(q_values)), key=lambda i: -q_values[i])
                 best_actions = [actions[ind] for ind in best_action_inds[:args.lookahead_branches]] # first N actions in decreasing order of qvalues
                 if best_actions[0] == 'done':
-                    break
+                    best_actions = best_actions[1:]
                 state_values = []
                 trajectories = []
                 end_rope_tfs = []
@@ -566,9 +566,11 @@ if __name__ == "__main__":
                     simulate_demo_traj(new_xyz, actionfile[best_action], trajectories[best_action_ind], animate=args.animation)
                 set_rope_transforms(end_rope_tfs[best_action_ind])
             else:
-                best_action = actions[np.argmax(q_values)]
+                best_action_inds = sorted(range(len(q_values)), key=lambda i: -q_values[i])
+                best_actions = [actions[ind] for ind in best_action_inds] # first N actions in decreasing order of qvalues
+                best_action = best_actions[0]
                 if best_action == 'done':
-                    break
+                    best_action = best_actions[1]
                 redprint("Simulating best action %s"%(best_action))
                 set_rope_transforms(get_rope_transforms())
                 success, _ = simulate_demo(new_xyz, actionfile[best_action], animate=args.animation)
