@@ -485,6 +485,7 @@ if __name__ == "__main__":
 
     weightfile = h5py.File(args.weightfile, 'r')
     weights = weightfile['weights'][:]
+    w0 = weightfile['w0'][()] if 'w0' in weightfile else 0
     weightfile.close()
     assert weights.shape[0] == num_features, "Dimensions of weights and features don't match. Make sure the right feature is being used"
     
@@ -507,7 +508,7 @@ if __name__ == "__main__":
         tasks = range(args.i_start, args.i_end)
 
     def q_value_fn(state, action):
-        return np.dot(weights, feature_fn(state, action))
+        return np.dot(weights, feature_fn(state, action)) + w0
     def value_fn(state):
         raise NotImplementedError
 
@@ -537,7 +538,7 @@ if __name__ == "__main__":
             state = ("eval_%i"%get_unique_id(), new_xyz)
     
             redprint("Choosing an action")
-            q_values = [q_value_fn(state, action) for action in actions]
+            q_values = [q_value_fn(state, action) for action in actions if action != 'done']
             if args.lookahead_branches > 1:
                 best_action_inds = sorted(range(len(q_values)), key=lambda i: -q_values[i])
                 best_actions = [actions[ind] for ind in best_action_inds[:args.lookahead_branches]] # first N actions in decreasing order of qvalues
