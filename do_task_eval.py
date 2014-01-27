@@ -415,6 +415,7 @@ if __name__ == "__main__":
     parser.add_argument("weightfile", type=str)
     parser.add_argument("--resultfile", type=str) # don't save results if this is not specified
     parser.add_argument("--lookahead_branches", type=int, default=0)
+    parser.add_argument('--rbf', action='store_true')
     parser.add_argument('--landmark_features')
     parser.add_argument('--only_landmark', action="store_true")
     parser.add_argument("--quad_features", action="store_true")
