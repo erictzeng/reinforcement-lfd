@@ -37,6 +37,8 @@ R_MAX, P_MAX, T_MAX = 0.15, np.pi, 2*np.pi
 R_BINS, P_BINS, T_BINS = 4, 1, 4
 DENSITY_RADIUS = .2
 
+DONE_MARGIN_VALUE = 175
+
 
 # rip rope_max_margin_model, you will not be missed --eric 1/14/2014
 
@@ -109,24 +111,23 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
         action = group['action'][()]
         action = action if not group['knot'][()] else 'done'
         # add examples
-        if not group['knot'][()]: # this is a knot
-            lhs_phi = feature_fn(state, action)
-            xi_name = str('xi_') + str(key)
-            for (i, other_a) in enumerate(actions):
-                if other_a == action:
-                    continue
-                if verbose:
-                    sys.stdout.write("added {}/{} for max_margin constraint {}\r".format(i, len(actions), xi_name))
-                    sys.stdout.flush()
-                rhs_phi = feature_fn(state, other_a)
-                margin = margin_fn(state, action, other_a)
-                g = outfile.create_group(str(constraint_ctr))
-                constraint_ctr += 1
-                g['example'] = key
-                g['exp_features'] = lhs_phi
-                g['rhs_phi'] = rhs_phi
-                g['margin'] = margin
-                g['xi'] = xi_name
+        lhs_phi = feature_fn(state, action)
+        xi_name = str('xi_') + str(key)
+        for (i, other_a) in enumerate(actions):
+            if other_a == action:
+                continue
+            if verbose:
+                sys.stdout.write("added {}/{} for max_margin constraint {}\r".format(i, len(actions), xi_name))
+                sys.stdout.flush()
+            rhs_phi = feature_fn(state, other_a)
+            margin = margin_fn(state, action, other_a)
+            g = outfile.create_group(str(constraint_ctr))
+            constraint_ctr += 1
+            g['example'] = key
+            g['exp_features'] = lhs_phi
+            g['rhs_phi'] = rhs_phi
+            g['margin'] = margin
+            g['xi'] = xi_name
         # trajectories for bellman_constraints
         if group['pred'][()] == key:
             if traj:
@@ -351,6 +352,7 @@ class ActionSet(object):
     def __init__(self, actionfile, use_cache = True, args=None, landmarks=None):
         self.actionfile = actionfile
         self.actions = sorted(actionfile.keys())
+        self.actions.append('done')
         self.action_to_ind = dict((v, i) for i, v in enumerate(self.actions))
         self.num_actions = len(self.actions)
         self.num_sc_features = R_BINS*T_BINS*P_BINS*2
@@ -469,6 +471,8 @@ class ActionSet(object):
         warp both actions, compare the resulting trajectories:
         ex. warp a1 -> a2; use compare_hmats(warp(a1.traj), a2.traj)
         """
+        if 'done' in (a1, a2):
+            return DONE_MARGIN_VALUE
         warped_a1_trajs, _, _ = self._warp_hmats((a2, self.get_ds_cloud(a2)), a1)
         warped_a1_trajs = [warped_a1_trajs[lr] for lr in 'lr']
         a1_trajs = [self.actionfile[a1][ln]['hmat'][:] for ln in self.link_names]
@@ -505,6 +509,8 @@ class ActionSet(object):
         when we call this with a particular expert demo we will warp that trajectory
         once for each action we compare to -- issue is hashing point clouds effectively        
         """
+        if 'done' in (a1, a2):
+            return DONE_MARGIN_VALUE
         warped_a1_trajs, _, _ = self._warp_hmats(state, a1)
         warped_a2_trajs, _, _ = self._warp_hmats(state, a2)
         return sum(compare_hmats(warped_a1_trajs[lr], warped_a2_trajs[lr]) for lr in 'lr')
@@ -837,6 +843,7 @@ def select_feature_fn(args):
         feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile)
     margin_fn, act_file = get_action_state_margin_fn(act_file)
     actions = act_file.keys()
+    actions.append('done')
     return feature_fn, margin_fn, num_features, actions
 
 def test_features(args, feature_type):
