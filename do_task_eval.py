@@ -245,7 +245,8 @@ def simulate_demo(new_xyz, seg_info, animate=False):
     Globals.sim.settle(animate=animate)
     Globals.robot.SetDOFValues(PR2_L_POSTURES["side"], Globals.robot.GetManipulator("leftarm").GetArmIndices())
     Globals.robot.SetDOFValues(mirror_arm_joints(PR2_L_POSTURES["side"]), Globals.robot.GetManipulator("rightarm").GetArmIndices())
-
+    if animate:
+        Globals.viewer.Step()
     Globals.sim.release_rope('l')
     Globals.sim.release_rope('r')
     
@@ -302,8 +303,13 @@ def replace_rope(new_rope):
     Globals.sim.rope = bulletsimpy.CapsuleRope(Globals.sim.bt_env, 'rope', new_rope,
                                                Globals.sim.rope_params)
     return old_rope_nodes
-    
 
+def get_rope_transforms():
+    return (Globals.sim.rope.GetTranslations(), Globals.sim.rope.GetRotations())    
+
+def set_rope_transforms(tfs):
+    Globals.sim.rope.SetTranslations(tfs[0])
+    Globals.sim.rope.SetRotations(tfs[1])
 
 def arm_moved(joint_traj):    
     if len(joint_traj) < 2: return False
@@ -536,34 +542,29 @@ if __name__ == "__main__":
                 best_actions = [actions[ind] for ind in best_action_inds[:args.lookahead_branches]] # first N actions in decreasing order of qvalues
                 state_values = []
                 trajectories = []
-                end_rope_states = []
-                start_rope_state = Globals.sim.rope.GetControlPoints()
+                end_rope_tfs = []
+                start_rope_tfs = get_rope_transforms()
                 for (i_lookahead, action) in zip(range(len(best_actions)), best_actions):
                     redprint("looking ahead %i/%i\r"%(i_lookahead+1,args.lookahead_branches))
-                    replace_rope(start_rope_state)
-                    Globals.sim.settle()
+                    set_rope_transforms(start_rope_tfs)
                     success, bodypart2trajs = simulate_demo(new_xyz, actionfile[action], animate=args.animation)
                     next_xyz = Globals.sim.observe_cloud()
                     state_values.append(value_fn(next_xyz))
                     trajectories.append(bodypart2trajs)
-                    end_rope_states.append(Globals.sim.rope.GetControlPoints())
+                    end_rope_tfs.append(get_rope_transforms())
                 best_action_ind = np.argmax(state_values)
                 best_action = best_actions[best_action_ind]
                 if args.animation:
                     redprint("Simulating best action %s"%(best_action))
-                    replace_rope(start_rope_state)
-                    Globals.sim.settle()
+                    set_rope_transforms(start_rope_tfs)
                     simulate_demo_traj(new_xyz, actionfile[best_action], trajectories[best_action_ind], animate=args.animation)
-                replace_rope(end_rope_states[best_action_ind])
-                Globals.sim.settle()
+                set_rope_transforms(end_rope_tfs[best_action_ind])
             else:
                 best_action = actions[np.argmax(q_values)]
                 redprint("Simulating best action %s"%(best_action))
-                replace_rope(Globals.sim.rope.GetControlPoints())
-                Globals.sim.settle()
+                set_rope_transforms(get_rope_transforms())
                 success, _ = simulate_demo(new_xyz, actionfile[best_action], animate=args.animation)
-                replace_rope(Globals.sim.rope.GetControlPoints())
-                Globals.sim.settle()
+                set_rope_transforms(get_rope_transforms())
             
             if save_results:
                 result_file[i_task].create_group(str(i_step))
