@@ -259,13 +259,25 @@ def concatenate_fns(fns, actionfile):
     N = sum(v[1] for v in fn_params)
     return (result_fn, N, actionfile)
 
-def get_landmark_feature_fn(actionfile, landmarksfile):
+def apply_rbf(ft_fn):
+    def new_ft_fn(state, action):
+        ft = ft_fn(state, action)
+        new_ft = np.exp(-np.square(ft))
+        new_ft /= np.linalg.norm(new_ft)
+        return new_ft
+    return new_ft_fn
+
+def get_landmark_feature_fn(actionfile, landmarksfile, rbf=False):
     if type(actionfile) is str:
         actionfile = h5py.File(actionfile, 'r')
     if type(landmarksfile) is str:
         landmarksfile = h5py.File(landmarksfile, 'r')
     act_set = ActionSet(actionfile, landmarks=landmarksfile)
-    return (act_set.landmark_features, act_set.num_landmark_features, actionfile)    
+    ft_fn = act_set.landmark_features
+    if rbf:
+        print 'Applying RBF to landmark features.'
+        ft_fn = apply_rbf(ft_fn)
+    return (ft_fn, act_set.num_landmark_features, actionfile)    
 
 def get_sc_feature_fn(actionfile):
     if type(actionfile) is str:
@@ -777,13 +789,13 @@ def select_feature_fn(args):
     ActionSet.args = args
     if args.landmark_features and not args.only_landmark:
         print 'Using bias, quad, sc, ropedist, landmark ({}) features.'.format(args.landmark_features)
-        curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features)
+        curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features, rbf=args.rbf)
         fns = [get_quad_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn,
                curried_landmark_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     elif args.landmark_features:
         print 'Using landmark {} features'.format(args.landmark_features)
-        feature_fn, num_features, act_file = get_landmark_feature_fn(args.actionfile, args.landmark_features)
+        feature_fn, num_features, act_file = get_landmark_feature_fn(args.actionfile, args.landmark_features, rbf=args.rbf)
     elif args.quad_features:
         print 'Using quadratic features.'
         feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile)
@@ -904,6 +916,7 @@ if __name__ == '__main__':
     parser.add_argument('model', choices=['single', 'multi', 'bellman'])
     parser.add_argument('--landmark_features')
     parser.add_argument('--only_landmark', action="store_true")
+    parser.add_argument('--rbf', action='store_true')
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--rope_dist_features", action="store_true")

@@ -18,7 +18,9 @@
 # Note: Make sure the FEATURE_ORDERS and FEATURE_LENGTHS vectors are correct
 # for your needs!
 
-import argparse, h5py
+import argparse
+import h5py
+import numpy as np
 
 FEATURE_ORDERS = {'bias': ['reg_cost', 'bias'],
                   'quad': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias'],
@@ -37,10 +39,10 @@ FEATURE_LENGTHS = {'reg_cost_sq': 1,
 
 # Set to [] if you want all landmark indices to be selected.
 # Otherwise, only the indices indicated in LANDMARK_INDICES are selected.
-# LANDMARK_INDICES = []
-LANDMARK_INDICES = [ 0,  1,  2,  3,  4,  5, 10, 12, 15, 17, 19, 20, 23, 24, 25, 28, 29,
-                    30, 32, 33, 34, 36, 37, 38, 42, 44, 50, 53, 56, 59, 61, 62, 63, 64,
-                    65, 66, 67]
+LANDMARK_INDICES = []
+#LANDMARK_INDICES = [ 0,  1,  2,  3,  4,  5, 10, 12, 15, 17, 19, 20, 23, 24, 25, 28, 29,
+                    #30, 32, 33, 34, 36, 37, 38, 42, 44, 50, 53, 56, 59, 61, 62, 63, 64,
+                    #65, 66, 67]
 
 def subselect_feature(args, input_feature):
     start_index = 0
@@ -53,9 +55,15 @@ def subselect_feature(args, input_feature):
     output_feature = []
     for idx, start_i in enumerate(output_start_indices):
         feature_length = FEATURE_LENGTHS[FEATURE_ORDERS[args.output_features][idx]]
-        if FEATURE_ORDERS[args.output_features][idx] == 'landmark' and len(LANDMARK_INDICES) > 0:
+        if FEATURE_ORDERS[args.output_features][idx] == 'landmark':
             all_landmark = input_feature[start_i:start_i + feature_length]
-            output_feature.extend([all_landmark[i] for i in LANDMARK_INDICES])
+            if args.rbf:
+                all_landmark = np.exp(-np.square(all_landmark))
+                all_landmark /= np.linalg.norm(all_landmark)
+            if LANDMARK_INDICES:
+                output_feature.extend([all_landmark[i] for i in LANDMARK_INDICES])
+            else:
+                output_feature.extend(all_landmark)
         else:
             output_feature.extend(input_feature[start_i:start_i + feature_length])
     return output_feature
@@ -84,6 +92,7 @@ if __name__ == '__main__':
     parser.add_argument('output_constraintfile')
     parser.add_argument('input_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark', 'landmark_buggy'])
     parser.add_argument('output_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark'])
+    parser.add_argument('--rbf', action='store_true')
     args = parser.parse_args()
 
     # Commenting out this assert because we may need to pass in "landmark" for both input and output features, for subselecting
@@ -102,5 +111,6 @@ if __name__ == '__main__':
     if args.input_features == 'landmark':
         assert args.output_features in ['bias', 'quad', 'sc', 'rope_dist', 'landmark'], "For landmark input features, output must be either bias, quad, sc, or rope_dist"
 
-    import profile
-    profile.run("subselect_features(args)")
+    subselect_features(args)
+    #import profile
+    #profile.run("subselect_features(args)")
