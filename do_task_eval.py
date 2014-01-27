@@ -509,7 +509,8 @@ if __name__ == "__main__":
     def q_value_fn(state, action):
         return np.dot(weights, feature_fn(state, action))
     def value_fn(state):
-        raise NotImplementedError
+        state = state[:]
+        return max(q_value_fn(state, action) for action in actions)
 
     for i_task, demo_id_rope_nodes in (holdoutfile.iteritems() if not tasks else [(unicode(t),holdoutfile[unicode(t)]) for t in tasks]):
         reset_arms_to_side()
@@ -541,6 +542,8 @@ if __name__ == "__main__":
             if args.lookahead_branches > 1:
                 best_action_inds = sorted(range(len(q_values)), key=lambda i: -q_values[i])
                 best_actions = [actions[ind] for ind in best_action_inds[:args.lookahead_branches]] # first N actions in decreasing order of qvalues
+                if best_actions[0] == 'done':
+                    break
                 state_values = []
                 trajectories = []
                 end_rope_tfs = []
@@ -550,7 +553,8 @@ if __name__ == "__main__":
                     set_rope_transforms(start_rope_tfs)
                     success, bodypart2trajs = simulate_demo(new_xyz, actionfile[action], animate=args.animation)
                     next_xyz = Globals.sim.observe_cloud()
-                    state_values.append(value_fn(next_xyz))
+                    next_state = ("eval_%i"%get_unique_id(), next_xyz)
+                    state_values.append(value_fn(next_state))
                     trajectories.append(bodypart2trajs)
                     end_rope_tfs.append(get_rope_transforms())
                 best_action_ind = np.argmax(state_values)
