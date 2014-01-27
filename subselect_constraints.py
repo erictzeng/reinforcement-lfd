@@ -59,7 +59,7 @@ def subselect_feature(args, input_feature):
             all_landmark = input_feature[start_i:start_i + feature_length]
             if args.rbf:
                 all_landmark = np.exp(-np.square(all_landmark))
-                all_landmark /= np.linalg.norm(all_landmark)
+                all_landmark /= np.linalg.norm(all_landmark, 1)
             if LANDMARK_INDICES:
                 output_feature.extend([all_landmark[i] for i in LANDMARK_INDICES])
             else:
