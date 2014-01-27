@@ -25,9 +25,9 @@ def seg_intersect(p1,p2,p3,p4) :
     denom = (p2-p1).dot(perp(p3-p4))
     if denom == 0:
         if numa==0 or numb==0: # coincident lines
-            return True
+            return (0.5,0.5)
         else: # parallel lines
-            return False
+            return None
     ua = (numa / denom)
     ub = (numb / denom)
     if ua >= 0 and ua <= 1 and ub >= 0 and ub <= 1:
