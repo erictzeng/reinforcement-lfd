@@ -667,7 +667,7 @@ def compare_hmats(traj1, traj2):
             j = j+1 
             best_next = min(DTW[i-1, j], DTW[i, j-1], DTW[i-1, j-1])
             DTW[i, j] = hmat_cost(hmat1, hmat2) + best_next
-    return DTW[n, m]
+    return DTW[n, m]/float(max(n, m))
 
 def warp_hmats(xyz_src, xyz_targ, hmat_list, src_interest_pts = None):
     f, src_params, g, targ_params, cost = registration_cost(xyz_src, xyz_targ, src_interest_pts)
