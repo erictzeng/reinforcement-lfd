@@ -33,7 +33,7 @@ def try_action_on_state(state, action, animate=False):
     task.reset_arms_to_side()
     task.replace_rope(state)
     task.Globals.sim.settle()
-    success = task.simulate_demo(state, action, animate=animate)
+    success, _ = task.simulate_demo(state, action, animate=animate)
     if not success:
         return None
     else:
