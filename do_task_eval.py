@@ -562,6 +562,8 @@ if __name__ == "__main__":
                 set_rope_transforms(end_rope_tfs[best_action_ind])
             else:
                 best_action = actions[np.argmax(q_values)]
+                if best_action == 'done':
+                    break
                 redprint("Simulating best action %s"%(best_action))
                 set_rope_transforms(get_rope_transforms())
                 success, _ = simulate_demo(new_xyz, actionfile[best_action], animate=args.animation)
