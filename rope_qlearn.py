@@ -12,6 +12,7 @@ import h5py, math, random
 import IPython as ipy
 from max_margin import MaxMarginModel, MultiSlackMaxMarginModel, BellmanMaxMarginModel
 from pdb import pm, set_trace
+from knot_classifier import isKnot as is_knot
 import numpy as np
 from joblib import Parallel, delayed
 import scipy.spatial.distance as ssd
@@ -282,9 +283,23 @@ def apply_rbf(ft_fn):
     def new_ft_fn(state, action):
         ft = ft_fn(state, action)
         new_ft = np.exp(-np.square(ft))
-        new_ft /= np.linalg.norm(new_ft)
+        new_ft /= np.linalg.norm(new_ft, 1)
         return new_ft
     return new_ft_fn
+
+def get_is_knot_feature_fn(actionfile):
+    if type(actionfile) is str:
+        actionfile = h5py.File(actionfile, 'r')
+    act_set = ActionSet(actionfile)
+    return (act_set.is_knot_features, act_set.num_is_knot_features, actionfile)
+
+def get_done_feature_fn(actionfile, landmarksfile):
+    if type(actionfile) is str:
+        actionfile = h5py.File(actionfile, 'r')
+    if type(landmarksfile) is str:
+        landmarksfile = h5py.File(landmarksfile, 'r')
+    act_set = ActionSet(actionfile, landmarks=landmarksfile)
+    return (act_set.done_features, act_set.num_done_features, actionfile)
 
 def get_landmark_feature_fn(actionfile, landmarksfile, rbf=False):
     if type(actionfile) is str:
@@ -346,6 +361,7 @@ class ActionSet(object):
     state is assumed to be a list [<state_id>, <point_cloud>]
     """
     caches = {}                 # will break if same processes use dif actionsets that have
+    caches['landmarks'] = {}
     # the same actions
     args = None
     
@@ -355,6 +371,8 @@ class ActionSet(object):
         self.actions.append('done')
         self.action_to_ind = dict((v, i) for i, v in enumerate(self.actions))
         self.num_actions = len(self.actions)
+        self.num_is_knot_features = 1
+        self.num_done_features = 2
         self.num_sc_features = R_BINS*T_BINS*P_BINS*2
         self.num_rope_dist_feat = 3
         act_key = u.tuplify(self.actions)
@@ -364,8 +382,8 @@ class ActionSet(object):
         self.use_cache = use_cache
         self.link_names = ["%s_gripper_tool_frame"%lr for lr in ('lr')]
         self.landmarks = landmarks if landmarks is not None else []
+        self.landmark_knot_indices = [int(i) for i in self.landmarks if self.landmarks[i]['knot'][()]]
         self.num_landmark_features = len(self.landmarks)
-        self.landmark_cache = {}
         if args:
             ActionSet.args = args
 
@@ -388,9 +406,20 @@ class ActionSet(object):
     def get_ds_cloud(self, action):
         return clouds.downsample(self.actionfile[action]['cloud_xyz'], DS_SIZE)
 
+    def is_knot_features(self, state, action):
+        return np.array([int(is_knot(state[1]))])
+
+    def done_features(self, state, action):
+        if action != 'done':
+            return np.array([0, 0])
+        else:
+            lm = self.landmark_features(state, action)
+            regcost = min(lm[self.landmark_knot_indices])
+            return np.array([1, regcost])
+
     def landmark_features(self, state, action):
-        if state[0] in self.landmark_cache:
-            return self.landmark_cache[state[0]]
+        if state[0] in ActionSet.caches['landmarks']:
+            return ActionSet.caches['landmarks'][state[0]]
         feat = np.empty(len(self.landmarks))
         if ActionSet.args and 'parallel' in ActionSet.args and ActionSet.args.parallel:
             landmarks = [self.landmarks[str(i)]['cloud_xyz'][()] for i in range(len(self.landmarks))]
@@ -400,9 +429,7 @@ class ActionSet(object):
             for i in range(len(self.landmarks)):
                 landmark = self.landmarks[str(i)]
                 feat[i] = registration_cost_cheap(state[1], landmark['cloud_xyz'][()])
-        feat = np.exp(-np.power(feat, 2))
-        feat = feat/np.sum(feat)
-        self.landmark_cache[state[0]] = feat
+        ActionSet.caches['landmarks'][state[0]] = feat
         return feat
 
     def sc_features(self, state, action):
@@ -818,7 +845,14 @@ def test_saving_model(mm_model):
 
 def select_feature_fn(args):
     ActionSet.args = args
-    if args.landmark_features and not args.only_landmark:
+    if args.ensemble:
+        print 'Using bias, quad, sc, ropedist, landmark ({}), done, is_knot features.'.format(args.landmark_features)
+        curried_done_fn = lambda actionfile: get_done_feature_fn(actionfile, args.landmark_features)
+        curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features, rbf=args.rbf)
+        fns = [get_quad_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn,
+               curried_landmark_fn, curried_done_fn, get_is_knot_feature_fn]
+        feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
+    elif args.landmark_features and not args.only_landmark:
         print 'Using bias, quad, sc, ropedist, landmark ({}) features.'.format(args.landmark_features)
         curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features, rbf=args.rbf)
         fns = [get_quad_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn,
@@ -946,6 +980,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
     parser.add_argument('model', choices=['single', 'multi', 'bellman'])
+    parser.add_argument('--ensemble', action='store_true')
     parser.add_argument('--landmark_features')
     parser.add_argument('--only_landmark', action="store_true")
     parser.add_argument('--rbf', action='store_true')
