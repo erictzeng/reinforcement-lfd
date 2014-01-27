@@ -39,6 +39,30 @@ def remove_short_traj(examples, output):
             else:
                 new_group[group_key] = examples[k][group_key][()]
         output_id += 1
+    k = str(i)
+    pred = int(examples[k]['pred'][()])
+    if pred == i and i != 0:
+        if i - prev_start < 4:  # trajectory has less than 4 (inc. endstate)
+            print "Removing trajectory starting at id ", prev_start, ", length: ", i - prev_start
+            for i_rm in range(i - prev_start):
+                output_id -= 1
+                print "Deleting output id ", output_id
+                del output[str(output_id)]
+            print "Adding again at output id ", output_id
+        prev_start = i
+
+    new_group = output.create_group(str(output_id))
+    for group_key in examples[k].keys():
+        # Update the value of 'pred' correctly (with the renumbering)
+        if group_key == 'pred':
+            assert pred == i or pred == i-1, "Invalid predecessor value for %i"%i
+            if pred == i:
+                new_group[group_key] = str(output_id)
+            else:
+                new_group[group_key] = str(output_id - 1)
+        else:
+            new_group[group_key] = examples[k][group_key][()]
+    output_id += 1
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

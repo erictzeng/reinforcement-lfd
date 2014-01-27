@@ -107,27 +107,26 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
         group = expert_demofile[key]
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
         action = group['action'][()]
-        if action.startswith('endstate'): # this is a knot
-            continue
-        if verbose:
-            print 'adding constraints for:\t', action        
+        action = action if not group['knot'][()] else 'done'
         # add examples
-        lhs_phi = feature_fn(state, action)
-        xi_name = str('xi_') + str(key)
-        for (i, other_a) in enumerate(actions):
-            if other_a == action:
-                continue
-            if verbose:
-                print "added {}/{}".format(i, len(actions)), xi_name
-            rhs_phi = feature_fn(state, other_a)
-            margin = margin_fn(state, action, other_a)
-            g = outfile.create_group(str(constraint_ctr))
-            constraint_ctr += 1
-            g['example'] = key
-            g['exp_features'] = lhs_phi
-            g['rhs_phi'] = rhs_phi
-            g['margin'] = margin
-            g['xi'] = xi_name
+        if not group['knot'][()]: # this is a knot
+            lhs_phi = feature_fn(state, action)
+            xi_name = str('xi_') + str(key)
+            for (i, other_a) in enumerate(actions):
+                if other_a == action:
+                    continue
+                if verbose:
+                    sys.stdout.write("added {}/{} for max_margin constraint {}\r".format(i, len(actions), xi_name))
+                    sys.stdout.flush()
+                rhs_phi = feature_fn(state, other_a)
+                margin = margin_fn(state, action, other_a)
+                g = outfile.create_group(str(constraint_ctr))
+                constraint_ctr += 1
+                g['example'] = key
+                g['exp_features'] = lhs_phi
+                g['rhs_phi'] = rhs_phi
+                g['margin'] = margin
+                g['xi'] = xi_name
         # trajectories for bellman_constraints
         if group['pred'][()] == key:
             if traj:
@@ -135,13 +134,12 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
                 traj = []
         traj.append([state, action])
         outfile.flush()
-        
+    sys.stdout.write('\n')
+    sys.stdout.flush()
     if traj:
         trajectories.append(traj)
         traj = []
     for traj in trajectories:
-        if verbose:
-            print "adding trajectory for trajectory with actions:\n", [a for [s,a] in traj]
         # add bellman constraints
         yi_name = 'yi_%s'%traj[0][0][0] # use the state id of the first trajectory as the trajectory id
         for i in range(len(traj)-1):
@@ -157,8 +155,14 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
             g['margin'] = 0
             g['xi'] = yi_name
             if verbose:
-                sys.stdout.write("added bellman constraint {}/{} ".format(i, len(traj)-1) + str(yi_name) + '\r')
+                sys.stdout.write("added bellman constraint {}/{}\r ".format(i, len(traj)-1) + str(yi_name))
                 sys.stdout.flush()
+        g = outfile.create_group(str(constraint_ctr))
+        constraint_ctr += 1
+        goal_state, goal_action = traj[-1]
+        g['example'] = '{}-knot'.format(goal_state[0])
+        g['exp_features'] = feature_fn(goal_state, goal_action)
+        g['xi'] = 'zi_{}'.format(goal_state[0])
         sys.stdout.write('\n')
         outfile.flush()
     outfile.close()
@@ -244,6 +248,20 @@ def add_bellman_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1
         mm_model.add_trajectory(traj, yi_name, verbose)
         if outfile:
             mm_model.save_constraints_to_file(outfile)
+
+def add_goal_constraints(mm_model, fname):
+    """
+    Adds constraints specifying w'*phi = zi
+    fname must specify a file of labelled examples.
+    NOTE: We assume the examples in fname have integer ids in consecutive order, starting from 0
+    """
+    demofile = h5py.File(fname, 'r')
+    for k in range(len(f.keys())):
+        if f[str(k)]['knot'][()] == 1:
+            prev_state = f[str(k-1)]['cloud_xyz']
+            prev_action = "done"
+            mm_model.add_goal_constraint(prev_state, prev_action, update=False)
+    mm_model.model.update()
 
 def concatenate_fns(fns, actionfile):
     if type(actionfile) is str:
@@ -368,12 +386,16 @@ class ActionSet(object):
             for i in range(len(self.landmarks)):
                 landmark = self.landmarks[str(i)]
                 feat[i] = registration_cost_cheap(state[1], landmark['cloud_xyz'][()])
+        feat = np.exp(-np.power(feat, 2))
+        feat = feat/np.sum(feat)
         self.landmark_cache[state[0]] = feat
         return feat
 
     def sc_features(self, state, action):
-        seg_info = self.actionfile[action]
+        if action == 'done':
+            return np.zeros(self.num_sc_features)
 
+        seg_info = self.actionfile[action]
         warped_trajs, _, _ = self._warp_hmats(state, action)
         feat_val = dict((lr, np.zeros(self.num_sc_features/2.0)) for lr in 'lr')
         closings = get_closing_inds(seg_info)
@@ -397,6 +419,8 @@ class ActionSet(object):
         Feature 3: same as Feature 2, but for the right gripper
         """
         feat = np.zeros(self.num_rope_dist_feat)
+        if action == 'done':
+            return feat
         new_rope_xyz = state[1]
         _, _, warped_rope_xyz = self._warp_hmats(state, action)
         kd_warped_rope = sp_spat.KDTree(warped_rope_xyz)
@@ -411,12 +435,16 @@ class ActionSet(object):
     
     def bias_features(self, state, action):
         feat = np.zeros(self.num_actions + 1)
+        if action == 'done':
+            return feat
         feat[0] = registration_cost_cheap(state[1], self.get_ds_cloud(action))
         feat[self.action_to_ind[action]+1] = 1
         return feat
     
     def quad_features(self, state, action):
         feat = np.zeros(2 + 2*self.num_actions)
+        if action == 'done':
+            return feat
         s = registration_cost_cheap(state[1], self.get_ds_cloud(action))
         feat[0] = s**2
         feat[1] = s
@@ -720,9 +748,7 @@ def bellman_test_features(args):
         key = str(uid)
         group = demofile[key]
         state = [key,group['cloud_xyz'][:]] # these are already downsampled
-        action = group['action'][()]
-        if action.startswith('endstate'): # this is a knot
-            continue
+        action = group['action'][()] if not group['knot'][()] else 'done'
         if group['pred'][()] == key:
             if traj:
                 trajectories.append(traj)
@@ -736,8 +762,7 @@ def bellman_test_features(args):
     mm_model = BellmanMaxMarginModel(action, 500, 1000, 10, .9, num_features, feature_fn, margin_fn)
     for i, t in enumerate(constraint_trajs):
         mm_model.add_trajectory(t, str(i), True)
-    weights = mm_model.optimize_model()
-    ipy.embed()
+    weights, w0 = mm_model.optimize_model()
     # evaluate value fn performance
     num_evals = len(trajectories) if args.num_evals < 0 else args.num_constraints + args.num_evals
     trajectories = trajectories[args.num_constraints:num_evals]
@@ -758,7 +783,7 @@ def bellman_test_features(args):
 
 def test_saving_model(mm_model):
     # Use Gurobi to save the model in MPS format
-    weights = mm_model.optimize_model()
+    weights, w0 = mm_model.optimize_model()
     mm_model.save_model('data/rope_model_saved_test.mps')
     mm_model_saved = grb.read('data/rope_model_saved_test.mps')
     mm_model_saved.optimize()

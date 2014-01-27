@@ -192,6 +192,10 @@ def check_outfile(outfile):
                 return False
             if i - prev_start > 5:
                 print "possible mistake: trajectory has length greater than 5 (including endstate); index: ", k, ", length: ", i - prev_start
+            if not outfile[str(i-1)]['knot'][()]:
+                print "trajectory must end with a knot; index: ", i-1
+                outfile.close()
+                return False
             prev_start = i
         if pred != int(k) and pred != int(k) - 1:
             print "predecessors not correct", k, pred            
@@ -203,6 +207,17 @@ def check_outfile(outfile):
             print "end states labelled improperly"
             outfile.close()
             return False
+    if i - prev_start < 4:
+        print "trajectory has length less than 4 (including endstate); index: ", k, ", length: ", i - prev_start
+        outfile.close()
+        return False
+    if i - prev_start > 5:
+        print "possible mistake: trajectory has length greater than 5 (including endstate); index: ", k, ", length: ", i - prev_start
+    if not outfile[str(i-1)]['knot'][()]:
+        print "trajectory must end with a knot; index: ", i-1
+        outfile.close()
+        return False
+        
     return True
 
 def concat_datafiles(in_f1, in_f2, ofname):

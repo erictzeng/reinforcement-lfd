@@ -38,6 +38,7 @@ class MaxMarginModel(object):
         self._C = C
         self.w = np.asarray([self.model.addVar(lb = -1*GRB.INFINITY, name = str(i)) 
                              for i in range(N)])
+        self.w0 = self.model.addVar(lb = -1*GRB.INFINITY, name='w0')
         self.weights = np.zeros(N)
         self.xi = self.model.addVar(lb = 0, name = 'xi')
         self.xi_val = None
@@ -57,6 +58,9 @@ class MaxMarginModel(object):
         w = []
         for var in mm_model.model.getVars():
             try:
+                if var.VarName == 'w0':
+                    mm_model.w0 = var
+                    continue
                 int(var.VarName)
                 w.append(var)
             except ValueError:
@@ -109,12 +113,14 @@ class MaxMarginModel(object):
         assert self.N == rhs_action_phi.shape[0], "failed adding constraint: size of rhs_action_phi is inconsistent with feature size"
 
         lhs_coeffs = [(p, w) for p, w in zip(expert_action_phi, self.w) if abs(p) >= eps]
+        lhs_coeffs.append((1, self.w0))
         if not lhs_coeffs:
             lhs = 0
         else:
             lhs = grb.LinExpr(lhs_coeffs)
         rhs_coeffs = [(p, w) for w, p in zip(self.w, rhs_action_phi) if abs(p) >= eps]
         rhs_coeffs.append((-1, self.xi))
+        rhs_coeffs.append((1, self.w0))
         rhs = grb.LinExpr(rhs_coeffs)
         rhs += margin_value
         self.model.addConstr(lhs >= rhs)
@@ -152,6 +158,7 @@ class MaxMarginModel(object):
                 g['xi'] = xi_name
         if save_weights:
             outfile['weights'] = self.weights
+            outfile['w0'] = self.w0_val
             outfile['xi'] = self.xi_val
         outfile.close()
         
@@ -174,12 +181,15 @@ class MaxMarginModel(object):
             self.weights = infile['weights'][:]
         if 'xi' in infile:
             self.xi_val = infile['xi'][()]
+        if 'w0' in infile:
+            self.w0_val = infile['w0'][()]
         infile.close()
         self.model.update()
 
     def load_weights_from_file(self, fname):
         infile = h5py.File(fname, 'r')
         self.weights = infile['weights'][:]
+        self.w0_val = infile['w0'][()]
         if 'xi' in infile:
             self.xi_val = infile['xi'][()]
         infile.close()
@@ -188,6 +198,7 @@ class MaxMarginModel(object):
         # changed to use h5py.File so file i/o is consistent
         outfile = h5py.File(fname, 'w')
         outfile['weights'] = self.weights
+        outfile['w0'] = self.w0_val
         outfile['xi'] = self.xi_val
         outfile.close()
 
@@ -196,13 +207,14 @@ class MaxMarginModel(object):
         self.model.optimize()
         try:
             self.weights = [x.X for x in self.w]
-            self.xi_val = self.xi.X
-            return self.weights
+            self.w0_val = self.w0.X
+            self.xi_val = self.xi.X            
+            return self.weights, self.w0_val
         except grb.GurobiError:
             raise RuntimeError, "issue with optimizing model, check gurobi optimizer output"
     
     def best_action(self, s):
-        besti = np.argmax([np.dot(self.w, self.feature(s, a)).getValue() for a in self.actions])
+        besti = np.argmax([np.dot(self.w, self.feature(s, a)).getValue() + self.w0_val for a in self.actions])
         return (besti, self.actions[besti])
 
     def save_model(self, fname):
@@ -253,12 +265,11 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         features and margins
         """
         lhs_coeffs = [(p, w) for p, w in zip(expert_action_phi, self.w) if abs(p) >= eps]
-        if not lhs_coeffs:
-            lhs = 0
-        else:
-            lhs = grb.LinExpr(lhs_coeffs)
+        lhs_coeffs.append((1, self.w0))
+        lhs = grb.LinExpr(lhs_coeffs)
         rhs_coeffs = [(p, w) for w, p in zip(self.w, rhs_action_phi) if abs(p) >= eps]
         rhs_coeffs.append((-1, xi_var))
+        rhs_coeffs.append((1, self.w0))
         rhs = grb.LinExpr(rhs_coeffs)
         rhs += margin_value
         self.model.addConstr(lhs >= rhs)
@@ -304,6 +315,7 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
             g['xi'] = str(xi_name)
         if save_weights:
             outfile['weights'] = self.weights
+            outfile['w0'] = self.w0_val
             outfile['xi'] = self.xi_val
         outfile.close()
 
@@ -338,6 +350,8 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         if 'xi' in infile:
             self.xi_val = infile['xi'][:]
             n_other_keys += 1
+        if 'w0' in infile:
+            self.w0_val = infile['w0'][()]
         slack_names = {}
         for key_i in range(len(infile) - n_other_keys):
             constr = infile[str(key_i)]
@@ -356,6 +370,7 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
     def load_weights_from_file(self, fname):
         infile = h5py.File(fname, 'r')
         self.weights = infile['weights'][:]
+        self.w0_val = infile['w0'][()]
         if 'xi' in infile:
             self.xi_val = infile['xi'][:]
         infile.close()
@@ -365,8 +380,9 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         self.model.optimize()
         try:
             self.weights = [x.X for x in self.w]
+            self.w0_val = self.w0.X
             self.xi_val = [x.X for x in self.xi]
-            return self.weights
+            return self.weights, self.w0_val
         except grb.GurobiError:
             raise RuntimeError, "issue with optimizing model, check gurobi optimizer output"
 
@@ -392,7 +408,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
     def read(fname, actions, feature_fn, margin_fn):
         mm_model = BellmanMaxMarginModel.__new__(BellmanMaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
-        assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi)+ len(mm_model.w), "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars"
+        assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi)+ len(mm_model.w) + 1 + 2*len(mm_model.zi), "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars" # constant 1 is for w0
         param_fname = mm_model.get_param_fname(fname)
         param_f = h5py.File(param_fname, 'r')
         mm_model.action_reward = param_f['action_reward'][()]
@@ -408,6 +424,8 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self.xi_val = []
         self.yi = [var for var in self.model.getVars() if var.VarName.startswith('yi')]
         self.yi_val = []
+        self.zi = [var for var in self.model.getVars() if var.VarName.startswith('zi')]
+        self.zi_val = []
         
     @property
     def D(self):
@@ -448,12 +466,11 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
     
     def add_bellman_constraint(self, curr_action_phi, next_action_phi, yi_var, update=True):
         lhs_coeffs = [(p, w) for w, p in zip(self.w, curr_action_phi) if abs(p) >= eps]
-        if not lhs_coeffs:
-            lhs = 0
-        else:
-            lhs = grb.LinExpr(lhs_coeffs)
+        lhs_coeffs.append((1, self.w0))
+        lhs = grb.LinExpr(lhs_coeffs)
         rhs_coeffs = [(self.gamma*p, w) for w, p in zip(self.w, next_action_phi) if abs(p) >= eps]
         rhs_coeffs.append((1, yi_var)) #flip
+        rhs_coeffs.append((1, self.w0))
         rhs = grb.LinExpr(rhs_coeffs)
         rhs += self.action_reward
         # w'*curr_phi <= -1 + yi + gammma * w'*next_phi
@@ -486,6 +503,9 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             if verbose:
                 sys.stdout.write("added bellman constraint {}/{} ".format(i, len(states_actions)-1) + str(cur_slack.VarName) + '\r')
                 sys.stdout.flush()
+        goal_state, goal_action = states_actions[-1]
+        goal_action_phi = self.feature(goal_state, goal_action)
+        self.add_goal_constraint(goal_action_phi, update=False)
         for feat in features:
             for (i, w) in enumerate(self.w):
                 if abs(feat[i]) >= eps:
@@ -494,35 +514,32 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self.model.update()
         self.F = self.F_no_norm        # this will update the coeffiencts to take into account num_values
 
+    def add_zi(self):
+        zi_name = "zi%i"%len(self.zi)
+        new_zi = self.model.addVar(lb = -1*GRB.INFINITY, name = zi_name, obj = 0)
+        # make sure new_zi is not already in self.zi
+        assert len([zi for zi in self.zi if zi is new_zi]) == 0
+        self.zi.append(new_zi)
+        abs_zi = self.model.addVar(name='abs_'+zi_name, obj = self.E)
+        self.model.update()
+        self.model.addConstr(abs_zi >= new_zi)
+        self.model.addConstr(abs_zi >= -1*new_zi)
+        self.model.update()
+        return new_zi
 
-    def add_goal_constraint(self, prev_state, prev_action, update=True):
+    def add_goal_constraint(self, goal_action_phi, update=True):
         """
-        Adds constraints specifying w'*phi = -1 + gamma * goal_reward + zi
+        Adds constraints specifying w'*phi + w0 = zi
         """
-        prev_action_phi = self.feature(prev_state, prev_action)
-        lhs_coeffs = [(p, w) for w, p in zip(self.w, prev_action_phi) if abs(p) >= eps]
-        if not lhs_coeffs:
-            lhs = 0
-        else:
-            lhs = grb.LinExpr(lhs_coeffs)
-        rhs = self.action_reward + self.gamma * self.goal_reward
-        self.model.addConstr(lhs <= rhs) #flip
+        zi_var = self.add_zi()
+        lhs_coeffs = [(p, w) for w, p in zip(self.w, goal_action_phi) if abs(p) >= eps]
+        lhs_coeffs.append((1, self.w0))
+        lhs = grb.LinExpr(lhs_coeffs)
+        rhs_coeffs = [(1, zi_var)]
+        rhs = grb.LinExpr(rhs_coeffs)
+        self.model.addConstr(lhs == rhs)
         if update:
             self.model.update()
-
-    def add_goal_constraints(self, fname):
-        """
-        Adds constraints specifying w'*phi <= -1 + gamma * goal_reward
-        fname must specify a file of labelled examples.
-        NOTE: We assume the examples in fname have integer ids in consecutive order, starting from 0
-        """
-        demofile = h5py.File(fname, 'r')
-        for k in range(len(f.keys())):
-            if f[str(k)]['knot'][()] == 1:
-                prev_state = f[str(k-1)]['cloud_xyz']
-                prev_action = f[str(k-1)]['action']
-                self.add_goal_constraint(prev_state, prev_action, update=False)
-        self.model.update()
 
     def load_constraints_from_file(self, fname):
         """
@@ -531,12 +548,12 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         MultiSlackMaxMarginModel.update_constraints_file(fname)
         infile = h5py.File(fname, 'r')
         n_other_keys = 0
-        if 'weights' in infile:
-            self.weights = infile['weights'][:]
-            n_other_keys += 1
-        if 'xi' in infile:
-            self.xi_val = infile['xi'][:]
-            n_other_keys += 1
+        assert 'weights' not in infile, infile + " should not have weights as a key"
+        assert 'w0' not in infile, infile + " should not have w0 as a key"
+        assert 'xi' not in infile, infile + " should not have xi as a key"
+        assert 'yi' not in infile, infile + " should not have yi as a key"
+        assert 'zi' not in infile, infile + " should not have zi as a key"
+        
         xi_names = {}
         yi_names = {}
         action_phis = {}
@@ -557,6 +574,9 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
                     action_phis[traj_i] = {}
                 action_phis[traj_i][curr_state_i] = curr_action_phi
                 action_phis[traj_i][next_state_i] = next_action_phi
+            elif slack_name.startswith('zi'):
+                goal_action_phi = constr['exp_features'][:]
+                self.add_goal_constraint(goal_action_phi, update=False)
             else:
                 exp_phi = constr['exp_features'][:]
                 rhs_phi = constr['rhs_phi'][:]
@@ -580,18 +600,24 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
     def load_weights_from_file(self, fname):
         infile = h5py.File(fname, 'r')
         self.weights = infile['weights'][:]
+        if 'w0' in infile:
+            self.w0_val = infile['w0'][()]
         if 'xi' in infile:
             self.xi_val = infile['xi'][()]
         if 'yi' in infile:
             self.yi_val = infile['yi'][()]
+        if 'zi' in infile:
+            self.zi_val = infile['zi'][()]
         infile.close()
         
     def save_weights_to_file(self, fname):
         # changed to use h5py.File so file i/o is consistent
         outfile = h5py.File(fname, 'w')
         outfile['weights'] = self.weights
+        outfile['w0'] = self.w0_val
         outfile['xi'] = self.xi_val
         outfile['yi'] = self.yi_val
+        outfile['zi'] = self.zi_val
         outfile.close()
 
     def get_param_fname(self, fname):
@@ -612,9 +638,11 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self.model.optimize()
         try:
             self.weights = [x.X for x in self.w]
+            self.w0_val = self.w0.X
             self.xi_val = [x.X for x in self.xi]
             self.yi_val = [x.X for x in self.yi]
-            return self.weights
+            self.zi_val = [x.X for x in self.zi]
+            return self.weights, self.w0_val
         except grb.GurobiError:
             raise RuntimeError, "issue with optimizing model, check gurobi optimizer output"
 
@@ -759,10 +787,6 @@ def test_bellman():
         for state, action in traj:
             model.add_example(state, action)
         model.add_trajectory(traj, 'yi%i'%i)
-        if len(traj) > 0:
-            prev_state = traj[-1][0]
-            prev_action = traj[-1][1]
-            model.add_goal_constraint(prev_state, prev_action)
     weights = model.optimize_model()
     print weights 
     return True
