@@ -27,7 +27,12 @@ FEATURE_ORDERS = {'bias': ['reg_cost', 'bias'],
                   'sc': ['reg_cost', 'bias', 'sc'],
                   'rope_dist': ['reg_cost', 'bias', 'sc', 'rope_dist'],
                   'landmark': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark'],
-                  'landmark_buggy': ['reg_cost', 'bias', 'reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark']}
+                  'landmark_buggy': ['reg_cost', 'bias', 'reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark'],
+                  'quad_landmark': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'landmark'],
+                  'ensemble': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark', 'done_bias', 'done_regcost', 'is_knot'],
+                  'ensemble_nogoal': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark'],
+                  'traj_diff': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark', 'done_bias', 'done_regcost', 'is_knot', 'traj_diff'],
+                  'traj_diff_nogoal': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark', 'traj_diff']}
 
 FEATURE_LENGTHS = {'reg_cost_sq': 1,
                    'reg_cost': 1,
@@ -35,7 +40,11 @@ FEATURE_LENGTHS = {'reg_cost_sq': 1,
                    'bias': 148,
                    'sc': 32,
                    'rope_dist': 3,
-                   'landmark': 70}
+                   'landmark': 70,
+                   'done_bias': 1,
+                   'done_regcost': 1,
+                   'is_knot': 1,
+                   'traj_diff': 1}
 
 # Set to [] if you want all landmark indices to be selected.
 # Otherwise, only the indices indicated in LANDMARK_INDICES are selected.
@@ -44,7 +53,8 @@ LANDMARK_INDICES = []
                     #30, 32, 33, 34, 36, 37, 38, 42, 44, 50, 53, 56, 59, 61, 62, 63, 64,
                     #65, 66, 67]
 
-def subselect_feature(args, input_feature):
+def subselect_feature(args, input_feature, len_input, len_output):
+    assert len(input_feature) == len_input, "Length of input feature does not match input feature type"
     start_index = 0
     output_start_indices = [0]*len(FEATURE_ORDERS[args.output_features])
     for feature_type in FEATURE_ORDERS[args.input_features]:
@@ -66,12 +76,21 @@ def subselect_feature(args, input_feature):
                 output_feature.extend(all_landmark)
         else:
             output_feature.extend(input_feature[start_i:start_i + feature_length])
+    assert len(output_feature) == len_output, "Length of output feature does not match output feature type"
     return output_feature
 
 def subselect_features(args):
     input_constraints = h5py.File(args.constraintfile, 'r')
     output_constraints = h5py.File(args.output_constraintfile, 'w')
     counter = 0
+
+    len_input = 0
+    len_output = 0
+    for f in FEATURE_ORDERS[args.input_features]:
+        len_input += FEATURE_LENGTHS[f]
+    for f in FEATURE_ORDERS[args.output_features]:
+        len_output += FEATURE_LENGTHS[f]
+
     for i in range(len(input_constraints)):
         key = str(i)
         counter += 1
@@ -80,7 +99,7 @@ def subselect_features(args):
         new_group = output_constraints.create_group(key)
         for group_key in input_constraints[key].keys():
             if group_key == 'exp_features' or group_key == "rhs_phi":
-                new_group[group_key] = subselect_feature(args, input_constraints[key][group_key][()])
+                new_group[group_key] = subselect_feature(args, input_constraints[key][group_key][()], len_input, len_output)
             else:
                 new_group[group_key] = input_constraints[key][group_key][()]
     input_constraints.close()
@@ -90,8 +109,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('constraintfile')
     parser.add_argument('output_constraintfile')
-    parser.add_argument('input_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark', 'landmark_buggy'])
-    parser.add_argument('output_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark'])
+    parser.add_argument('input_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark', 'landmark_buggy', 'quad_landmark', 'ensemble', 'ensemble_nogoal', 'traj_diff', 'traj_diff_nogoal'])
+    parser.add_argument('output_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark', 'quad_landmark', 'ensemble', 'ensemble_nogoal', 'traj_diff', 'traj_diff_nogoal'])
     parser.add_argument('--rbf', action='store_true')
     args = parser.parse_args()
 
