@@ -44,14 +44,28 @@ def calculateCrossings(rope_nodes):
                 intersections[i_node, j_node] = intersect[0]
                 intersections[j_node, i_node] = intersect[1]
     crossings = [] # 1 for overcrossings and -1 for undercrossings
+#     links_to_cross_info = {}
+#     curr_cross_id = 1
     for i_link in range(intersections.shape[0]):
         j_links = sorted(range(intersections.shape[1]), key=lambda j_link: intersections[i_link,j_link])
         j_links = [j_link for j_link in j_links if intersections[i_link,j_link] != -1]
         for j_link in j_links:
             i_link_z = rope_nodes[i_link,2] + intersections[i_link,j_link] * (rope_nodes[i_link+1,2] - rope_nodes[i_link,2])
             j_link_z = rope_nodes[j_link,2] + intersections[j_link,i_link] * (rope_nodes[j_link+1,2] - rope_nodes[j_link,2])
-            i_over_j = i_link_z > j_link_z
-            crossings.append(1 if i_over_j else -1)
+            i_over_j = 1 if i_link_z > j_link_z else -1
+            crossings.append(i_over_j)
+#             link_pair_id = (min(i_link,j_link), max(i_link,j_link))
+#             if link_pair_id not in links_to_cross_info:
+#                 links_to_cross_info[link_pair_id] = []
+#             links_to_cross_info[link_pair_id].append((curr_cross_id, i_over_j))
+#             curr_cross_id += 1
+#     # make sure rope is closed
+#     dt_code = [0]*len(links_to_cross_info)
+#     for cross_info in links_to_cross_info.values():
+#         if cross_info[0][0]%2 == 0:
+#             dt_code[cross_info[1][0]/2] = i_over_j * cross_info[0][0]
+#         else:
+#             dt_code[cross_info[0][0]/2] = i_over_j * cross_info[1][0]
     return crossings
 
 def crossingsToString(crossings):
