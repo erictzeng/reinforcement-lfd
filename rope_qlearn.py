@@ -13,6 +13,7 @@ import IPython as ipy
 from max_margin import MaxMarginModel, MultiSlackMaxMarginModel, BellmanMaxMarginModel
 from pdb import pm, set_trace
 from knot_classifier import isKnot as is_knot
+import traj_utils
 import numpy as np
 from joblib import Parallel, delayed
 import scipy.spatial.distance as ssd
@@ -288,6 +289,12 @@ def apply_rbf(ft_fn):
         return new_ft
     return new_ft_fn
 
+def get_traj_diff_feature_fn(actionfile):
+    if type(actionfile) is str:
+        actionfile = h5py.File(actionfile, 'r')
+    act_set = ActionSet(actionfile)
+    return (act_set.traj_diff_features, act_set.num_traj_diff_features, actionfile)    
+
 def get_is_knot_feature_fn(actionfile):
     if type(actionfile) is str:
         actionfile = h5py.File(actionfile, 'r')
@@ -365,6 +372,9 @@ class ActionSet(object):
     caches['landmarks'] = {}
     # the same actions
     args = None
+
+    # set up openrave env for traj cost
+    env, robot = traj_utils.initialize_lite_sim()
     
     def __init__(self, actionfile, use_cache = True, args=None, landmarks=None):
         self.actionfile = actionfile
@@ -377,6 +387,7 @@ class ActionSet(object):
         self.num_done_features = 2
         self.num_sc_features = R_BINS*T_BINS*P_BINS*2
         self.num_rope_dist_feat = 3
+        self.num_traj_diff_features = 1
         act_key = u.tuplify(self.actions)
         if act_key not in ActionSet.caches:
             ActionSet.caches[act_key] = {}
@@ -407,6 +418,15 @@ class ActionSet(object):
 
     def get_ds_cloud(self, action):
         return clouds.downsample(self.actionfile[action]['cloud_xyz'], DS_SIZE)
+
+    def traj_diff_features(self, state, action):
+        if action == 'done':
+            return np.array([0])
+        target_trajs = self._warp_hmats(state, action)[0]
+        orig_joint_trajs = traj_utils.joint_trajs(action, self.actionfile)
+        err = traj_utils.follow_trajectory_cost(target_trajs, orig_joint_trajs,
+                                                ActionSet.robot)
+        return np.array([err])
 
     def is_knot_features(self, state, action):
         return np.array([int(is_knot(state[1]))])
@@ -852,17 +872,18 @@ def test_saving_model(mm_model):
 def select_feature_fn(args):
     ActionSet.args = args
     if args.ensemble:
-        print 'Using bias, quad, sc, ropedist, landmark ({}), done, is_knot features.'.format(args.landmark_features)
+        print 'Using bias, quad, sc, ropedist, landmark ({}), done, is_knot features, traj_diff.'.format(args.landmark_features)
         curried_done_fn = lambda actionfile: get_done_feature_fn(actionfile, args.landmark_features)
         curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features, rbf=args.rbf)
         fns = [get_quad_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn,
-               curried_landmark_fn, curried_done_fn, get_is_knot_feature_fn]
+               curried_landmark_fn, curried_done_fn, get_is_knot_feature_fn, 
+               get_traj_diff_feature_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     elif args.landmark_features and not args.only_landmark:
         print 'Using bias, quad, sc, ropedist, landmark ({}) features.'.format(args.landmark_features)
         curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features, rbf=args.rbf)
         fns = [get_quad_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn,
-               curried_landmark_fn]
+               curried_landmark_fn, get_traj_diff_feature_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     elif args.landmark_features:
         print 'Using landmark {} features'.format(args.landmark_features)
@@ -872,15 +893,16 @@ def select_feature_fn(args):
         feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile)
     elif args.rope_dist_features:
         print 'Using sc, bias, and rope dist features.'
-        fns = [get_bias_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn]
+        fns = [get_bias_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn, get_traj_diff_feature_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     elif args.sc_features:
         print 'Using sc and bias features.'
-        fns = [get_bias_feature_fn, get_sc_feature_fn]
+        fns = [get_bias_feature_fn, get_sc_feature_fn, get_traj_diff_feature_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     else:
         print 'Using bias features.'
-        feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile)
+        fns = [get_bias_feature_fn, get_traj_diff_feature_fn]
+        feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     margin_fn, act_file = get_action_state_margin_fn(act_file)
     actions = act_file.keys()
     # not including 'done' as an action anymore in max-margin constraints

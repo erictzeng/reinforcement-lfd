@@ -318,6 +318,9 @@ def get_input(start_state, action_name, next_state, outfile, pred):
         success = True
     return (success, resample)    
 
+def multiple_rc(target, clds):
+    return [registration_cost_cheap(target, cl) for cl in clds]
+
 
 def manual_select_demo(xyz, demofile, outfile, pred):
     start_rope_state = Globals.sim.rope.GetControlPoints()    
@@ -414,7 +417,7 @@ def simulate_demo(new_xyz, seg_info, animate=False):
             print "planning trajectory following"
             with util.suppress_stdout():
                 new_joint_traj = planning.plan_follow_traj(Globals.robot, manip_name,
-                                                           Globals.robot.GetLink(ee_link_name), new_ee_traj_rs,old_joint_traj_rs)
+                                                           Globals.robot.GetLink(ee_link_name), new_ee_traj_rs,old_joint_traj_rs)[0]
             part_name = {"l":"larm", "r":"rarm"}[lr]
             bodypart2traj[part_name] = new_joint_traj
             ################################    
