@@ -470,7 +470,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         lhs = grb.LinExpr(lhs_coeffs)
         rhs_coeffs = [(self.gamma*p, w) for w, p in zip(self.w, next_action_phi) if abs(p) >= eps]
         rhs_coeffs.append((1, yi_var)) #flip
-        rhs_coeffs.append((1, self.w0))
+        rhs_coeffs.append((self.gamma, self.w0))
         rhs = grb.LinExpr(rhs_coeffs)
         rhs += self.action_reward
         # w'*curr_phi <= -1 + yi + gammma * w'*next_phi
