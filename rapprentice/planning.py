@@ -71,4 +71,4 @@ def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj):
         
     print "planned trajectory for %s. max position error: %.3f. all position errors: %s"%(manip_name, pos_errs.max(), pos_errs)
             
-    return traj         
+    return traj, pos_errs

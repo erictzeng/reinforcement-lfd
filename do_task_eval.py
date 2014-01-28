@@ -222,7 +222,7 @@ def simulate_demo(new_xyz, seg_info, animate=False):
             print "planning trajectory following"
             with util.suppress_stdout():
                 new_joint_traj = planning.plan_follow_traj(Globals.robot, manip_name,
-                                                           Globals.robot.GetLink(ee_link_name), new_ee_traj_rs,old_joint_traj_rs)
+                                                           Globals.robot.GetLink(ee_link_name), new_ee_traj_rs,old_joint_traj_rs)[0]
             part_name = {"l":"larm", "r":"rarm"}[lr]
             bodypart2traj[part_name] = new_joint_traj
             ################################    
@@ -474,6 +474,8 @@ if __name__ == "__main__":
     Globals.sim.create(rope_nodes)
     # move arms to the side
     reset_arms_to_side()
+
+    
 
     if args.animation:
         Globals.viewer = trajoptpy.GetViewer(Globals.env)
