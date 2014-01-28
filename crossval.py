@@ -14,8 +14,8 @@ import sys
 #SLACK_COEFF_VALS = [10 ** i for i in range(-1, 4)]
 #BELLMAN_COEFF_VALS = [10 ** i for i in range(-1, 4)]
 
-SLACK_COEFF_VALS = [1]
-BELLMAN_COEFF_VALS = [1, 10]
+SLACK_COEFF_VALS = [10 ** i for i in range(1, 2)]
+BELLMAN_COEFF_VALS = [10 ** i for i in range(-1, 4)]
 
 def parse_modelname(modelfile):
     modelfile = os.path.basename(modelfile)
@@ -35,7 +35,7 @@ def fake_args(modelfile, weightfile, slack_coeff, bellman_coeff):
     args.modelfile = modelfile
     args.weightfile = weightfile
     args.actionfile = 'data/misc/actions.h5'
-    args.demofile = 'data/misc/all_labels.h5'
+    args.demofile = 'labels/all_labels_fixed.h5'
     args.model = 'bellman'
     args.ensemble = True
     args.landmark_features = 'data/misc/landmarks/landmarks_70.h5'
@@ -43,6 +43,7 @@ def fake_args(modelfile, weightfile, slack_coeff, bellman_coeff):
     args.rbf = True
     args.quad_features = False
     args.sc_features = False
+    args.traj_features = False
     args.rope_dist_features = False
     args.C = slack_coeff
     args.D = 4.0*slack_coeff
