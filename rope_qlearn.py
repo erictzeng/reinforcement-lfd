@@ -980,9 +980,13 @@ def build_model(args):
         mm_model = BellmanMaxMarginModel(actions, args.C, args.D, args.F, .9, num_features, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
-    mm_model.load_constraints_from_file(args.constraintfile)
-    if args.model == 'bellman' and args.goal_constraints:
-        mm_model.add_goal_constraints(args.demofile)
+    if not args.goal_constraints and args.model == 'bellman':
+        demofile = h5py.File(args.demofile, 'r')
+        ignore_keys = [k for k in demofile if demofile[k]['knot'][()]]
+        demofile.close()
+    else:
+        ignore_keys = None
+    mm_model.load_constraints_from_file(args.constraintfile, ignore_keys)
     mm_model.save_model(args.modelfile)
 
 def optimize_model(args):
@@ -1054,6 +1058,7 @@ if __name__ == '__main__':
     # build-model subparser
     parser_build_model = subparsers.add_parser('build-model')
     parser_build_model.add_argument('constraintfile')
+    parser_build_model.add_argument('demofile')
     parser_build_model.add_argument('modelfile')
     parser_build_model.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser_build_model.set_defaults(func=build_model)
