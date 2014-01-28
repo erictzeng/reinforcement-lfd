@@ -876,8 +876,7 @@ def select_feature_fn(args):
         curried_done_fn = lambda actionfile: get_done_feature_fn(actionfile, args.landmark_features)
         curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features, rbf=args.rbf)
         fns = [get_quad_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn,
-               curried_landmark_fn, curried_done_fn, get_is_knot_feature_fn, 
-               get_traj_diff_feature_fn]
+               curried_landmark_fn, get_traj_diff_feature_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     elif args.landmark_features and not args.only_landmark:
         print 'Using bias, quad, sc, ropedist, landmark ({}) features.'.format(args.landmark_features)
