@@ -558,7 +558,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         assert 'xi' not in infile, infile + " should not have xi as a key"
         assert 'yi' not in infile, infile + " should not have yi as a key"
         assert 'zi' not in infile, infile + " should not have zi as a key"
-        
+
         xi_names = {}
         yi_names = {}
         action_phis = {}
@@ -627,7 +627,8 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         outfile['w0'] = self.w0_val
         outfile['xi'] = self.xi_val
         outfile['yi'] = self.yi_val
-        outfile['zi'] = self.zi_val
+        if self.zi_val:
+            outfile['zi'] = self.zi_val
         outfile.close()
 
     def get_param_fname(self, fname):
