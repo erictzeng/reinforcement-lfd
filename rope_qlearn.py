@@ -993,13 +993,13 @@ def optimize_model(args):
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Found model: {}'.format(args.modelfile)
     if args.model == 'multi':
-        mm_model = MultiSlackMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
+        mm_model = MultiSlackMaxMarginModel.read(args.modelfile, actions, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel.read(args.modelfile, actions, num_features, feature_fn, margin_fn)
         mm_model.D = args.D
         mm_model.F = args.F
     else:
-        mm_model = MaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
+        mm_model = MaxMarginModel.read(args.modelfile, actions, num_features, feature_fn, margin_fn)
     if args.save_memory:
         mm_model.model.setParam('threads', 1)  # Use single thread instead of maximum
         # barrier method (#2) is default for QP, but uses more memory and could lead to error
