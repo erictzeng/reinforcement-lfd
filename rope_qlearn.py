@@ -876,14 +876,15 @@ def select_feature_fn(args):
         curried_done_fn = lambda actionfile: get_done_feature_fn(actionfile, args.landmark_features)
         curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features, rbf=args.rbf)
         fns = [get_quad_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn,
-               curried_landmark_fn, curried_done_fn, get_is_knot_feature_fn, 
-               get_traj_diff_feature_fn]
+               curried_landmark_fn]
+        if args.traj_features:
+            fns.append(get_traj_diff_feature_fn)
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     elif args.landmark_features and not args.only_landmark:
         print 'Using bias, quad, sc, ropedist, landmark ({}) features.'.format(args.landmark_features)
         curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features, rbf=args.rbf)
         fns = [get_quad_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn,
-               curried_landmark_fn, get_traj_diff_feature_fn]
+               curried_landmark_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     elif args.landmark_features:
         print 'Using landmark {} features'.format(args.landmark_features)
@@ -893,16 +894,15 @@ def select_feature_fn(args):
         feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile)
     elif args.rope_dist_features:
         print 'Using sc, bias, and rope dist features.'
-        fns = [get_bias_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn, get_traj_diff_feature_fn]
+        fns = [get_bias_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     elif args.sc_features:
         print 'Using sc and bias features.'
-        fns = [get_bias_feature_fn, get_sc_feature_fn, get_traj_diff_feature_fn]
+        fns = [get_bias_feature_fn, get_sc_feature_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     else:
         print 'Using bias features.'
-        fns = [get_bias_feature_fn, get_traj_diff_feature_fn]
-        feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
+        feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile)
     margin_fn, act_file = get_action_state_margin_fn(act_file)
     actions = act_file.keys()
     # not including 'done' as an action anymore in max-margin constraints
@@ -993,13 +993,13 @@ def optimize_model(args):
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Found model: {}'.format(args.modelfile)
     if args.model == 'multi':
-        mm_model = MultiSlackMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
+        mm_model = MultiSlackMaxMarginModel.read(args.modelfile, actions, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel.read(args.modelfile, actions, num_features, feature_fn, margin_fn)
         mm_model.D = args.D
         mm_model.F = args.F
     else:
-        mm_model = MaxMarginModel.read(args.modelfile, actions, feature_fn, margin_fn)
+        mm_model = MaxMarginModel.read(args.modelfile, actions, num_features, feature_fn, margin_fn)
     if args.save_memory:
         mm_model.model.setParam('threads', 1)  # Use single thread instead of maximum
         # barrier method (#2) is default for QP, but uses more memory and could lead to error
@@ -1020,6 +1020,7 @@ if __name__ == '__main__':
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--rope_dist_features", action="store_true")
+    parser.add_argument("--traj_features", action="store_true")
     parser.add_argument('--C', '-c', type=float, default=1)
     parser.add_argument('--D', '-d', type=float, default=1)
     parser.add_argument('--F', '-f', type=float, default=1)

@@ -422,6 +422,7 @@ if __name__ == "__main__":
     parser.add_argument("weightfile", type=str)
     parser.add_argument("--resultfile", type=str) # don't save results if this is not specified
     parser.add_argument("--lookahead_branches", type=int, default=0)
+    parser.add_argument('--twostep_lookahead', action='store_true')
     parser.add_argument('--ensemble', action='store_true')
     parser.add_argument('--rbf', action='store_true')
     parser.add_argument('--landmark_features')
@@ -429,6 +430,7 @@ if __name__ == "__main__":
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--rope_dist_features", action="store_true")
+    parser.add_argument("--traj_features", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
     parser.add_argument("--animation", type=int, default=0)
     parser.add_argument("--i_start", type=int, default=-1)
@@ -571,40 +573,46 @@ if __name__ == "__main__":
                         knot_action_ind = i_lookahead
 
                     next_state = ("eval_%i"%get_unique_id(), next_xyz)
-                    #state_values.append(value_fn(next_state))
+                    if not args.twostep_lookahead:
+                        state_values.append(value_fn(next_state))
                     level1_states.append(next_xyz)
                     trajectories.append(bodypart2trajs)
                     end_rope_tfs.append(get_rope_transforms())
 
-                    next_q_values = [q_value_fn(next_state[:], action) for action in actions]
-                    next_best_action_inds = sorted(range(len(next_q_values)), key=lambda i: -next_q_values[i])[:args.lookahead_branches]
-                    for next_best_action_ind in next_best_action_inds:
-                        level1_q_values.append([i_lookahead, actions[next_best_action_ind], next_q_values[next_best_action_ind]])
-
-                level2_best_action_inds = sorted(range(len(level1_q_values)), key=lambda i: -level1_q_values[i][2])[:args.lookahead_branches]
-                level2_best_actions = [level1_q_values[level2_best_action_ind] for level2_best_action_ind in level2_best_action_inds]
-                level1_inds = [a[0] for a in level2_best_actions]
+                    if args.twostep_lookahead:
+                        next_q_values = [q_value_fn(next_state[:], action) for action in actions]
+                        next_best_action_inds = sorted(range(len(next_q_values)), key=lambda i: -next_q_values[i])[:args.lookahead_branches]
+                        for next_best_action_ind in next_best_action_inds:
+                            level1_q_values.append([i_lookahead, actions[next_best_action_ind], next_q_values[next_best_action_ind]])
 
                 if knot_action_ind >= 0:
                     # If knot has been identified, choose that action and skip further lookahead
-                    print "IDENTIFIED KNOT"
+                    redprint("IDENTIFIED KNOT")
                     best_action_ind = knot_action_ind
-                elif all([a == level1_inds[0] for a in level1_inds]):
-                    # Skip ahead if all the best q-values are from the same level 1 action
-                    print "SKIPPING AHEAD"
-                    best_action_ind = level2_best_actions[0][0]
+                elif not args.twostep_lookahead:
+                    best_action_ind = np.argmax(state_values)
                 else:
-                    # Simulate next level of lookahead
-                    for (level2_i, level2_action) in enumerate(level2_best_actions):
-                        redprint("looking ahead, depth 2: %i/%i\r"%(level2_i+1, args.lookahead_brances))
-                        level1_i = level2_action[0]  # Index of action taken in level 1 of lookahead
-                        set_rope_transforms(end_rope_tfs[level1_i])
-                        success, bodypart2trajs = simulate_demo(level1_states[level1_i], actionfile[level2_action[1]], animate=args.animation)
+                    level2_best_action_inds = sorted(range(len(level1_q_values)), key=lambda i: -level1_q_values[i][2])[:args.lookahead_branches]
+                    level2_best_actions = [level1_q_values[level2_best_action_ind] for level2_best_action_ind in level2_best_action_inds]
+                    level1_inds = [a[0] for a in level2_best_actions]
 
-                        next_state = ("eval_%i"%get_unique_id(), Globals.sim.observe_cloud())
-                        state_values.append(value_fn(next_state))
-                            
-                    best_action_ind = level2_best_actions[np.argmax(state_values)][0]
+                    if all([a == level1_inds[0] for a in level1_inds]):
+                        # Skip ahead if all the best q-values are from the same level 1 action
+                        redprint("SKIPPING AHEAD")
+                        best_action_ind = level2_best_actions[0][0]
+                        print level1_q_values
+                    else:
+                        # Simulate next level of lookahead
+                        for (level2_i, level2_action) in enumerate(level2_best_actions):
+                            redprint("looking ahead, depth 2: %i/%i\r"%(level2_i+1, args.lookahead_brances))
+                            level1_i = level2_action[0]  # Index of action taken in level 1 of lookahead
+                            set_rope_transforms(end_rope_tfs[level1_i])
+                            success, bodypart2trajs = simulate_demo(level1_states[level1_i], actionfile[level2_action[1]], animate=args.animation)
+
+                            next_state = ("eval_%i"%get_unique_id(), Globals.sim.observe_cloud())
+                            state_values.append(value_fn(next_state))
+                                
+                        best_action_ind = level2_best_actions[np.argmax(state_values)][0]
 
                 best_action = best_actions[best_action_ind]
                 if args.animation:

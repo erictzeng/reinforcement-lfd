@@ -51,7 +51,7 @@ class MaxMarginModel(object):
         self.constraints_cache = set()
 
     @staticmethod
-    def read_helper(mm_model, fname, actions, feature_fn, margin_fn):
+    def read_helper(mm_model, fname, actions, num_features, feature_fn, margin_fn):
         mm_model.actions = actions[:]
         grb_model = grb.read(fname)
         mm_model.model = grb_model
@@ -66,6 +66,7 @@ class MaxMarginModel(object):
             except ValueError:
                 pass
         mm_model.N = len(w)
+        assert mm_model.N == num_features, "Number of features in the model mismatches the number of the feature vector"
         mm_model.w = np.asarray(w)
         mm_model.populate_slacks()
         mm_model.weights = np.zeros(len(w))
@@ -74,9 +75,9 @@ class MaxMarginModel(object):
         mm_model.constraints_cache = set()
 
     @staticmethod
-    def read(fname, actions, feature_fn, margin_fn):
+    def read(fname, actions, num_features, feature_fn, margin_fn):
         mm_model = MaxMarginModel.__new__(MaxMarginModel)
-        MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
+        MaxMarginModel.read_helper(mm_model, fname, actions, num_features, feature_fn, margin_fn)
         assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.w), "Number of Gurobi vars mismatches the MaxMarginModel vars"
         return mm_model
 
@@ -238,9 +239,9 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         self.xi_val = []
 
     @staticmethod
-    def read(fname, actions, feature_fn, margin_fn):
+    def read(fname, actions, num_features, feature_fn, margin_fn):
         mm_model = MultiSlackMaxMarginModel.__new__(MultiSlackMaxMarginModel)
-        MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
+        MaxMarginModel.read_helper(mm_model, fname, actions, num_features, feature_fn, margin_fn)
         assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.w), "Number of Gurobi vars mismatches the MultiSlackMaxMarginModel vars"
         return mm_model
 
@@ -402,12 +403,14 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self.zi_val = []
         self._F = F # weight on the sum of value fns
         self.F_no_norm = F # keeps track of what we want the coefficient on the whole sum to be
+        self.w0.Obj = -1*F #flip
         self.f_sum_size = 0
+        self.model.update()
 
     @staticmethod
-    def read(fname, actions, feature_fn, margin_fn):
+    def read(fname, actions, num_features, feature_fn, margin_fn):
         mm_model = BellmanMaxMarginModel.__new__(BellmanMaxMarginModel)
-        MaxMarginModel.read_helper(mm_model, fname, actions, feature_fn, margin_fn)
+        MaxMarginModel.read_helper(mm_model, fname, actions, num_features, feature_fn, margin_fn)
         assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi)+ len(mm_model.w) + 1 + 2*len(mm_model.zi), "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars" # constant 1 is for w0
         param_fname = mm_model.get_param_fname(fname)
         param_f = h5py.File(param_fname, 'r')
@@ -445,12 +448,13 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
 
     @F.setter
     def F(self, value):
+        self.w0.Obj = -1*value #flip
         for w in self.w:
             w.Obj = w.Obj/float(self._F)
         self.model.update()
         self._F = value/float(self.f_sum_size)
         for w in self.w:
-            w.Obj *= float(self._F)
+            w.Obj *= -1*float(self._F) #flip
         self.model.update()
 
     @property
@@ -558,7 +562,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         assert 'xi' not in infile, infile + " should not have xi as a key"
         assert 'yi' not in infile, infile + " should not have yi as a key"
         assert 'zi' not in infile, infile + " should not have zi as a key"
-        
+
         xi_names = {}
         yi_names = {}
         action_phis = {}
@@ -566,6 +570,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             constr = infile[str(key_i)]
             slack_name = constr['xi'][()]
             if slack_name.startswith('yi'):
+                #set_trace()
                 example = constr['example'][()]
                 traj_i = slack_name[3:]
                 curr_state_i, next_state_i, _ = example.split('-')
@@ -598,7 +603,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         infile.close()
         # add to the objective the values that are in the bellman constraint
         for features in action_phis.values():
-            assert len(features) > 2, "Some trajectories has less than 3 steps. Did you fix the the constraints file?"
+            assert len(features) > 3, "Some trajectories has less than 4 steps. Did you fix the the constraints file?"
             for feat in features.values():
                 for (i, w) in enumerate(self.w):
                     if abs(feat[i]) >= eps:
@@ -627,6 +632,8 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         outfile['w0'] = self.w0_val
         outfile['xi'] = self.xi_val
         outfile['yi'] = self.yi_val
+        if self.zi_val:
+            outfile['zi'] = self.zi_val
         outfile.close()
 
     def get_param_fname(self, fname):
