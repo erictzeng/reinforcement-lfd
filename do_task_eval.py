@@ -430,6 +430,7 @@ if __name__ == "__main__":
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--rope_dist_features", action="store_true")
+    parser.add_argument("--traj_features", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
     parser.add_argument("--animation", type=int, default=0)
     parser.add_argument("--i_start", type=int, default=-1)
