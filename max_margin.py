@@ -403,7 +403,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self.zi_val = []
         self._F = F # weight on the sum of value fns
         self.F_no_norm = F # keeps track of what we want the coefficient on the whole sum to be
-        self.w0.Obj = F
+        self.w0.Obj = -1*F #flip
         self.f_sum_size = 0
         self.model.update()
 
@@ -448,13 +448,13 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
 
     @F.setter
     def F(self, value):
-        self.w0.Obj = value
+        self.w0.Obj = -1*value #flip
         for w in self.w:
             w.Obj = w.Obj/float(self._F)
         self.model.update()
         self._F = value/float(self.f_sum_size)
         for w in self.w:
-            w.Obj *= float(self._F)
+            w.Obj *= -1*float(self._F) #flip
         self.model.update()
 
     @property
