@@ -426,6 +426,7 @@ if __name__ == "__main__":
     parser.add_argument('--ensemble', action='store_true')
     parser.add_argument('--rbf', action='store_true')
     parser.add_argument('--landmark_features')
+    parser.add_argument('--quad_landmark_features', action='store_true')
     parser.add_argument('--only_landmark', action="store_true")
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
@@ -543,12 +544,13 @@ if __name__ == "__main__":
             new_xyz = Globals.sim.observe_cloud()
             state = ("eval_%i"%get_unique_id(), new_xyz)
     
-            redprint("Choosing an action")
-            q_values = [q_value_fn(state, action) for action in actions]
 
             Globals.sim.observe_cloud()
             if is_knot(Globals.sim.observe_cloud()):
                 break;
+
+            redprint("Choosing an action")
+            q_values = [q_value_fn(state, action) for action in actions]
 
             if args.lookahead_branches > 1:
                 best_action_inds = sorted(range(len(q_values)), key=lambda i: -q_values[i])
