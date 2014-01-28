@@ -465,6 +465,9 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self.model.update()
     
     def add_bellman_constraint(self, curr_action_phi, next_action_phi, yi_var, update=True):
+        print curr_action_phi
+        print next_action_phi
+        raw_input("go?")
         lhs_coeffs = [(p, w) for w, p in zip(self.w, curr_action_phi) if abs(p) >= eps]
         lhs_coeffs.append((1, self.w0))
         lhs = grb.LinExpr(lhs_coeffs)
@@ -541,10 +544,15 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         if update:
             self.model.update()
 
-    def load_constraints_from_file(self, fname):
+    def load_constraints_from_file(self, fname, ignore_goal = None):
         """
         loads the contraints from the file indicated and adds them to the optimization problem
+        
+        to ignore goal constraints, set ignore_goal with a list of keys associated with 
+        goal examples
         """
+        if not ignore_goal:
+            ignore_goal = []
         MultiSlackMaxMarginModel.update_constraints_file(fname)
         infile = h5py.File(fname, 'r')
         n_other_keys = 0
@@ -561,22 +569,27 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             constr = infile[str(key_i)]
             slack_name = constr['xi'][()]
             if slack_name.startswith('yi'):
+                example = constr['example'][()]
+                traj_i = slack_name[3:]
+                curr_state_i, next_state_i, _ = example.split('-')
                 curr_action_phi = constr['exp_features'][:]
                 next_action_phi = constr['rhs_phi'][:]
-                example = constr['example'][()]
+                if next_state_i in ignore_goal:
+                    next_action_phi = 0*next_action_phi
                 if slack_name not in yi_names:
                     yi_var = self.add_yi(slack_name)
                     yi_names[slack_name] = yi_var
                 self.add_bellman_constraint(curr_action_phi, next_action_phi, yi_names[slack_name], update=False)
-                traj_i = slack_name[3:]
-                curr_state_i, next_state_i, _ = example.split('-')
                 if traj_i not in action_phis:
                     action_phis[traj_i] = {}
                 action_phis[traj_i][curr_state_i] = curr_action_phi
                 action_phis[traj_i][next_state_i] = next_action_phi
             elif slack_name.startswith('zi'):
-                goal_action_phi = constr['exp_features'][:]
-                self.add_goal_constraint(goal_action_phi, update=False)
+                if not ignore_goal:
+                    goal_action_phi = constr['exp_features'][:]
+                    self.add_goal_constraint(goal_action_phi, update=False)
+                else:
+                    continue
             else:
                 exp_phi = constr['exp_features'][:]
                 rhs_phi = constr['rhs_phi'][:]

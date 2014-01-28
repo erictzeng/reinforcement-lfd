@@ -980,7 +980,13 @@ def build_model(args):
         mm_model = BellmanMaxMarginModel(actions, args.C, args.D, args.F, .9, num_features, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
-    mm_model.load_constraints_from_file(args.constraintfile)
+    if args.no_goal_constraints and args.model == 'bellman':
+        demofile = h5py.File(args.no_goal_constraints, 'r')
+        ignore_keys = [k for k in demofile if demofile[k]['knot'][()]]
+        demofile.close()
+    else:
+        ignore_keys = None
+    mm_model.load_constraints_from_file(args.constraintfile, ignore_keys)
     if args.model == 'bellman' and args.goal_constraints:
         mm_model.add_goal_constraints(args.demofile)
     mm_model.save_model(args.modelfile)
@@ -1023,6 +1029,7 @@ if __name__ == '__main__':
     parser.add_argument("--gripper_weighting", action="store_true")
     parser.add_argument("--goal_constraints", action="store_true")
     parser.add_argument('--parallel', action='store_true')
+    parser.add_argument('--no_goal_constraints') # set with the demofile to ignore those goals
     
 
     # bellman test subparser
