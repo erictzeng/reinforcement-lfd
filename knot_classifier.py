@@ -36,16 +36,22 @@ def seg_intersect(p1,p2,p3,p4) :
         return None
 
 def calculateCrossings(rope_nodes):
-    crossings = np.zeros(rope_nodes.shape[0]-1) # 1 for overcrossings and -1 for undercrossings
+    intersections = -1*np.ones((rope_nodes.shape[0]-1, rope_nodes.shape[0]-1))
     for i_node in range(rope_nodes.shape[0]-1):
         for j_node in range(i_node+2,rope_nodes.shape[0]-1):
             intersect = seg_intersect(rope_nodes[i_node,:2], rope_nodes[i_node+1,:2], rope_nodes[j_node,:2], rope_nodes[j_node+1,:2])
             if intersect:
-                i_link_z = rope_nodes[i_node,2] + intersect[0] * (rope_nodes[i_node+1,2] - rope_nodes[i_node,2])
-                j_link_z = rope_nodes[j_node,2] + intersect[1] * (rope_nodes[j_node+1,2] - rope_nodes[j_node,2])
-                i_over_j = i_link_z > j_link_z
-                crossings[i_node] = 1 if i_over_j else -1
-                crossings[j_node] = 1 if not i_over_j else -1
+                intersections[i_node, j_node] = intersect[0]
+                intersections[j_node, i_node] = intersect[1]
+    crossings = [] # 1 for overcrossings and -1 for undercrossings
+    for i_link in range(intersections.shape[0]):
+        j_links = sorted(range(intersections.shape[1]), key=lambda j_link: intersections[i_link,j_link])
+        j_links = [j_link for j_link in j_links if intersections[i_link,j_link] != -1]
+        for j_link in j_links:
+            i_link_z = rope_nodes[i_link,2] + intersections[i_link,j_link] * (rope_nodes[i_link+1,2] - rope_nodes[i_link,2])
+            j_link_z = rope_nodes[j_link,2] + intersections[j_link,i_link] * (rope_nodes[j_link+1,2] - rope_nodes[j_link,2])
+            i_over_j = i_link_z > j_link_z
+            crossings.append(1 if i_over_j else -1)
     return crossings
 
 def crossingsToString(crossings):

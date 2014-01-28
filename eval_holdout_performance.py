@@ -28,17 +28,28 @@ from PIL import ImageTk, Image
 import IPython as ipy
 import os, sys
 
+MAX_NUM_IMAGES = 5
+
 def get_task(index, t_index = True):
-    if t_index:
-        index = index*num_steps
+    assert not t_index  # t_index is deprecated
     return '_'.join(image_filenames[index].split('_')[0:2])
 
 class Application(Frame):
 
-    def change_image(self, t_index):
-        start_index = t_index * num_steps
-        if start_index >= len(image_filenames):
+    def change_image(self):
+        global img_counter
+        if img_counter >= len(image_filenames):
             self.quit()
+
+        sys.stdout.write("Current task: {}           \r".format(get_task(img_counter, False)))
+        sys.stdout.flush()
+
+        num_steps = 1
+        curr_task = get_task(img_counter, False)
+	while img_counter + num_steps < len(image_filenames) and get_task(img_counter + num_steps, False) == curr_task:
+	    num_steps += 1
+
+        start_index = img_counter
         for i in range(num_steps):
             im = Image.open(images_folder + image_filenames[start_index + i])
             im.thumbnail((im_size, im_size), Image.ANTIALIAS)
@@ -46,31 +57,56 @@ class Application(Frame):
             panels[i].configure(image = imgs[i])
             panels[i].image = imgs[i]
 
+        img_counter += num_steps
+
+        for i in range(num_steps, MAX_NUM_IMAGES):
+            im = Image.open(images_folder + image_filenames[start_index + num_steps - 1])
+            im.thumbnail((im_size, im_size), Image.ANTIALIAS)
+            imgs[i] = ImageTk.PhotoImage(im)
+            panels[i].configure(image = imgs[i])
+            panels[i].image = imgs[i]
+
     def next_image(self):
-        global task_index
-        task_index += 1
-        self.change_image(task_index)
+        #global task_index
+        #task_index += 1
+        self.change_image()
         
     def record_yes(self):
-        results[get_task(task_index)] = True
+        results[get_task(img_counter-1, False)] = True
         self.next_image()
 
     def record_no(self):
-        results[get_task(task_index)] = False
+        results[get_task(img_counter-1, False)] = False
         self.next_image()
 
     def undo_record(self):
-        global task_index
-        task_index -= 1
-        task_name = get_task(task_index)
+        global img_counter
+        task_name = get_task(img_counter-1, False)
         if task_name in failures:
             failures.remove(task_name)
         if task_name in results:
             results.pop(task_name)
-        self.change_image(task_index)
+
+        print "Undoing task: ", task_name
+
+        num_steps = 1
+        curr_task = get_task(img_counter-1, False)
+        while get_task(img_counter - num_steps - 1, False) == curr_task:
+            num_steps += 1
+
+        img_counter = img_counter - num_steps
+
+        num_steps = 1
+        curr_task = get_task(img_counter-1, False)
+        while get_task(img_counter - num_steps - 1, False) == curr_task:
+            num_steps += 1
+
+        img_counter = img_counter - num_steps
+
+        self.change_image()
 
     def note_failure(self):
-        failures.append(get_task(task_index))
+        failures.append(get_task(img_counter-1, False))
         self.record_no()
 
     def createWidgets(self):
@@ -115,14 +151,8 @@ if images_folder[-1] is not '/':
 print "Loading images from: " , images_folder
 
 image_filenames = sorted(os.listdir(images_folder))
-task_index = 0
 
-num_steps = 1
-first_task = get_task(0, False)
-while get_task(num_steps, False) == first_task:
-    num_steps += 1
-
-print "Number of steps per knot tying attempt: ", num_steps
+print "Max number of steps per knot tying attempt: ", MAX_NUM_IMAGES
 
 results = {}
 root = Tk()
@@ -141,7 +171,14 @@ imgs = {}
 top_frame = Frame(root)
 top_frame.pack()
 
-im_size = (root.winfo_screenwidth()-200) / num_steps
+im_size = (root.winfo_screenwidth()-200) / MAX_NUM_IMAGES
+
+img_counter = 0
+
+num_steps = 1
+first_task = get_task(0, False)
+while get_task(num_steps, False) == first_task:
+    num_steps += 1
 
 for i in range(num_steps):
     im = Image.open(images_folder + image_filenames[i])
@@ -150,10 +187,17 @@ for i in range(num_steps):
     panels[i] = Label(top_frame, image = imgs[i])
     panels[i].pack(side = "left", fill = "both", expand = "yes")
 
+img_counter += num_steps
+
+for i in range(num_steps, MAX_NUM_IMAGES):
+    im = Image.open(images_folder + image_filenames[num_steps-1])
+    im.thumbnail((im_size, im_size), Image.ANTIALIAS)
+    imgs[i] = ImageTk.PhotoImage(im)
+    panels[i] = Label(top_frame, image = imgs[i])
+    panels[i].pack(side = "left", fill = "both", expand = "yes")
+
 app.mainloop()
 
-accuracy = float(sum(results.values())) / len(results.values())
-print "Accuracy: ", accuracy
 
 output_file = sys.argv[2]
 print "Writing failures to file ", output_file
@@ -169,5 +213,8 @@ if len(sys.argv) > 3:
         for k in sorted(results.keys()):
             f.write("%s\t%s\n" % (k, results[k]))
     f.close()
+
+accuracy = float(sum(results.values())) / len(results.values())
+print "Accuracy: ", accuracy
 
 root.destroy()
