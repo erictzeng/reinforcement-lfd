@@ -11,6 +11,7 @@ import sys
 # slacks - one global weight
 # F
 
+
 SLACK_COEFF_VALS = [10 ** i for i in range(3, 4)]
 BELLMAN_COEFF_VALS = [10 ** i for i in range(-1, 4)]
 
@@ -40,6 +41,7 @@ def fake_args(modelfile, weightfile, slack_coeff, bellman_coeff):
     args.rbf = True
     args.quad_features = False
     args.sc_features = False
+    args.traj_features = False
     args.rope_dist_features = False
     args.C = slack_coeff
     args.D = 4.0*slack_coeff
