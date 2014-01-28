@@ -465,9 +465,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self.model.update()
     
     def add_bellman_constraint(self, curr_action_phi, next_action_phi, yi_var, update=True):
-        print curr_action_phi
-        print next_action_phi
-        raw_input("go?")
         lhs_coeffs = [(p, w) for w, p in zip(self.w, curr_action_phi) if abs(p) >= eps]
         lhs_coeffs.append((1, self.w0))
         lhs = grb.LinExpr(lhs_coeffs)
