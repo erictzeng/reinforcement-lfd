@@ -627,7 +627,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         outfile['w0'] = self.w0_val
         outfile['xi'] = self.xi_val
         outfile['yi'] = self.yi_val
-        outfile['zi'] = self.zi_val
         outfile.close()
 
     def get_param_fname(self, fname):
@@ -651,7 +650,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             self.w0_val = self.w0.X
             self.xi_val = [x.X for x in self.xi]
             self.yi_val = [x.X for x in self.yi]
-            self.zi_val = [x.X for x in self.zi]
             return self.weights, self.w0_val
         except grb.GurobiError:
             raise RuntimeError, "issue with optimizing model, check gurobi optimizer output"
