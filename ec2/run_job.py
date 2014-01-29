@@ -110,6 +110,7 @@ def combine_results(conf):
         for key in keys:
             outfile.copy(f[key], str(i))
             i += 1
+    outfile.close()
 
 def done(streams):
     if all(stdout.channel.exit_status_ready() for stdout, stderr in streams):
