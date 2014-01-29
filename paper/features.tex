@@ -3,33 +3,34 @@
 \input{variables.tex}
 
 In the formulation above, we assumed the presence of a feature function
-\featurefn{s}{a} that produces a featurized representation of a state action pair.
-We briefly outline a few basic features that are general enough to applied to
-any task in which trajectory transfer is applicable. \et{``Trajectory transfer''
-  might not be the right criterion here.}
+$\featurefn(\statevar, \actionvar)$ that produces a featurized representation of
+a state action pair.  We briefly outline a few basic features that are general
+enough to applied to any task in which trajectory transfer is
+applicable. \et{``Trajectory transfer'' might not be the right criterion here.}
 
 \begin{itemize}
-  \item \textbf{Action bias}: An \actionsetsize{}-dimensional vector, with each
-    component corresponding to a particular action in \actionset{}. Let $i_a$
-    be an index associated uniquely with action \actionvar{}. The action bias vector is 0
-    at every component except $i_a$, where it has a value of 1. This enables us
-    to learn whether actions generalize well or poorly and weight them
-    accordingly.
-  \item \textbf{Registration cost}: An $(\actionsetsize{}+1)$-dimensional vector
-    based on the TPS registration cost \regcost{} between \statevar{} and \actionsub{start}. The
-    registration cost vector consists of a shared component, which is always
-    \regcost{}, and an action-specific component, in which component \indexsub{a} is set to
-    \regcost{} and every other component is left at 0. The shared component allows for
-    a single penalty to be applied for any large registration cost. The
-    individual components allow for additional adjustments in the cases where
-    actions are particularly sensitive to poor registrations
-  \item \textbf{Landmarks}: We randomly select a set of ``landmark'' states \landmarkset{}
-    from the set of expert demonstrations. The landmark feature is an
-    \landmarksetsize{}-dimensional vector consisting of the TPS registration costs to each of
-    these landmarks. We apply a Gaussian RBF kernel to these costs and normalize
-    the vector to sum to 1. This serves to identify which portion of the state
-    space we are in via comparison to known states, and allows us to prefer
-    states that lie closer to the goal.
+  \item \textbf{Action bias}: An $|\actionset{}|$-dimensional vector, with each
+    component corresponding to a particular action in \actionset{}. Let
+    $\indexvar{}_{\actionvar{}}$ be an index associated uniquely with action
+    \actionvar{}. The action bias vector is 0 at every component except
+    $\indexvar{}_{\actionvar{}}$, where it has a value of 1. This enables us to
+    learn whether actions generalize well or poorly and weight them accordingly.
+  \item \textbf{Registration cost}: An $(|\actionset{}|+1)$-dimensional vector
+    based on the TPS registration cost \regcost{} between \statevar{} and
+    $\actionvar{}_{start}$. The registration cost vector consists of a shared
+    component, which is always \regcost{}, and an action-specific component, in
+    which component $\indexvar{}_{\actionvar{}}$ is set to \regcost{} and every
+    other component is left at 0. The shared component allows for a single
+    penalty to be applied for any large registration cost. The individual
+    components allow for additional adjustments in the cases where actions are
+    particularly sensitive to poor registrations
+  \item \textbf{Landmarks}: We randomly select a set of ``landmark'' states
+    \landmarkset{} from the set of expert demonstrations. The landmark feature
+    is an $|\landmarkset{}|$-dimensional vector consisting of the TPS
+    registration costs to each of these landmarks. We apply a Gaussian RBF
+    kernel to these costs and normalize the vector to sum to 1. This serves to
+    identify which portion of the state space we are in via comparison to known
+    states, and allows us to prefer states that lie closer to the goal.
 \end{itemize}
 
 In our experiments, which we outline in Section~\ref{sec:experiments}, it
