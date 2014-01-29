@@ -1,0 +1,37 @@
+\section{Feature Selection}
+\label{sec:features}
+
+In the formulation above, we assumed the presence of a feature function
+$\Phi(S,A)$ that produces a featurized representation of a state action pair.
+We briefly outline a few basic features that are general enough to applied to
+any task in which trajectory transfer is applicable. \et{``Trajectory transfer''
+  might not be the right criterion here.}
+
+\begin{itemize}
+  \item \textbf{Action bias}: An $|\mathcal{A}|$-dimensional vector, with each
+    component corresponding to a particular action in $\mathcal{A}$. Let $i_A$
+    be an index associated uniquely with action $A$. The action bias vector is 0
+    at every component except $i_A$, where it has a value of 1. This enables us
+    to learn whether actions generalize well or poorly and weight them
+    accordingly.
+  \item \textbf{Registration cost}: An $(|\mathcal{A}|+1)$-dimensional vector
+    based on the TPS registration cost $R$ between $S$ and $A_{start}$. The
+    registration cost vector consists of a shared component, which is always
+    $R$, and an action-specific component, in which component $i_A$ is set to
+    $R$ and every other component is left at 0. The shared component allows for
+    a single penalty to be applied for any large registration cost. The
+    individual components allow for additional adjustments in the cases where
+    actions are particularly sensitive to poor registrations
+  \item \textbf{Landmarks}: We randomly select a set of ``landmark'' states $L$
+    from the set of expert demonstrations. The landmark feature is an
+    $|L|$-dimensional vector consisting of the TPS registration costs to each of
+    these landmarks. We apply a Gaussian RBF kernel to these costs and normalize
+    the vector to sum to 1. This serves to identify which portion of the state
+    space we are in via comparison to known states, and allows us to prefer
+    states that lie closer to the goal.
+\end{itemize}
+
+In our experiments, which we outline in Section~\ref{sec:experiments}, it
+suffices to simply concatenate the output of these three feature functions into
+a single feature representation. However, depending on the task, one could
+very well fold in additional features that rely on domain-specific knowledge.
