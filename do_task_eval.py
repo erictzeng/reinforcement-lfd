@@ -566,7 +566,7 @@ if __name__ == "__main__":
                     success, bodypart2trajs = simulate_demo(cur_xyz, actionfile[a], animate=False)
                     if args.animation:
                         Globals.viewer.Step()
-                        result_cloud = Globals.sim.observe_cloud()
+                    result_cloud = Globals.sim.observe_cloud()
                     if is_knot(result_cloud):
                         best_root_action = r_a
                         break
