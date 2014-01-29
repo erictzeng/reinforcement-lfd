@@ -31,3 +31,9 @@ In contrast, MMQL copes with high dimensional state and action spaces as well as
 Miyamoto et al. \dhm{CITE} describe an approach for learning to play Kendama and hit a tennis ball from demonstrated actions. 
 This method was successful at generalizing a human trajectory to a robot and incorporates the sequential combination of multiple demonstrations.
 However, their approach requires a hand tuning of waypoints and does not generalize to new scenes.
+
+The most similar behavioral cloning working to our approach is that of Isaac et al.~\dhm{CITE}. 
+They use behavioral cloning to learn to fly an airplane.
+They make use of an abstract goal directed layer, which sits on top of a low-level PID controller.
+This goal directed learning is similar in spirit to ours, although it makes use of a different formalism.
+The primary difference with this work is in the complexity of the low level controllers and complexity derived from manipulation.
