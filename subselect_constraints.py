@@ -29,6 +29,7 @@ FEATURE_ORDERS = {'bias': ['reg_cost', 'bias'],
                   'landmark': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark'],
                   'landmark_buggy': ['reg_cost', 'bias', 'reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark'],
                   'quad_landmark': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'landmark'],
+                  'quad_landmark_noregcostsq': ['reg_cost', 'bias_sq', 'bias', 'landmark'],
                   'ensemble': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark', 'done_bias', 'done_regcost', 'is_knot'],
                   'ensemble_nogoal': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark'],
                   'traj_diff': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark', 'done_bias', 'done_regcost', 'is_knot', 'traj_diff'],
@@ -109,26 +110,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('constraintfile')
     parser.add_argument('output_constraintfile')
-    parser.add_argument('input_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark', 'landmark_buggy', 'quad_landmark', 'ensemble', 'ensemble_nogoal', 'traj_diff', 'traj_diff_nogoal'])
-    parser.add_argument('output_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark', 'quad_landmark', 'ensemble', 'ensemble_nogoal', 'traj_diff', 'traj_diff_nogoal'])
+    parser.add_argument('input_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark', 'landmark_buggy', 'quad_landmark', 'quad_landmark_noregcostsq', 'ensemble', 'ensemble_nogoal', 'traj_diff', 'traj_diff_nogoal'])
+    parser.add_argument('output_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark', 'quad_landmark', 'quad_landmark_noregcostsq', 'ensemble', 'ensemble_nogoal', 'traj_diff', 'traj_diff_nogoal'])
     parser.add_argument('--rbf', action='store_true')
     args = parser.parse_args()
 
     # Commenting out this assert because we may need to pass in "landmark" for both input and output features, for subselecting
     # from the landmark features.
     #assert args.input_features != args.output_features, "Input and output features are the same, so there is nothing to be done"
-
-    # Make sure the output features are compatible with the input
-    if args.input_features == 'bias':
-        assert args.output_features in ['bias'], "For bias input features, output must be bias"
-    if args.input_features == 'quad':
-        assert args.output_features in ['bias', 'quad'], "For quad input features, output must be either bias or quad"
-    if args.input_features == 'sc':
-        assert args.output_features in ['bias', 'sc'], "For sc input features, output must be either bias or sc"
-    if args.input_features == 'rope_dist':
-        assert args.output_features in ['bias', 'sc', 'rope_dist'], "For rope_dist input features, output must be either bias, sc, or rope_dist"
-    if args.input_features == 'landmark':
-        assert args.output_features in ['bias', 'quad', 'sc', 'rope_dist', 'landmark'], "For landmark input features, output must be either bias, quad, sc, or rope_dist"
 
     subselect_features(args)
     #import profile
