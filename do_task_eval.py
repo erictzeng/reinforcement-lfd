@@ -421,8 +421,8 @@ if __name__ == "__main__":
     parser.add_argument('holdoutfile', nargs='?', default='data/misc/holdout_set.h5')
     parser.add_argument("weightfile", type=str)
     parser.add_argument("--resultfile", type=str) # don't save results if this is not specified
-    parser.add_argument("--lookahead_branches", type=int, default=0)
-    parser.add_argument('--twostep_lookahead', action='store_true')
+    parser.add_argument("--lookahead_width", type=int, default=1)
+    parser.add_argument('--lookahead_depth', type=int, default=0)
     parser.add_argument('--ensemble', action='store_true')
     parser.add_argument('--rbf', action='store_true')
     parser.add_argument('--landmark_features')
@@ -551,98 +551,45 @@ if __name__ == "__main__":
 
             redprint("Choosing an action")
             q_values = [q_value_fn(state, action) for action in actions]
+            rope_tf = get_rope_transforms()
 
-            if args.lookahead_branches > 1:
-                best_action_inds = sorted(range(len(q_values)), key=lambda i: -q_values[i])
-                best_actions = [actions[ind] for ind in best_action_inds[:args.lookahead_branches]] # first N actions in decreasing order of qvalues
-                if best_actions[0] == 'done':
-                    best_actions = best_actions[1:]
-                state_values = []
-                level1_states = []
-                trajectories = []
-                end_rope_tfs = []
-                level1_q_values = []
-                start_rope_tfs = get_rope_transforms()
-                knot_action_ind = -1
-
-                # Simulate first level of lookahead
-                for (i_lookahead, action) in zip(range(len(best_actions)), best_actions):
-                    redprint("looking ahead, depth 1: %i/%i\r"%(i_lookahead+1,args.lookahead_branches))
-                    set_rope_transforms(start_rope_tfs)
-                    success, bodypart2trajs = simulate_demo(new_xyz, actionfile[action], animate=False)
+            assert args.lookahead_width>= 1, 'Lookahead branches set to zero will fail to select any action'
+            agenda = sorted(zip(q_values, actions), key = lambda v: -v[0])[:args.lookahead_width]
+            agenda = [(v, a, rope_tf, a) for (v, a) in agenda] # state is (value, most recent action, rope_transforms, root action)
+            best_root_action = None
+            for _ in range(args.lookahead_depth):
+                expansion_results = []
+                for (q, a, tf, r_a) in agenda:
+                    set_rope_transforms(tf)                 
+                    cur_xyz = Globals.sim.observe_cloud()
+                    success, bodypart2trajs = simulate_demo(cur_xyz, actionfile[a], animate=False)
                     if args.animation:
                         Globals.viewer.Step()
-                    next_xyz = Globals.sim.observe_cloud()
-
-                    next_state = ("eval_%i"%get_unique_id(), next_xyz)
-                    if not args.twostep_lookahead:
-                        state_values.append(value_fn(next_state))
-                    level1_states.append(next_xyz)
-                    trajectories.append(bodypart2trajs)
-                    end_rope_tfs.append(get_rope_transforms())
-
-                    if is_knot(next_xyz):
-                        knot_action_ind = i_lookahead
+                        result_cloud = Globals.sim.observe_cloud()
+                    if is_knot(result_cloud):
+                        best_root_action = r_a
                         break
-
-                    if args.twostep_lookahead:
-                        next_q_values = [q_value_fn(next_state[:], action) for action in actions]
-                        next_best_action_inds = sorted(range(len(next_q_values)), key=lambda i: -next_q_values[i])[:args.lookahead_branches]
-                        for next_best_action_ind in next_best_action_inds:
-                            level1_q_values.append([i_lookahead, actions[next_best_action_ind], next_q_values[next_best_action_ind]])
-
-                if knot_action_ind >= 0:
-                    # If knot has been identified, choose that action and skip further lookahead
-                    redprint("IDENTIFIED KNOT")
-                    best_action_ind = knot_action_ind
-                elif not args.twostep_lookahead:
-                    best_action_ind = np.argmax(state_values)
-                else:
-                    level2_best_action_inds = sorted(range(len(level1_q_values)), key=lambda i: -level1_q_values[i][2])[:args.lookahead_branches]
-                    level2_best_actions = [level1_q_values[level2_best_action_ind] for level2_best_action_ind in level2_best_action_inds]
-                    level1_inds = [a[0] for a in level2_best_actions]
-
-                    if all([a == level1_inds[0] for a in level1_inds]):
-                        # Skip ahead if all the best q-values are from the same level 1 action
-                        redprint("SKIPPING AHEAD")
-                        best_action_ind = level2_best_actions[0][0]
-                        print level1_q_values
-                    else:
-                        # Simulate next level of lookahead
-                        for (level2_i, level2_action) in enumerate(level2_best_actions):
-                            redprint("looking ahead, depth 2: %i/%i\r"%(level2_i+1, args.lookahead_branches))
-                            level1_i = level2_action[0]  # Index of action taken in level 1 of lookahead
-                            set_rope_transforms(end_rope_tfs[level1_i])
-                            success, bodypart2trajs = simulate_demo(level1_states[level1_i], actionfile[level2_action[1]], animate=False)
-                            if args.animation:
-                                Globals.viewer.Step()
-
-                            next_state = ("eval_%i"%get_unique_id(), Globals.sim.observe_cloud())
-                            if is_knot(next_state[1]):
-                                state_values.append(np.inf)
-                                break
-                            state_values.append(value_fn(next_state))
-
-                        
-                        best_action_ind = level2_best_action_inds[np.argmax(state_values)][0]
-
-                best_action = best_actions[best_action_ind]
-                if args.animation:
-                    redprint("Simulating best action %s"%(best_action))
-                    set_rope_transforms(start_rope_tfs)
-                    simulate_demo_traj(new_xyz, actionfile[best_action], trajectories[best_action_ind], animate=args.animation)
-                set_rope_transforms(end_rope_tfs[best_action_ind])
-                trajs = trajectories[best_action_ind]
-            else:
-                best_action_inds = sorted(range(len(q_values)), key=lambda i: -q_values[i])
-                best_actions = [actions[ind] for ind in best_action_inds] # first N actions in decreasing order of qvalues
-                best_action = best_actions[0]
-                if best_action == 'done':
-                    best_action = best_actions[1]
-                redprint("Simulating best action %s"%(best_action))
-                set_rope_transforms(get_rope_transforms())
-                success, trajs = simulate_demo(new_xyz, actionfile[best_action], animate=args.animation)
-                set_rope_transforms(get_rope_transforms())
+                    expansion_results.append((result_cloud, a, get_rope_transforms(), r_a))
+                if best_root_action is not None:
+                    redprint('Knot Found, stopping search early')
+                    break
+                agenda = []
+                for (cld, incoming_a, tf, r_a) in expansion_results:
+                    next_state = ("eval_%i"%get_unique_id(), cld)
+                    q_values = [(q_value_fn(next_state, action), action, tf, r_a) for action in actions]
+                    agenda.extend(q_values)
+                agenda.sort(key = lambda v: -v[0])
+                agenda = agenda[:args.lookahead_width]                    
+                first_root_action = agenda[0][-1]
+                if all(r_a == first_root_action for (_, _, _, r_a) in agenda):
+                    best_root_action = first_root_action
+                    redprint('All best actions have same root, stopping search early')
+                    break
+            if best_root_action is None:
+                best_root_action = agenda[0][-1]
+            set_rope_transforms(rope_tf) # reset rope to initial state
+            success, trajs = simulate_demo(new_xyz, actionfile[best_root_action], animate=args.animation)
+            set_rope_transforms(get_rope_transforms())
             
             if save_results:
                 result_file[i_task].create_group(str(i_step))
