@@ -1,9 +1,9 @@
 \section{Determining a Policy}
 
-Given an appropriate choice of $\phi$, we can set up an optimization problem
-based on the formulation outlined in Section~\ref{sec:formulation}. Solving this
-optimization problem produces a weight vector $w$, which defines an approximate
-Q-function:
+Given an appropriate choice of $\featurefn{}$, we can set up an optimization
+problem based on the formulation outlined in
+Section~\ref{sec:formulation}. Solving this optimization problem produces a
+weight vector $w$, which defines an approximate Q-function:
 
 \begin{equation}
   \tilde{Q}(s,a) = w^\intercal \phi(s,a)
@@ -24,8 +24,8 @@ $\pi$ is an optimal policy. However, since the constraints in the optimization
 problem are only a subset of the full set of constraints imposed by the MDP, and
 the approximate Q-function is simply a linear combination of the features, in
 practice $\tilde{Q}$ serves as only a loose approximation of the true function
-$Q$. Thus, other choices of $\pi$ instead of the na\"{\i}ve greedy policy have
-the potential to improve the robustness of action selection.
+$Q$. Thus, other choices of $\policyvar{}$ instead of the na\"{\i}ve greedy
+policy have the potential to improve the robustness of action selection.
 
 One such strategy for determining a policy takes advantage of the fact that
 learning an approximate Q-function confers the ability to compare the value of
@@ -40,13 +40,14 @@ to a depth of $d$, then select the initial action which yields the successor
 with the highest $\tilde{V}$, where $\tilde{V}$ is defined as
 
 \begin{equation}
-  \tilde{V}(s) = \max_{a \in \mathcal{A}} \tilde{Q}(s, a).
+  \tilde{V}(\statevar) = \max_{\actionvar \in \actionset} \tilde{Q}(\statevar, \actionvar).
 \end{equation}
 
 
 If at any point during this expansion we encounter a goal state, we select the
-action that leads to it---this is equivalent to enforcing $\tilde{V}(g) \geq
-\tilde{V}(s)$ for $g \in \mathcal{G}, s \not\in \mathcal{G}$.
+action that leads to it---this is equivalent to enforcing
+$\tilde{V}(\statevar{}) \geq \tilde{V}(\statevar{}')$ for $\statevar{} \in
+\goalset{}, \statevar{}' \not\in \goalset{}$.
 
 We evaluate the effectiveness of the greedy policy and the family of beam search
 lookahead policies in Section~\ref{sec:experiments}.
