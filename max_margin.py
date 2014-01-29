@@ -468,13 +468,16 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             zi_var.Obj = value
         self.model.update()
     
-    def add_bellman_constraint(self, curr_action_phi, next_action_phi, yi_var, update=True):
+    def add_bellman_constraint(self, curr_action_phi, next_action_phi, yi_var, update=True, final_transition=False):
         lhs_coeffs = [(p, w) for w, p in zip(self.w, curr_action_phi) if abs(p) >= eps]
         lhs_coeffs.append((1, self.w0))
         lhs = grb.LinExpr(lhs_coeffs)
-        rhs_coeffs = [(self.gamma*p, w) for w, p in zip(self.w, next_action_phi) if abs(p) >= eps]
+        if final_transition:
+            rhs_coeffs = []
+        else:
+            rhs_coeffs = [(self.gamma*p, w) for w, p in zip(self.w, next_action_phi) if abs(p) >= eps]
+            rhs_coeffs.append((self.gamma, self.w0))
         rhs_coeffs.append((1, yi_var)) #flip
-        rhs_coeffs.append((self.gamma, self.w0))
         rhs = grb.LinExpr(rhs_coeffs)
         rhs += self.action_reward
         # w'*curr_phi <= -1 + yi + gammma * w'*next_phi
@@ -576,16 +579,17 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
                 curr_state_i, next_state_i, _ = example.split('-')
                 curr_action_phi = constr['exp_features'][:]
                 next_action_phi = constr['rhs_phi'][:]
-                if next_state_i in ignore_goal:
-                    next_action_phi = 0*next_action_phi
+                final_transtion = next_state_i in ignore_goal
                 if slack_name not in yi_names:
                     yi_var = self.add_yi(slack_name)
                     yi_names[slack_name] = yi_var
-                self.add_bellman_constraint(curr_action_phi, next_action_phi, yi_names[slack_name], update=False)
+                self.add_bellman_constraint(curr_action_phi, next_action_phi, yi_names[slack_name], 
+                                            update=False, final_transition=final_transition)
                 if traj_i not in action_phis:
                     action_phis[traj_i] = {}
                 action_phis[traj_i][curr_state_i] = curr_action_phi
-                action_phis[traj_i][next_state_i] = next_action_phi
+                if not final_transition: # only add this state if it isn't an end state
+                    action_phis[traj_i][next_state_i] = next_action_phi
             elif slack_name.startswith('zi'):
                 if not ignore_goal:
                     goal_action_phi = constr['exp_features'][:]

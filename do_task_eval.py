@@ -569,12 +569,15 @@ if __name__ == "__main__":
                     if is_knot(result_cloud):
                         best_root_action = r_a
                         break
-                    expansion_results.append((result_cloud, a, get_rope_transforms(), r_a))
+                    expansion_results.append((result_cloud, a, success, get_rope_transforms(), r_a))
                 if best_root_action is not None:
                     redprint('Knot Found, stopping search early')
                     break
                 agenda = []
-                for (cld, incoming_a, tf, r_a) in expansion_results:
+                for (cld, incoming_a, success, tf, r_a) in expansion_results:
+                    if not success:
+                        agenda.append((-np.inf, actions[0], tf, r_a))
+                        continue
                     next_state = ("eval_%i"%get_unique_id(), cld)
                     q_values = [(q_value_fn(next_state, action), action, tf, r_a) for action in actions]
                     agenda.extend(q_values)
