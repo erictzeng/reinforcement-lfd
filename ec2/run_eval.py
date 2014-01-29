@@ -4,7 +4,7 @@ import argparse
 import os.path
 from pprint import pprint
 
-def build_conf(weightfile, num_instances=1, extra_copies=None, extra_flags=None):
+def build_conf(weightfile, eval_dir='jobs/eval', num_instances=1, extra_copies=None, extra_flags=None):
     if extra_flags is None:
         extra_flags = []
     if extra_copies is None:
@@ -13,8 +13,8 @@ def build_conf(weightfile, num_instances=1, extra_copies=None, extra_flags=None)
     conf = {}
     conf['keyfile'] = '~/.ssh/eric-east-nv.pem'
     conf['commit'] = 'HEAD'
-    conf['output'] = 'jobs/eval/{0}/{0}.h5'.format(name, name)
-    conf['workdir'] = 'jobs/eval/{}'.format(name)
+    conf['output'] = os.path.join(eval_dir, '{0}/{0}.h5'.format(name, name))
+    conf['workdir'] = os.path.join(eval_dir, '{}'.format(name))
     conf['num_examples'] = 100
     conf['start'] = 0
     conf['end'] = conf['num_examples']
@@ -26,7 +26,8 @@ def build_conf(weightfile, num_instances=1, extra_copies=None, extra_flags=None)
         conf['command'] += ' ' + ' '.join(extra_flags)
     instance_info = {}
     conf['instance_info'] = instance_info
-    instance_info['image_id'] = 'ami-11ead678'
+    #instance_info['image_id'] = 'ami-8fe9d6e6'
+    instance_info['image_id'] = 'ami-333f005a'
     instance_info['key_name'] = 'eric-east-nv'
     instance_info['security_groups'] = ['reinforcement-lfd']
     instance_info['instance_type'] = 'c3.2xlarge'
