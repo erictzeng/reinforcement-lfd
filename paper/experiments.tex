@@ -1,19 +1,23 @@
 \section{Experiments}
 \label{sec:experiments}
-\input{variables.tex}
 
 The proposed method for choosing an action was evaluated for the task of knot tying using the Willow Garage PR2 robot platform. 
 The demonstrations were collected in the real world, where a human controlled the PR2's gripper to tie a knot.
-The labelled examples and the evaluation of the trained policy were run in a simulation environment containing the rope and the PR2.
+The labelled examples, crossvalidation and the evaluation of the trained policy were run in a simulation environment containing the rope and the PR2.
 The rope was simulated as a linked chain of capsules with bending and torsional constraints using Bullet Physics.
 To evaluate the trained policy, we measured the success rate of tying an overhand knot performing 5 sequences of actions or less.
 
 The set of demonstrations consist of 148 pairs of point clouds and gripper trajectories.
-The point clouds of the ropes were collected using the Asus Xtion Pro and filtered based in color to remove the background.
-The gripper trajectories were recorded as a human moved the PR2's gripper to tie a knot.
-Even though a human could tie a knot in a sequence of 3 demonstrations, the demonstrations also contained demonstrations that fixed the rope.
-\al{should I mention that 93 demonstrations were such that made the rope configuration to be closer to the goal, while the remaining 55 demonstrations were such that made the rope configuration recover from failures?}
+These demonstrations are from the dataset collected by Schulman et al. \cite{Schulmanetal_ISRR2013} in their rope experiments.
+The point clouds of the ropes were collected using an RGBD camera and filtered based on color to remove the background.
+The gripper trajectories were recorded kinesthetically, by moving the robot's gripper to tie a knot.
+The dataset contains 93 demonstrations that demonstrates tying a knot in a sequence of 3 demonstrations, as well as 55 demonstrations that demonstrates recovering from failure states.
 
 The expert labelled examples consist of 1000 pairs of point clouds and actions.
-To collect this data, we simulated sequences of actions for various initial point cloud states, with a human in the loop selecting actions.
+To collect this data, we simulated sequences of actions for various initial rope configurations, with a human in the loop selecting actions.
+These initial rope states are perturbed configurations of randomly chosen initial rope states from the demontrations.
+In order to perturb an initial rope state, five points uniformly spaced along the rope, were dragged uniformly random within a radius of 15 cm in a random direction.
+For every initial rope configuration, a human expert selected the sequence of actions to tie a knot.
+In practice, not all the actions were applied and simulated to the current state.
+Instead, the actions were ranked in increasing order of registration cost with respect to the current state, under the assumption that actions with smaller registration cost are more likely to be better.
 
