@@ -6,6 +6,8 @@
 \usepackage{multicol}
 \usepackage[bookmarks=true]{hyperref}
 \usepackage{color}
+\usepackage{amsmath}
+\usepackage{amssymb}
 
 \pdfinfo{
    /Author (Homer Simpson)
@@ -14,6 +16,9 @@
    /Subject (Robots)
    /Keywords (Robots;Overlords)
 }
+
+\DeclareMathOperator*{\argmin}{argmin}
+\DeclareMathOperator*{\argmax}{argmax}
 
 \newcommand{\et}[1]{\textcolor{blue}{Eric: #1}}
 \newcommand{\dhm}[1]{\textcolor{red}{Dylan: #1}}
@@ -83,6 +88,8 @@
 \input{max_margin_formulation.tex}
 
 \input{features.tex}
+
+\input{policy.tex}
 
 \input{results.tex}
 
