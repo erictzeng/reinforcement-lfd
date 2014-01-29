@@ -610,7 +610,7 @@ if __name__ == "__main__":
                     else:
                         # Simulate next level of lookahead
                         for (level2_i, level2_action) in enumerate(level2_best_actions):
-                            redprint("looking ahead, depth 2: %i/%i\r"%(level2_i+1, args.lookahead_brances))
+                            redprint("looking ahead, depth 2: %i/%i\r"%(level2_i+1, args.lookahead_branches))
                             level1_i = level2_action[0]  # Index of action taken in level 1 of lookahead
                             set_rope_transforms(end_rope_tfs[level1_i])
                             success, bodypart2trajs = simulate_demo(level1_states[level1_i], actionfile[level2_action[1]], animate=False)
