@@ -551,6 +551,7 @@ if __name__ == "__main__":
 
             redprint("Choosing an action")
             q_values = [q_value_fn(state, action) for action in actions]
+            q_values_root = q_values
             rope_tf = get_rope_transforms()
 
             assert args.lookahead_width>= 1, 'Lookahead branches set to zero will fail to select any action'
@@ -565,7 +566,7 @@ if __name__ == "__main__":
                     success, bodypart2trajs = simulate_demo(cur_xyz, actionfile[a], animate=False)
                     if args.animation:
                         Globals.viewer.Step()
-                        result_cloud = Globals.sim.observe_cloud()
+                    result_cloud = Globals.sim.observe_cloud()
                     if is_knot(result_cloud):
                         best_root_action = r_a
                         break
@@ -597,12 +598,12 @@ if __name__ == "__main__":
             if save_results:
                 result_file[i_task].create_group(str(i_step))
                 result_file[i_task][str(i_step)]['rope_nodes'] = Globals.sim.rope.GetControlPoints()
-                result_file[i_task][str(i_step)]['best_action'] = str(best_action)
+                result_file[i_task][str(i_step)]['best_action'] = str(best_root_action)
                 trajs_g = result_file[i_task][str(i_step)].create_group('trajs')
                 for (i_traj,traj) in enumerate(trajs):
                     traj_g = trajs_g.create_group(str(i_traj))
                     for (bodypart, bodyparttraj) in traj.iteritems():
                         traj_g[str(bodypart)] = bodyparttraj
-                result_file[i_task][str(i_step)]['values'] = q_values
+                result_file[i_task][str(i_step)]['values'] = q_values_root
         if save_results:
             result_file.close()
