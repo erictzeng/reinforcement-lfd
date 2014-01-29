@@ -349,6 +349,14 @@ def get_quad_feature_fn(actionfile):
         return act_set.quad_features(state, action)
     return (feature_fn, 2 + 2*act_set.num_actions, actionfile)
 
+def get_quad_feature_noregcostsq_fn(actionfile):
+    if type(actionfile) is str:
+        actionfile = h5py.File(actionfile, 'r')
+    act_set = ActionSet(actionfile)
+    def feature_fn(state, action):
+        return act_set.quad_features_noregcost(state, action)
+    return (feature_fn, 1 + 2*act_set.num_actions, actionfile)
+
 def get_action_only_margin_fn(actionfile):
     if type(actionfile) is str:
         actionfile = h5py.File(actionfile, 'r')
@@ -513,6 +521,16 @@ class ActionSet(object):
         feat[1] = s
         feat[2+self.action_to_ind[action]] = s
         feat[2+self.num_actions+self.action_to_ind[action]] = 1
+        return feat
+
+    def quad_features_noregcostsq(self, state, action):
+        feat = np.zeros(1 + 2*self.num_actions)
+        if action == 'done':
+            return feat
+        s = registration_cost_cheap(state[1], self.get_ds_cloud(action))
+        feat[0] = s
+        feat[1+self.action_to_ind[action]] = s
+        feat[1+self.num_actions+self.action_to_ind[action]] = 1
         return feat
 
     def action_only_margin(self, s, a1, a2):
@@ -883,7 +901,7 @@ def select_feature_fn(args):
     elif args.quad_landmark_features and args.landmark_features:
         print 'Using bias, quad, landmark ({}) features.'.format(args.landmark_features)
         curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features, rbf=args.rbf)
-        fns = [get_quad_feature_fn, curried_landmark_fn]
+        fns = [get_quad_feature_noregcostsq_fn, curried_landmark_fn]
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     elif args.landmark_features and not args.only_landmark:
         print 'Using bias, quad, sc, ropedist, landmark ({}) features.'.format(args.landmark_features)
