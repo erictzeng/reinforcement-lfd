@@ -632,6 +632,7 @@ if __name__ == "__main__":
                     set_rope_transforms(start_rope_tfs)
                     simulate_demo_traj(new_xyz, actionfile[best_action], trajectories[best_action_ind], animate=args.animation)
                 set_rope_transforms(end_rope_tfs[best_action_ind])
+                trajs = trajectories[best_action_ind]
             else:
                 best_action_inds = sorted(range(len(q_values)), key=lambda i: -q_values[i])
                 best_actions = [actions[ind] for ind in best_action_inds] # first N actions in decreasing order of qvalues
@@ -640,12 +641,18 @@ if __name__ == "__main__":
                     best_action = best_actions[1]
                 redprint("Simulating best action %s"%(best_action))
                 set_rope_transforms(get_rope_transforms())
-                success, _ = simulate_demo(new_xyz, actionfile[best_action], animate=args.animation)
+                success, trajs = simulate_demo(new_xyz, actionfile[best_action], animate=args.animation)
                 set_rope_transforms(get_rope_transforms())
             
             if save_results:
                 result_file[i_task].create_group(str(i_step))
                 result_file[i_task][str(i_step)]['rope_nodes'] = Globals.sim.rope.GetControlPoints()
+                result_file[i_task][str(i_step)]['best_action'] = str(best_action)
+                trajs_g = result_file[i_task][str(i_step)].create_group('trajs')
+                for (i_traj,traj) in enumerate(trajs):
+                    traj_g = trajs_g.create_group(str(i_traj))
+                    for (bodypart, bodyparttraj) in traj.iteritems():
+                        traj_g[str(bodypart)] = bodyparttraj
                 result_file[i_task][str(i_step)]['values'] = q_values
         if save_results:
             result_file.close()
