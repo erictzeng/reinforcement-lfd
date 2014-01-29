@@ -35,7 +35,12 @@ def seg_intersect(p1,p2,p3,p4) :
     else:
         return None
 
-def calculateCrossings(rope_nodes):
+def calculateIntersections(rope_nodes):
+    """
+    Takes in the nodes of a rope with n links.
+    Returns the n x n matrix intersections, where intersections[i,j] = u_ij if link i intersects with link j at point pt_i, and intersections[i,j] = -1 otherwise.
+    pt_i is the point on the line segment of link i with parameter u_ij.
+    """
     intersections = -1*np.ones((rope_nodes.shape[0]-1, rope_nodes.shape[0]-1))
     for i_node in range(rope_nodes.shape[0]-1):
         for j_node in range(i_node+2,rope_nodes.shape[0]-1):
@@ -43,7 +48,14 @@ def calculateCrossings(rope_nodes):
             if intersect:
                 intersections[i_node, j_node] = intersect[0]
                 intersections[j_node, i_node] = intersect[1]
-    crossings = [] # 1 for overcrossings and -1 for undercrossings
+    return intersections
+
+def calculateCrossings(rope_nodes):
+    """
+    Returns a list of crossing patterns by following the rope nodes; +1 for overcrossings and -1 for undercrossings.
+    """
+    intersections = calculateIntersections(rope_nodes)
+    crossings = []
 #     links_to_cross_info = {}
 #     curr_cross_id = 1
     for i_link in range(intersections.shape[0]):
