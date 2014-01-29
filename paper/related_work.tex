@@ -3,17 +3,17 @@ Related work for our contribution stems from three areas of research: deformable
 
 \subsection{Learning from Demonstrations}
 The problem of learning from demonstrations deals with the generalization of expert demonstrations to new scenarios. 
-This is a broad area of research with many different approaches and broad applicabilty.\dhm{Cite Veloso survey and Schaal paper}
+This is a broad area of research with many different approaches and broad applicabilty~\cite{Argall_2009, Schaal_1999}.
 The approach to learning from demonstrations applied here is most closely linked to behavioral cloning; where an agent atempts to learn a function that directly maps states to actions so as to mimic the experts behavior. 
 
-One of the first successfull applications of this strategy was the ALVINN system, which utilized a neural network to learning a policy such that an autonomous car could follow a road\dhm{CITE}.
+One of the first successful applications of this strategy was the ALVINN system~\cite{Pomerleau_NIPS1989}, which utilized a neural network to learning a policy such that an autonomous car could follow a road.
 In this a function is learned that can map image input and range finder input to left and right steering commands. 
-This research direction has been furthered recently by Lecun et al. \dhm{CITE} who use a convolutional network to learn a steering policy for off-road driving.
-Bagnell et al. propose a method to directly control a Micro UAV from RGB camera input and describe a method to account for differences in the training distribution under expert demonstration and the induced distribution under a learned policy\dhm{CITE}. 
+This research direction has been furthered recently by \citet{muller2005off}, who use a convolutional network to learn a steering policy for off-road driving.
+\citet{Ross_2013} propose a method to directly control a Micro UAV from RGB camera input and describe a method to account for differences in the training distribution under expert demonstration and the induced distribution under a learned policy. 
 These approaches differ from the proposed method in that they do learning for low-dimensional action spaces and directly imitate the expert.
 In contrast, MMQL copes with high dimensional state and action spaces as well as accounting for temporal constraints from demonstrated behavior.
 
-Miyamoto et al. \dhm{CITE} describe an approach for learning to play Kendama and hit a tennis ball from demonstrated actions. 
+Miyamoto et al. describe an approach for learning to play Kendama~\cite{Miyamoto_1996} and hit a tennis ball~\cite{Miyamoto_1998} from demonstrated actions. 
 This method was successful at generalizing a human trajectory to a robot and incorporates the sequential combination of multiple demonstrations.
 However, their approach requires a hand tuning of waypoints and does not generalize to new scenes.
 
