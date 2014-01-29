@@ -12,11 +12,9 @@ import sys
 # F
 
 
-SLACK_COEFF_VALS = [10 ** i for i in range(3, 4)]
-BELLMAN_COEFF_VALS = [10 ** i for i in range(-1, 4)]
+SLACK_COEFF_VALS = [50, 100, 300, 500, 1000]
+BELLMAN_COEFF_VALS = [50, 100, 300, 500, 1000]
 
-SLACK_COEFF_VALS = [50, 100, 300]
-BELLMAN_COEFF_VALS = [50, 100, 300]
 def parse_modelname(modelfile):
     modelfile = os.path.basename(modelfile)
     match = re.match(r'(.*)_model.mps$', modelfile)
