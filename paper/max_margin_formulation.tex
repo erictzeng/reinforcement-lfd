@@ -1,4 +1,4 @@
-\section{Problem Description}
+\section{Problem Description and Formulation}
 \label{sec:formulation}
 %\input{variables.tex}
 
@@ -9,14 +9,15 @@ specify our assumptions regarding the problems it is applied to.
 
 The required inputs of our pipeline are a set \demoset{}
 of expert demonstrations and a set \labelset{} of labeled sequences of
-task executions.
+task executions (Section~\ref{subsec:labeledex}).
 Each \demovar{} $\in$ \demoset{} corresponds to a complete expert-guided
 demonstration of the given robotic task or a movement primitive of a complete
-demonstration --- the latter may be necessary for complex, multi-step tasks.
+demonstration --- our WillSmith formulation assumes the latter,
+since it is often necessary for complex, multi-step tasks.
 In our application of knot tying, we split each expert demonstration of
 tying a knot into three or four movement primitives. The movement primitives
 also include demonstration segments that attempt to
-recover from failure states \cite{Schulmanet al_ISRR2013}.
+recover from failure states \cite{Schulmanetal_ISRR2013}.
 Ideally, the segments in \demoset{} contain at least several demonstrations
 of each movement primitive in the task.
 
@@ -25,12 +26,6 @@ where \demosub{pc} is a point cloud representation of the underlying
 starting state of the demonstration, and \demosub{traj} stores
 the trajectory executed by the expert in that demonstration. The trajectory
 space \trajset{} spans the set of all possible trajectories.
-
-Each \labelsub{j} $\in$ \labelset{} corresponds to a labeled sequence of
-task executions of length \nsub{j}: [\sapairsub{1}, \sapairsub{2}, \ldots,
-\sapairsub{\nsub{j}}]. \sh{Not sure if we should talk about \labelset{}
-before or after describing MDP, since we need the transition function to
-completely specify \labelset{}. Opinions?}
 
 \subsection{Markov Decision Process}
 Selecting from multiple demonstrations can be framed as a Markov Decision
@@ -46,20 +41,44 @@ Process (MDP), which allows us to learn a policy through applying Q-learning. Th
 \rewardfn{}(\statevar{}) &= -1 {[ \statevar{} \not \in \goalset{} ]} \\
 \end{align*}
 
+In the above specification, \goalset{} denotes the goal set and contains all
+states that satisfy the predefined goal, i.e. tying a knot.
 For any \demovar{} $\in$ \demoset{}, \policysub{d}{s} denotes the trajectory
 resulting from applying trajectory transfer to \demosub{traj}, using
 the non-rigid registration from state \demosub{pc} to \statevar{}.
-The policy \policysub{d}{s} belongs to the set of all policies, \policyset{} : \transitionfn{} \text{x} \stateset{} $\rightarrow$
-\stateset{}. There is a one-to-one mapping between demonstrations \demovar{}
+There is a one-to-one mapping between demonstrations \demovar{}
 $\in$ \demoset{} and actions \actionvar{} $\in$ \actionset{}, so to simplify
 notation, from this point forwards we will refer to demonstrations and
 actions interchangeably.
-With this simplification, we can loosely define \policysub{\actionsub{j}}{\statevar{}} as the
-state that results from applying trajectory transfer to the corresponding
-demonstration \demosub{j}'s trajectory and executing the resulting trajectory
-on the state \statevar{}.
 
-The goal set \goalset{} contains all states that satisfy the
-predefined goal, i.e. tying a knot.
+The MDP transition function \transitionfn{} is deterministic. For states
+\statevar{} in \goalset{}, we assume all actions lead back to the same
+goal state \statevar{}. For
+non-goal states, we loosely define \policysub{\actionvar}{\statevar{}}
+as the state that results from applying trajectory transfer to the corresponding
+demonstration \demovar{}'s trajectory and executing the resulting trajectory
+on the state \statevar{}. Then \policysub{\actionvar{}}{\statevar{}} is a
+policy belonging to the set of all policies, \policyset{} : \transitionfn{}
+\text{x} \stateset{} $\rightarrow$ \stateset{}. Our MDP's reward function is
+simply $-1$ for all non-goal states.
+
+\subsection{Labeled Examples}
+\label{subsec:labeledex}
+
+As mentioned, one of the required inputs to our pipeline is a set \labelset{}
+of labeled sequences of task executions. Each \labelsub{j} $\in$ \labelset{}
+corresponds to a labeled sequence of
+task executions of length \nsub{j}: \labelsub{j} = [\sapairsub{1},
+\sapairsub{2}, \ldots, \sapairsub{\nsub{j}}]. Each labeled sequence corresponds
+to a single complete task execution, ordered in the sequence of states and
+actions taken. More formally, it is required that for each trajectory
+\labelsub{j} $\in$ \labelset{}, for $1 \leq i \leq$ \nsub{j},
+\begin{align*}
+T(\statesubsup{i}{(j)}, \actionsubsup{i}{(j)}) &= \statesubsup{i+1}{(j)} \text{ for } i < \nsub{j} \\
+\text{and } T(\statesubsup{\nsub{j}}{(j)}, \actionsubsup{\nsub{j}}{(j)}) &\in \goalset{}
+\end{align*}
+
+\subsection{Max Margin Formulation}
 
 
+\subsection{Max Margin Q-Learning Formulation}
