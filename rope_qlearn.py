@@ -354,7 +354,7 @@ def get_quad_feature_noregcostsq_fn(actionfile):
         actionfile = h5py.File(actionfile, 'r')
     act_set = ActionSet(actionfile)
     def feature_fn(state, action):
-        return act_set.quad_features_noregcost(state, action)
+        return act_set.quad_features_noregcostsq(state, action)
     return (feature_fn, 1 + 2*act_set.num_actions, actionfile)
 
 def get_action_only_margin_fn(actionfile):
