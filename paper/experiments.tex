@@ -1,23 +1,38 @@
 \section{Experiments}
 \label{sec:experiments}
 
-The proposed method for choosing an action was evaluated for the task of knot tying using the Willow Garage PR2 robot platform. 
+The proposed method for choosing an action is evaluated for the task of tying an overhand knot using the Willow Garage PR2 robot platform. 
 The demonstrations were collected in the real world, where a human controlled the PR2's gripper to tie a knot.
-The labelled examples, crossvalidation and the evaluation of the trained policy were run in a simulation environment containing the rope and the PR2.
-The rope was simulated as a linked chain of capsules with bending and torsional constraints using Bullet Physics.
-To evaluate the trained policy, we measured the success rate of tying an overhand knot performing 5 sequences of actions or less.
+The training, validation and evaluation of the trained policy are ran in a simulation environment containing the rope and the PR2.
+The rope is simulated as a linked chain of capsules with bending and torsional constraints using Bullet Physics.
+To evaluate the trained policy, we measure the success rate, where we define success as tying an overhand knot in a sequence of 5 or less actions.
 
-The set of demonstrations consist of 148 pairs of point clouds and gripper trajectories.
+The set of demonstrations consists of 148 pairs of point clouds and gripper trajectories.
 These demonstrations are from the dataset collected by Schulman et al. \cite{Schulmanetal_ISRR2013} in their rope experiments.
-The point clouds of the ropes were collected using an RGBD camera and filtered based on color to remove the background.
+The point clouds of the ropes were collected using an RGBD camera and then filtered based on color to remove the background.
 The gripper trajectories were recorded kinesthetically, by moving the robot's gripper to tie a knot.
 The dataset contains 93 demonstrations that demonstrates tying a knot in a sequence of 3 demonstrations, as well as 55 demonstrations that demonstrates recovering from failure states.
 
-The expert labelled examples consist of 1000 pairs of point clouds and actions.
-To collect this data, we simulated sequences of actions for various initial rope configurations, with a human in the loop selecting actions.
+The expert labelled examples consists of 1000 pairs of point clouds and actions.
+To collect this data, we simulate sequences of actions for various initial rope configurations, with a human in the loop selecting the actions.
 These initial rope states are perturbed configurations of randomly chosen initial rope states from the demontrations.
-In order to perturb an initial rope state, five points uniformly spaced along the rope, were dragged uniformly random within a radius of 15 cm in a random direction.
-For every initial rope configuration, a human expert selected the sequence of actions to tie a knot.
-In practice, not all the actions were applied and simulated to the current state.
-Instead, the actions were ranked in increasing order of registration cost with respect to the current state, under the assumption that actions with smaller registration cost are more likely to be better.
+In order to perturb an initial rope state, five points uniformly spaced along the rope, are dragged uniformly at random within a radius of 15 cm in a random direction.
+For every initial rope configuration, a human expert selects the sequence of actions to tie a knot.
+In practice, not all the actions are applied and simulated to the current state.
+Instead, the actions are ranked in increasing order of registration cost with respect to the current state, under the assumption that actions with smaller registration cost are more likely to be better.
+
+To tune the optimization hyperparameters $C$, $D$ and $F$, we perform holdout validation on a validation set.
+\al{replace hyperparameters name.}
+The validation set consists of 100 random initial rope states, which are generated in the same way as in the training set.
+We run the trained policy on this validation set with no lookahead for different values of hyperparameters, and choose the set of hyperparameters that gives the highes sucess rate. Even though we also evaluate using lookahead, we don't revalidate the hyperparameters due to lack of computation time.
+
+The evaluation set consists of 500 initial rope states from the same distribution as the training and validation set.
+We evaluate the proposed method under the following policies:
+\begin{itemize}
+  \item no lookahead
+  \item one-step lookahead with width 10
+  \item two-step lookahead with width 5
+  \item \al{do we want to do variable width lookahead?}
+\end{itemize}
+We also evaluate using the method presented in Schulman et al. as a baseline to compare our results. Their policy is to choose the action that has the smallest bidirectional registration cost with respect to the current state.
 
