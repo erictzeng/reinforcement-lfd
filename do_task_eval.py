@@ -426,6 +426,7 @@ if __name__ == "__main__":
     parser.add_argument('--ensemble', action='store_true')
     parser.add_argument('--rbf', action='store_true')
     parser.add_argument('--landmark_features')
+    parser.add_argument('--quad_landmark_features', action='store_true')
     parser.add_argument('--only_landmark', action="store_true")
     parser.add_argument("--quad_features", action="store_true")
     parser.add_argument("--sc_features", action="store_true")
@@ -543,12 +544,13 @@ if __name__ == "__main__":
             new_xyz = Globals.sim.observe_cloud()
             state = ("eval_%i"%get_unique_id(), new_xyz)
     
-            redprint("Choosing an action")
-            q_values = [q_value_fn(state, action) for action in actions]
 
             Globals.sim.observe_cloud()
             if is_knot(Globals.sim.observe_cloud()):
                 break;
+
+            redprint("Choosing an action")
+            q_values = [q_value_fn(state, action) for action in actions]
 
             if args.lookahead_branches > 1:
                 best_action_inds = sorted(range(len(q_values)), key=lambda i: -q_values[i])
@@ -567,10 +569,10 @@ if __name__ == "__main__":
                 for (i_lookahead, action) in zip(range(len(best_actions)), best_actions):
                     redprint("looking ahead, depth 1: %i/%i\r"%(i_lookahead+1,args.lookahead_branches))
                     set_rope_transforms(start_rope_tfs)
-                    success, bodypart2trajs = simulate_demo(new_xyz, actionfile[action], animate=args.animation)
+                    success, bodypart2trajs = simulate_demo(new_xyz, actionfile[action], animate=False)
+                    if args.animation:
+                        Globals.viewer.Step()
                     next_xyz = Globals.sim.observe_cloud()
-                    if is_knot(next_xyz):
-                        knot_action_ind = i_lookahead
 
                     next_state = ("eval_%i"%get_unique_id(), next_xyz)
                     if not args.twostep_lookahead:
@@ -578,6 +580,10 @@ if __name__ == "__main__":
                     level1_states.append(next_xyz)
                     trajectories.append(bodypart2trajs)
                     end_rope_tfs.append(get_rope_transforms())
+
+                    if is_knot(next_xyz):
+                        knot_action_ind = i_lookahead
+                        break
 
                     if args.twostep_lookahead:
                         next_q_values = [q_value_fn(next_state[:], action) for action in actions]
@@ -607,12 +613,18 @@ if __name__ == "__main__":
                             redprint("looking ahead, depth 2: %i/%i\r"%(level2_i+1, args.lookahead_brances))
                             level1_i = level2_action[0]  # Index of action taken in level 1 of lookahead
                             set_rope_transforms(end_rope_tfs[level1_i])
-                            success, bodypart2trajs = simulate_demo(level1_states[level1_i], actionfile[level2_action[1]], animate=args.animation)
+                            success, bodypart2trajs = simulate_demo(level1_states[level1_i], actionfile[level2_action[1]], animate=False)
+                            if args.animation:
+                                Globals.viewer.Step()
 
                             next_state = ("eval_%i"%get_unique_id(), Globals.sim.observe_cloud())
+                            if is_knot(next_state[1]):
+                                state_values.append(np.inf)
+                                break
                             state_values.append(value_fn(next_state))
-                                
-                        best_action_ind = level2_best_actions[np.argmax(state_values)][0]
+
+                        
+                        best_action_ind = level2_best_action_inds[np.argmax(state_values)][0]
 
                 best_action = best_actions[best_action_ind]
                 if args.animation:

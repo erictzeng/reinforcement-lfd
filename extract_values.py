@@ -23,14 +23,13 @@ import os
 if __name__ == '__main__':
 
     result_file = h5py.File(args.results_file, 'r')
-    values = None
+    values = np.zeros((len(result_file),0))
     for i_task, task_info in result_file.iteritems():
-        if int(i_task) == 0:
-            values = np.zeros((len(result_file), len(task_info)))
+        if len(task_info) > values.shape[1]:
+            values = np.c_[values, np.zeros((len(result_file), len(task_info)-values.shape[1]))]
         for i_step, step_info in task_info.iteritems():
             values[int(i_task), int(i_step)] = np.max(step_info['values'][()])
     print values
     plt.plot(values.transpose())
-    plt.ylim([values[:,:3].min(), values[:,:3].max()])
     plt.show()
     ipy.embed()

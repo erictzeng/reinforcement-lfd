@@ -11,12 +11,12 @@ import sys
 # slacks - one global weight
 # F
 
-#SLACK_COEFF_VALS = [10 ** i for i in range(-1, 4)]
-#BELLMAN_COEFF_VALS = [10 ** i for i in range(-1, 4)]
 
-SLACK_COEFF_VALS = [10 ** i for i in range(1, 2)]
+SLACK_COEFF_VALS = [10 ** i for i in range(3, 4)]
 BELLMAN_COEFF_VALS = [10 ** i for i in range(-1, 4)]
 
+SLACK_COEFF_VALS = [50, 100, 300]
+BELLMAN_COEFF_VALS = [50, 100, 300]
 def parse_modelname(modelfile):
     modelfile = os.path.basename(modelfile)
     match = re.match(r'(.*)_model.mps$', modelfile)
@@ -35,10 +35,11 @@ def fake_args(modelfile, weightfile, slack_coeff, bellman_coeff):
     args.modelfile = modelfile
     args.weightfile = weightfile
     args.actionfile = 'data/misc/actions.h5'
-    args.demofile = 'labels/all_labels_fixed.h5'
+    args.demofile = 'data/labels/all_labels.h5'
     args.model = 'bellman'
-    args.ensemble = True
-    args.landmark_features = 'data/misc/landmarks/landmarks_70.h5'
+    args.ensemble = False
+    args.landmark_features = 'data/landmarks/landmarks_70.h5'
+    args.quad_landmark_features = True
     args.only_landmark = False
     args.rbf = True
     args.quad_features = False

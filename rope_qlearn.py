@@ -880,6 +880,11 @@ def select_feature_fn(args):
         if args.traj_features:
             fns.append(get_traj_diff_feature_fn)
         feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
+    elif args.quad_landmark_features and args.landmark_features:
+        print 'Using bias, quad, landmark ({}) features.'.format(args.landmark_features)
+        curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features, rbf=args.rbf)
+        fns = [get_quad_feature_fn, curried_landmark_fn]
+        feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
     elif args.landmark_features and not args.only_landmark:
         print 'Using bias, quad, sc, ropedist, landmark ({}) features.'.format(args.landmark_features)
         curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features, rbf=args.rbf)
@@ -1015,6 +1020,7 @@ if __name__ == '__main__':
     parser.add_argument('model', choices=['single', 'multi', 'bellman'])
     parser.add_argument('--ensemble', action='store_true')
     parser.add_argument('--landmark_features')
+    parser.add_argument('--quad_landmark_features', action='store_true')
     parser.add_argument('--only_landmark', action="store_true")
     parser.add_argument('--rbf', action='store_true')
     parser.add_argument("--quad_features", action="store_true")

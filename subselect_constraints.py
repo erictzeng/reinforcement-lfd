@@ -28,6 +28,7 @@ FEATURE_ORDERS = {'bias': ['reg_cost', 'bias'],
                   'rope_dist': ['reg_cost', 'bias', 'sc', 'rope_dist'],
                   'landmark': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark'],
                   'landmark_buggy': ['reg_cost', 'bias', 'reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark'],
+                  'quad_landmark': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'landmark'],
                   'ensemble': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark', 'done_bias', 'done_regcost', 'is_knot'],
                   'ensemble_nogoal': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark'],
                   'traj_diff': ['reg_cost_sq', 'reg_cost', 'bias_sq', 'bias', 'sc', 'rope_dist', 'landmark', 'done_bias', 'done_regcost', 'is_knot', 'traj_diff'],
@@ -108,8 +109,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('constraintfile')
     parser.add_argument('output_constraintfile')
-    parser.add_argument('input_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark', 'landmark_buggy', 'ensemble', 'ensemble_nogoal', 'traj_diff', 'traj_diff_nogoal'])
-    parser.add_argument('output_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark', 'ensemble', 'ensemble_nogoal', 'traj_diff', 'traj_diff_nogoal'])
+    parser.add_argument('input_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark', 'landmark_buggy', 'quad_landmark', 'ensemble', 'ensemble_nogoal', 'traj_diff', 'traj_diff_nogoal'])
+    parser.add_argument('output_features', choices=['bias', 'quad', 'sc', 'rope_dist', 'landmark', 'quad_landmark', 'ensemble', 'ensemble_nogoal', 'traj_diff', 'traj_diff_nogoal'])
     parser.add_argument('--rbf', action='store_true')
     args = parser.parse_args()
 
