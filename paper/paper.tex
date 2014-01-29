@@ -7,6 +7,7 @@
 \usepackage[bookmarks=true]{hyperref}
 \usepackage{color}
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{mathtools}
 
 \pdfinfo{
@@ -16,6 +17,9 @@
    /Subject (Robots)
    /Keywords (Robots;Overlords)
 }
+
+\DeclareMathOperator*{\argmin}{argmin}
+\DeclareMathOperator*{\argmax}{argmax}
 
 \newcommand{\et}[1]{\textcolor{blue}{Eric: #1}}
 \newcommand{\dhm}[1]{\textcolor{red}{Dylan: #1}}
@@ -77,8 +81,6 @@
 \IEEEpeerreviewmaketitle
 
 \input{introduction.tex}
-
-\input{background.tex}
 
 \input{related_work.tex}
 
@@ -170,26 +172,19 @@ and the entry in the compiled PDF would look like:
 
 \def\tmplabel#1{[#1]}
 
-\begin{enumerate}
-\item[\tmplabel{1}] Tad McGeer. \href{http://ijr.sagepub.com/content/9/2/62.abstract}{Passive Dynamic
-Walking}. {\em The International Journal of Robotics Research}, 9(2):62--82,
-1990.
-\end{enumerate}
-%
-where the title of the article is a link that takes you to the article on IJRR's website. 
+\input{background.tex}
 
+\input{max_margin_formulation.tex}
 
-Linking cited articles will not always be possible, especially for
-older articles. There are also often several versions of papers
-online: authors are free to decide what to use as the link destination
-yet we strongly encourage to link to archival or publisher sites
-(such as IEEE Xplore or Sage Journals).  We encourage all authors to use this feature to
-the extent possible.
+\input{features.tex}
 
-\section{Conclusion} 
-\label{sec:conclusion}
+\input{policy.tex}
 
-The conclusion goes here.
+\input{experiments.tex}
+
+\input{results.tex}
+
+\input{conclusion.tex}
 
 \section*{Acknowledgments}
 
@@ -199,5 +194,3 @@ The conclusion goes here.
 \bibliography{references}
 
 \end{document}
-
-
