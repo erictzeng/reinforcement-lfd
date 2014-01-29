@@ -1,2 +1,28 @@
 \section{Related Work}
-This section is for related work.
+
+Our approach can be applied towards a variety of tasks in robotics,
+including the manipulation of deformable objects.
+In particular, we demonstrate the effectiveness of our approach for
+knot tying, a commonly studied manipulation task in robotics.
+Previous approaches to knot tying usually depend on rope-specific knowledge
+and assumptions.
+For instance, in knot planning from observation (KPO), knot theory is used
+to recognize rope configurations and define movement primitives in visual
+observations of humans tying knots \cite{Morita_ICRA2003, Takamatsu_TransRob2006}.
+Existing motion planning approaches for knot tying use topological
+representations of rope states (i.e. sequences of rope crossings and their
+properties) and define a model for transitioning between topological states
+\cite{Saha_ExpRobotics2008, Wakamatsu_IJRR2006}.
+Robust open loop execution of knot tying has also been explored \cite{Bell_PhD2010}.
+
+Recently, Schulman et al. used trajectory transfer to enable learning
+from human-guided demonstrations of knot tying \cite{Schulmanetal_ISRR2013}.
+For a given rope configuration, trajectory transfer is applied to the nearest
+demonstration, and the resulting trajectory is executed.
+The distance metric used is the thin plate spline (TPS) registration
+cost between the rope configurations in the new scene and demonstration.
+However, certain demonstrations may be less robust than others: for example,
+a demonstration trajectory may involve a grasp that is unnecessarily near
+the edge of a rope.
+Our approach uses WillSmith to learn a policy that more robustly selects a
+demonstration to apply, instead of always selecting the nearest demonstration.
