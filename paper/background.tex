@@ -53,10 +53,24 @@ $H$ is a horizon which determines the number of actions we will take in the MDP.
 A solution to an MDP is a mapping from each state and horizon to an action.
 
 The solution to an MDP is found by finding a value function, $V^*$, that satisfies the Bellman equations:
-$$V(s, h) = \left\{ \begin{array}{cl} \underset{a}{\max} \underset{s'}{\sum} T(s, a, s')[R(s, a, s') + V(s', h-1)] & h >0 \\ 0 & h = 0\end{array}\right.$$
+$${\footnotesize V(s, h) = \left\{ \begin{array}{cl} \underset{a}{\max}\ \underset{s'}{\sum} T(s, a, s')[R(s, a, s') + V(s', h-1)] & h >0 \\ 0 & h = 0\end{array}\right.}$$
 It is sometimes easier to work with the right hand side of this equation, which we call a $Q$-function. Thus, $V^*(s, h) = \underset{a}{\max}Q^*(s, h, a)$.
 There are many approaches to finding such a value function, but they require storing a vector that is $O(|\stateset{}|)$, which can be prohibitive in many applications. 
 
 
-When faced with large state spaces, a common approach is to resort to value (or Q) function approximation~\cite{schweitzer1985generalized}. This can be done with 
+When faced with large state spaces, a common approach is to resort to value (or Q) function approximation~\cite{schweitzer1985generalized}. 
+Given a set of basis functions $\phi: \stateset{}\times \actionset{} \rightarrow \mathbb{R}$ we can formulate an approximate linear program:
+\begin{equation}
+{\footnotesize
+\begin{aligned}
+\underset{w, \nu}{\min}\ \    &-w_0 + -\sum_{i, h} w^\top \phi(s_i, a_i, h) + C\sum \nu_i\\
+\text{s.t.}\ \   &w^\top \phi(\statevar{}_i, \actionvar{}_i, h) \leq \\ &\ \ \ \ \ \ \underset{s'}{\sum}[R(s_i, a_i, s') + T(s_i, a_i, s')\underset{a'}{\max}\ w^\top \phi(\statevar{}'_i, \actionvar{}', h-1)] -  \nu_i \\
+&w^\top \phi(\statevar{}_i, \actionvar{}_i, h) \leq 0
+\end{aligned}}
+\end{equation}
+The solution to this optimization is a lower bound on the Q function of the MDP and have many fewer variables than the exact value function computation~\cite{puterman1994}.
+However, we will still frequently have too many constraints in order to solve this optimization exactly.
+Thus, many approximate linear programming techniques will further approximate by subsampling constraints.
+While the result may no longer be an underestimator, contraints samples techniques have been quite successful in solving many large MDP problems.
+
 
