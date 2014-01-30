@@ -1,26 +1,26 @@
 \section{Technical Background}
 
 \subsection{Trajectory Transfer through Non-Rigid Registration}
-Non-Rigid Registration is a method for computing a a function, $f$, to minimize error between landmark points subject to a regularization term.
-A regularizer that has seen widespread, and effective, use for registering spatial data is the Thin Plate Spline regularizer\dhm{Cite Wahba, other stuff}.
-Given a set of corresponding points $(x_i, y_i)$, we minimize the following objective:
-$$\min_f \sum_i ||x_i - y_i||^2 + C\int dx ||D^2(f)||^2_{Frob}.$$
-Where $C$ is a hyper-parameter that trades off between correspondance error and increased curvature.
-This problem has a finite dimensional solution in terms of basis functions around the correspondance points.
-The reader is referred to \dhm{survey on TPS} for more details.
+Non-rigid registration computes a function $f$ that minimizes error between landmark points, subject to a regularization term.
+A commonly-used, effective method for registering spatial data is the Thin Plate Spline (TPS) regularizer \dhm{Cite Wahba, other stuff}.
+Given a set of correspondence points $(x_i, y_i)$, we minimize the following objective:
+$$\min_f \sum_i ||x_i - y_i||^2 + C\int dx ||D^2(f)||^2_{Frob}$$,
+where $C$ is a hyper-parameter that trades off between correspondance error and increased curvature.
+This problem has a finite dimensional solution in terms of basis functions around the correspondence points.
+The reader is referred to \dhm{cite survey on TPS} for more details.
 
-Schulman et al. leveerage this technique to perform trajectory transfer. 
-Using a point cloud representation of both scenes, they use the TPS-RPM algorithm to jointy find point correspondances and a registration between them\dhm{Cite CHui}.
-TPS-RPM alternates between (1) estimating correspondences between the two scenes' point clouds and (2) fitting the optimal thin plate spline transformation based on these estimated correspondences. 
-The result of this procedure is used to warp the path traced by the end effector of the robot in the demonstration
+Schulman et al. leverage TPS to perform trajectory transfer. 
+Using a point cloud representation of both scenes, they use the TPS-RPM algorithm to jointy find point correspondances and a registration between them \dhm{Cite CHui}.
+TPS-RPM alternates between (1) estimating correspondences between the point clouds of two scenes and (2) fitting the optimal TPS transformation based on these estimated scene correspondences. 
+The result of this procedure is used to warp the path traced by the end effector of the robot in the demonstration.
 Finally, this warped trajectory is used as a goal for trajectory following in order to find a similar trajectory that satisfies joint limits and collision constraints.
-The result of this step is executed, with the hope that the registration will account for changes in the environment but maintain the important aspects of the manipulation.
+The result trajectory is executed, with the hope that the registration will account for changes in the environment but maintain the important aspects of the manipulation.
 
 As a result, we can consider each demonstration as a policy that is parameterized by the environment around the robot.
-Given a demonstration state, demonstration trajectory, and current state it will produce a new trajectory to apply to the current state.
-This approach has been efffective in generalizing deformable object manipulations to new scenarios and has been explored for knot-tieing and automated suturing applications.
-Schulman et al. extend this to use multiple demonstrations by computing the registration for several candidate demonstrations and selecting the option with the least objective value at optimum.
-In this paper, we use leverage this technique to generalize individual demonstrations, but describe a novel method for selecting which demonstration to select.
+Given a demonstration state, demonstration trajectory, and current state, the induced policy will produce a new trajectory to apply to the current state.
+This approach has been efffective in generalizing deformable object manipulations to new scenarios and has been explored for knot-tying and automated suturing.
+Schulman et al. extend this method to make use of multiple demonstrations by computing the registration cost to several candidate demonstrations and selecting the demonstration with the lowest registration cost.
+In this paper, we leverage trajectory transfer to generalize individual demonstrations, but describe a novel method for selecting from multiple demonstrations.
 \subsection{Structured Max Margin}
 One way to incorporate expert demonstrations into learning in through the use of max-margin learning.
 In this setting, we are given a set of labelled examples, \labelset{} (in our case pairings of states and expert demonstrations), and we would 
