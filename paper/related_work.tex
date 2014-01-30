@@ -1,20 +1,17 @@
 \section{Related Work}
 Related work for our contribution stems from three areas of research:
 learning from demonstrations, deformable object manipulation (in particular
-knot tying), and hierarchical reinforcement learning.
-\dhm{I took out sub section headings here b/c they looked a little wonky. Not super attached to that though.}
-\sh{I'm fine either way - I think it looks fine without the subsection headings.}
-
+knot tying), and hierarchical reinforcement learning.\dhm{We think this is too long, but haven't had time to clip it}
 
 %\subsection{Learning from Demonstrations}
 The problem of learning from demonstrations deals with the generalization of expert demonstrations to new scenarios. 
 This is a broad area of research with many different approaches and broad applicability~\cite{Argall_2009, Schaal_1999}.
-The approach to learning from demonstrations applied here is most closely linked to behavioral cloning, where an agent atempts to learn a function that directly maps states to actions in order to mimic the expert's behavior. 
+The approach to learning from demonstrations applied here is most closely linked to behavioral cloning, where an agent attempts to learn a function that directly maps states to actions in order to mimic the expert's behavior. 
 
 One of the first successful applications of this strategy is the ALVINN system~\cite{Pomerleau_NIPS1989}, which utilizes a neural network to learn a policy that enables an autonomous car to follow a road.
 ALVIN learns a function that maps image input and range finder input to left and right steering commands. 
 This research direction has been furthered more recently by \citet{muller2005off}, who use a convolutional network to learn a steering policy for off-road driving.
-\citet{Ratliff_Humanoids2007} uses multi-class classification to learn a function that scores actions to predict good foot steps for robot locomotion and good graps for robot manipulation.
+\citet{Ratliff_Humanoids2007} uses multi-class classification to learn a function that scores actions to predict good foot steps for robot locomotion and good grasps for robot manipulation.
 \citet{Ross_2013} propose a method to directly control a Micro UAV from RGB camera input and describe a method to account for differences in the training distribution derived from expert demonstrations and the induced distribution under a learned policy. 
 These approaches differ from our proposed method in that they learn in low-dimensional action spaces and directly imitate the expert.
 In contrast, \mmql{} copes with high-dimensional state and action spaces, and accounts for temporal constraints from demonstrated behavior.
@@ -26,7 +23,8 @@ However, their approach requires hand tuning of waypoints and does not generaliz
 The behavioral cloning work most similar to our approach is that of \citet{Isaac_ICML2003}.
 They use behavioral cloning to learn to fly an airplane, by making use of an abstract goal-directed layer which sits on top of a low-level PID controller.
 This goal-directed learning is similar in spirit to ours, although it makes use of a different formalism.
-The primary difference with this work is in the complexity of the low level controllers and complexity derived from manipulation. \sh{It seems that the first point (complexity of low level controllers) refers to Isaac et al.'s work, but I'm not sure if the second point refers to their work or ours. Could you rephrase this sentence to make it more clear?}
+One limitation of this work is that the low-level control are all PID controllers, which is 
+limits the applications it can be applied to.
 
 Similarly to our approach, \citet{Dvijotham_ICML2010} also attempt to directly
 learn a value function or Q-function for a MDP, given sample transitions
@@ -74,8 +72,7 @@ recognition and did not apply their work to execution of knot tying. Matsuno et 
 also uses a topological model of the rope and knot theory to recognize knots with
 stereo vision input~\cite{Matsuno_RSJ2006}.
 Saha et al. and Wakamatsu et al. propose motion planning approaches for knot tying,
-using topological representations of rope states (i.e. sequences of rope crossings
-and their properties). Wakamatsu et al. define four basic operations for
+using topological representations of rope states. Wakamatsu et al. define four basic operations for
 transitioning between topological rope states,
 while Saha et al.'s approach requires a model of state-transition functions
 as input~\cite{Saha_ExpRobotics2008, Wakamatsu_IJRR2006}. Moll et al.'s approach
@@ -93,10 +90,14 @@ robustly applying human-guided demonstrations to new scenes through
 A final area of related work stems from hierarchical reinforcement learning. 
 In this setting, a policy is learned given the ability to experiment in the world.
 This policy is potentially initialized from expert demonstrations.
-There is some similarity in our abstract MDP formulation to the options framework for temporal abstraction~\cite{sutton1999between}.
-The options framework simplifies learning by enabling the learning of a policy that will eventually reach a goal state.
-We make use of a similar type of abstraction, but our policies are learned from demonstrations and do not satisfy all the requirements to be an option.
-\sh{I'm confused by how this options framework guarantees the policy will eventually reach a goal state. Could you elaborate Dylan?}
+There is some similarity in our abstract MDP formulation to the options 
+framework for temporal abstraction~\cite{sutton1999between}.
+The options framework simplifies learning by enabling temporal abstraction through
+policies that are gauranteed to reach a target state. 
+This lets learning agent abstract away low-level details of a task and focus on 
+high level interactions. 
+We make use of a similar type of abstraction, but our policies are learned from 
+demonstrations and do not satisfy all the requirements to be an option.
 
 \citet{konidaris2010constructing} use learning from demonstrations to initialize a skill chaining reinforcement learning algorithm.
 However, they focus on taking a demonstration and decomposing it into explicit local policies.
