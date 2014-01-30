@@ -117,25 +117,59 @@ Recall that actions in \actionset{} have a one-to-one correspondence with the
 expert-guided demonstrations in \demoset{}, and are defined by executing the
 transferred trajectory from the corresponding demonstration to the given state.
 
-We approximate the Q-function for a given state \statevar{} and action
-\actionvar{} as a linear combination of features \features{\statevar{}}{\actionvar{}}
-(Section~\ref{sec:features}):
+The functions we learn of linear combinations of features on states and actions.
+For a given state \statevar{} and action
+\actionvar{} the corresponding feature vector is \features{\statevar{}}{\actionvar{}}
+(described in Section~\ref{sec:features}). Thus our approximate Q function is defined as
 \begin{equation}
-\approxq(\statevar{}, \actionvar{}) = \weightst{} \features{\statevar{}}{\actionvar{}}
+\approxq(\statevar{}, \actionvar{}) = \weightst{} \features{\statevar{}}{\actionvar{}}.
 \end{equation}
 
-To calculate the weights, we construct an optimization problem within the
-max-margin framework that incorporates max-margin constraints with a structured
-margin, as well as Bellman constraints for Q-learning. The weights of \approxq{}
-are then the solution of this optimization problem, which is as follows:
+An initial approach to learning in this problem is just do max margin behavior cloning. 
+This corresponds to computing the weights, $w$, as the solution to the following  convex optimization problem: 
+\begin{align}
+& \underset{w, \xi, \nu}{\text{min}}  & & ||\weights{}||^2 + \marginslackc{} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} \marginslacksubsup{i}{(j)}\notag \\
+& \text{s.t.} & &\weightst{} \features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}} \geq \weightst{} \phi(\statesubsup{i}{(j)}, \actionvar{}') + \marginvar{}(\statesubsup{i}{(j)}, \actionsub{i}, \actionvar{}') - \marginslacksubsup{i}{(j)} \notag\\
+    &&&\hspace{1.9cm}\forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j}; \notag\\
+    &&&\hspace{1.9cm}\forall \actionvar{}' \in \actionset{}\setminus \actionvar{}_i  \label{eq:margin_constr}\\
+&    & & \marginslacksubsup{i}{(j)} \geq 0 \hspace{0.7cm} \forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j} \label{eq:margin_slacks}
+\end{align}
+
+The constraints in Equation~\ref{eq:margin_constr}
+enforce the max-margin requirements that the
+labeled action \actionsubsup{i}{(j)} associated with state \statesubsup{i}{(j)}
+has a higher (approximate) Q-value than the other actions for that
+state. The slack variables \marginslacksubsup{i}{(j)} relax these constraints;
+the degree of relaxation is controlled by the regularization parameter \marginslackc{}.
+
+
+To account for situations where several demonstrations will generalize well, we use a structured margin.
+We structure our margin with the similarity metric
+\marginvar{}(\statesubsup{i}{(j)}, \actionsub{i}, \actionvar{}') that computes
+the difference between the trajectories of the actions after being warped onto
+the state \statesubsup{i}{(j)}. More precisely, we first apply trajectory
+transfer on both actions \actionsub{i} and \actionvar{}' to transfer
+each trajectory to the state \statesubsup{i}{(j)}. Then, we use dynamic
+time warping of the trajectories for robust comparison of trajectories that
+vary in time and speed~\cite{Sakoe_IEEE1978, Vakanski_2012}.
+
+The solution to this problem will determine a policy which aproximates the expert's policy.
+A standard approach to improving a policy defined by optimizing a heuristic measure action quality
+is to perform search and act to maximize action rankings over a horizon. 
+However, the rankings from the behavior cloning optimization are state dependent and 
+we have no way of comparing actions from different states. Because our data
+contains full traces of expert-guided executions, we can incorporate a version
+of the approximate linear program for an MDP into our formulation. This is formalized as the 
+following optimization:
+
 \begin{align}
 & \underset{w, \xi, \nu}{\text{min}}  & & ||\weights{}||^2 + \marginslackc{} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} \marginslacksubsup{i}{(j)}
                                                       + \bellmanslackc{} \sum_{j=1}^{\labelsetsize{}} \bellmanslacksup{(j)} \notag \\
 &    & & - \frac{\bellmanc{}}{\labelsatotal{}} \weightszero{} - \frac{\bellmanc{}}{\labelsatotal{}} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} \weightst{}\features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}}\\
 & \text{s.t.} & &\weightst{} \features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}} \geq \weightst{} \phi(\statesubsup{i}{(j)}, \actionvar{}') + \marginvar{}(\statesubsup{i}{(j)}, \actionsub{i}, \actionvar{}') - \marginslacksubsup{i}{(j)} \notag\\
     &&&\hspace{1.9cm}\forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j}; \notag\\
-    &&&\hspace{1.9cm}\forall \actionvar{}' \in \actionset{}\setminus \actionvar{}_i  \label{eq:margin_constr}\\
-&    & & \marginslacksubsup{i}{(j)} \geq 0 \hspace{0.7cm} \forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j} \label{eq:margin_slacks}\\
+    &&&\hspace{1.9cm}\forall \actionvar{}' \in \actionset{}\setminus \actionvar{}_i  \notag\\
+&    & & \marginslacksubsup{i}{(j)} \geq 0 \hspace{0.7cm} \forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j} \notag\\
 &    & & \weightst{}\features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}} \leq \rewardfn{}(\statesubsup{i}{(j)}) + \weightst{}\features{\statesubsup{i+1}{(j)}}{\actionsubsup{i+1}{(j)}} + \bellmanslacksup{(j)} \notag \\
     &&&\hspace{1.9cm} \forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j} - 2 \label{eq:bellman_constr}\\
 &    & & \weightst{}\features{\statesubsup{\nsub{j}-1}{(j)}}{\actionsubsup{\nsub{j}-1}{(j)}} + \weightszero \leq \rewardfn{}(\statesubsup{\nsub{j}-1}{(j)}) + \bellmanslacksup{(j)} \notag \\
@@ -147,22 +181,6 @@ where \labelsatotal{} is equal to the total number of
 (\statevar{}, \actionvar{}) pairs in \labelset{}, so \labelsatotal{} = 
 $\sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} 1$.
 
-In the optimization problem, the constraints in Equation~\ref{eq:margin_constr}
-enforce the max-margin requirements that the
-labeled example's action \actionsubsup{i}{(j)} for state \statesubsup{i}{(j)}
-has a higher (approximate) Q-value than the other actions for that
-state. The slack variables \marginslacksubsup{i}{(j)} relax these constraints;
-the degree of relaxation is controlled by the regularization parameter \marginslackc{}.
-We build a structured margin, that allows actions similar to the
-action of the labeled example to have a higher approximate Q-value.
-We structure our margin with a similarity metric
-\marginvar{}(\statesubsup{i}{(j)}, \actionsub{i}, \actionvar{}') that computes
-the difference between the trajectories of the actions after being warped onto
-the state \statesubsup{i}{(j)}. More precisely, we first apply trajectory
-transfer on both actions \actionsub{i} and \actionvar{}' to transfer
-each trajectory to the state \statesubsup{i}{(j)}. Then, we use dynamic
-time warping of the trajectories for robust comparison of trajectories that
-vary in time and speed~\cite{Sakoe_IEEE1978, Vakanski_2012}.
 
 The Bellman constraints in Equation~\ref{eq:bellman_constr} and~\ref{eq:bellman_goal_constr}
 are key for learning a valid Q-function approximation \approxq. These constraints specify that
@@ -177,7 +195,7 @@ both sides of the inequality of Equation~\ref{eq:bellman_constr} and thus cancel
 We can also ignore \weightszero{} when using \approxq{} to define a policy. The slack variables
 \bellmanslacksup{(j)} relax these constraints, with \bellmanslackc{} controlling
 the degree of relaxation.
-\rewardfn{}(\statevar{}) is as defined in Equation~\ref{eq:mdp},
+\rewardfn{}(\statevar{}) is as defined in Equation~\ref{eq:mdp}:
 -1 for non-goal states and 0 for goal states.
 
 \subsection{Elimination of Manual Labeling}
@@ -204,5 +222,4 @@ corresponding state, we exclude each expert demonstration from the max margin
 constraints its corresponding unsupervisedexample generates. Additionally, note
 that this unsupervised method of generating labeled sequences does not include a
 temporal component. Thus, when forming the optimization problem with
-$\labelset{}_u$, we must omit Bellman constraints. \et{If time/space permits
-  this is where I'd talk about the second round of bootstrapping.}
+$\labelset{}_u$, we must omit Bellman constraints.
