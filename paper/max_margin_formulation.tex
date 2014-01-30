@@ -39,7 +39,8 @@ space \trajset{} spans the set of all possible trajectories.
 \subsection{Markov Decision Process}
 Selecting from multiple demonstrations can be framed as a Markov Decision
 Process (MDP), which allows us to learn a policy through applying Q-learning. The structure of our MDP is as follows:
-\begin{align*}
+\begin{equation}\label{eq:mdp}
+\begin{aligned}
 \stateset{} &=  \text{all reachable underlying states of task} \\
 \actionset{} &= \{\policysub{\demovar{}}{\statevar{}}\ \| \text{ } \demovar{} \in \demoset{}\} \\
 \transitionfn{}(\statevar{}, \actionvar{}, \nextstatevar{}) &=
@@ -48,7 +49,8 @@ Process (MDP), which allows us to learn a policy through applying Q-learning. Th
     1[\statevar{} = \statevar{}'] \text{ if } \statevar{} \in \goalset{}
     \end{cases}\\
 \rewardfn{}(\statevar{}) &= -1 {[ \statevar{} \not \in \goalset{} ]} \\
-\end{align*}
+\end{aligned}
+\end{equation}
 
 In the above specification, \goalset{} denotes the goal set and contains all
 states that satisfy the predefined goal, i.e. tying a knot.
@@ -83,11 +85,73 @@ to a single complete task execution, ordered in the sequence of states and
 actions taken. More formally, it is required that for each trajectory
 \labelsub{j} $\in$ \labelset{}, for $1 \leq i \leq$ \nsub{j},
 \begin{align*}
-T(\statesubsup{i}{(j)}, \actionsubsup{i}{(j)}) &= \statesubsup{i+1}{(j)} \text{ for } i < \nsub{j} \\
+\transitionfn(\statesubsup{i}{(j)}, \actionsubsup{i}{(j)}) &= \statesubsup{i+1}{(j)} \text{ for } i < \nsub{j} \\
 \text{and } T(\statesubsup{\nsub{j}}{(j)}, \actionsubsup{\nsub{j}}{(j)}) &\in \goalset{}
 \end{align*}
 
-\subsection{Max Margin Formulation}
+\subsection{Max-Margin Q-Learning Formulation}
+Our goal is to use the labeled sequences \labelset{} in order to learn an
+approximate Q-function that determines, for a given state, which actions
+rank higher than others.
+Recall that actions in \actionset{} have a one-to-one correspondence with the
+expert-guided demonstrations in \demoset{}, and are defined by executing the
+transferred trajectory from the corresponding demonstration to the given state.
 
+We approximate the Q-function for a given state \statevar{} and action
+\actionvar{} as a linear combination of features \features{\statevar{}}{\actionvar{}}
+(Section~\ref{sec:features}):
+\begin{equation}
+\approxq(\statevar{}, \actionvar{}) = \weightst{} \features{\statevar{}}{\actionvar{}}
+\end{equation}
 
-\subsection{Max Margin Q-Learning Formulation}
+To calculate the weights, we construct an optimization problem within the
+max-margin framework that incorporates max-margin constraints with a structured
+margin, as well as Bellman constraints for Q-learning. The weights of \approxq{}
+are then the solution of this optimization problem, which is as follows:
+\begin{align}
+& \underset{w, \xi}{\text{min}}  & & ||\weights{}||^2 + \marginslackc{} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} \marginslacksubsup{i}{(j)}
+                                                      + \bellmanslackc{} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j} - 1} \bellmanslacksubsup{i}{(j)} \notag \\
+&    & & - \bellmanc{} \weightszero{} - \bellmanc{} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} \weightst{}\features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}}\\
+& \text{s.t.} & &\weightst{} \features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}} \geq \weightst{} \phi(\statesubsup{i}{(j)}, \actionvar{}') + \marginvar{}(\statesubsup{i}{(j)}, \actionsub{i}, \actionvar{}') - \marginslacksubsup{i}{(j)} \notag\\
+    &&&\hspace{1.9cm}\forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j}; \notag\\
+    &&&\hspace{1.9cm}\forall \actionvar{}' \in \actionset{}\setminus \actionvar{}_i  \label{eq:margin_constr}\\
+&    & & \marginslacksubsup{i}{(j)} \geq 0 \hspace{0.7cm} \forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j} \label{eq:margin_slacks}\\
+&    & & \weightst{}\features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}} \leq \rewardfn{}(\statesubsup{i}{(j)}) + \weightst{}\features{\statesubsup{i+1}{(j)}}{\actionsubsup{i+1}{(j)}} + \bellmanslacksubsup{i}{(j)} \notag \\
+    &&&\hspace{1.9cm} \forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j} - 2 \label{eq:bellman_constr}\\
+&    & & \weightst{}\features{\statesubsup{\nsub{j}-1}{(j)}}{\actionsubsup{\nsub{j}-1}{(j)}} + \weightszero \leq \rewardfn{}(\statesubsup{\nsub{j}-1}{(j)}) + \bellmanslacksubsup{\nsub{j}-1}{(j)} \notag \\
+    &&&\hspace{1.9cm} \forall j = 1, \ldots, \labelsetsize{} \label{eq:bellman_goal_constr}\\
+&    & & \bellmanslacksubsup{i}{(j)} \geq 0 \hspace{0.7cm} \forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j} - 1 \label{eq:bellman_slack}
+\end{align}
+
+In the optimization problem, the constraints in Equation~\ref{eq:margin_constr}
+enforce the max-margin requirements that the
+labeled example's action \actionsubsup{i}{(j)} for state \statesubsup{i}{(j)}
+has a higher (approximate) Q-value than the other actions for that
+state. The slack variables \marginslacksubsup{i}{(j)} relax these constraints;
+the degree of relaxation is controlled by the regularization parameter \marginslackc{}.
+We build a structured margin, that allows actions similar to the
+action of the labeled example to have a higher approximate Q-value.
+We structure our margin with a similarity metric
+\marginvar{}(\statesubsup{i}{(j)}, \actionsub{i}, \actionvar{}') that computes
+the difference between the trajectories of the actions after being warped onto
+the state \statesubsup{i}{(j)}. More precisely, we first apply trajectory
+transfer on both actions \actionsub{i} and \actionvar{}' to transfer
+each trajectory to the state \statesubsup{i}{(j)}. Then, we use dynamic
+time warping of the trajectories for robust comparison of trajectories that
+vary in time and speed. \sh{Add citation here for DTW}
+
+The Bellman constraints in Equation~\ref{eq:bellman_constr} and~\ref{eq:bellman_goal_constr}
+are key for learning a valid Q-function approximation \approxq. These constraints specify that
+the values of the states in the labeled example task executions increase as they
+approach the goal. In the objective, we effectively maximize the sum of the
+approximate Q-values of the non-goal state-action pairs in the labeled examples,
+thus driving the Bellman constraints to equality. By enforcing the value of goal states
+to be zero, we arrive at the constraints in Equation~\ref{eq:bellman_goal_constr} for
+states immediately prior to the goal in the labeled sequences.
+The \weightszero{} term allows for the \approxq{} to be affine; it exists on
+both sides of the inequality of Equation~\ref{eq:bellman_constr} and thus cancels out.
+We can also ignore \weightszero{} when using \approxq{} to define a policy. The slack variables
+\bellmanslacksubsup{i}{(j)} relax these constraints, with \bellmanslackc{} controlling
+the degree of relaxation.
+\rewardfn{}(\statevar{}) is as defined in Equation~\ref{eq:mdp},
+-1 for non-goal states and 0 for goal states.
