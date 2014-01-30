@@ -1,1 +1,24 @@
-\section{Conclusion}
+\section{Conclusions and Future Work}
+In summation, we present a method for improving the use of trajectory transfer in 
+learning from demonstrations for deformable object manipulation. 
+We formulate this problem as a sequential decision making
+problem in the form of a discrete-action abstract MDP. We present a novel approach to 
+learning from demonstrations for this MDP, which we call Max-Margin Q-Learning, that 
+integrates behavior cloning and value function approximation. We provide
+features for learning in this scenario that make no additional assumptions beyond
+the assumptions required to apply trajectory transfer. We describe Leave-One-Out Labeling 
+for bootstraping demonstrations in this MDP from only the intial demonstrations in our
+trajectory library.
+
+We validate our approach on a simulated knot-tying task and contribute a benchmark
+set of examples (both at the low-level trajectory level and in the abstract MDP) and 
+problems. We show a signifigant improvement over a baseline method that uses
+a registration cost from trajectory tranfer to select actions. We show that our learning
+method is very data efficient and acheives close to peak performance with few examples.
+
+There are several next steps to take in furthering this line of work. The first is to
+expand on Leave-One-Out Labeling to incorporate Bellman constraints and make lookahead 
+feasible. We believe this can be done through an application of reinforcement learning.
+We can use the automatically labeled examples to intialize a policy for our task and then
+use exploration to determine Bellman constraints needed for optimization. This provides
+a nice method to incorporate experience into an expert demonstration.
