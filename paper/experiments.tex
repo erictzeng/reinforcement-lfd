@@ -44,12 +44,12 @@ We define success as tying an overhand knot in a sequence of 5 or fewer actions.
 We evaluate the success rate using the following policies when using the expert-labeled and leave-one-out labeled examples: greedy, one-step lookahead with width 10, and two-step lookahead with width 5.
 \subsubsection{Expert-labeled Examples}
 For this evaluation, 1000 expert-labeled examples are used.
-For each of these policies, the optimization hyperparameters $C$, $D$ and $F$ are first tuned via holdout validation, using a holdout set of 100 randomly drawn initial rope states.
-Then the best-performing hyperparameters are used to calculate the weights and then run each of the three policies on the evaluation set, which consists of 500 randomly drawn initial rope states.
+For each of these policies, the optimization hyperparameters $C$, $D$ and $F$ are first tuned via holdout validation, using a holdout set of 100 randomly drawn initial rope states. For this case, the best-performing hyperparameters we found are $C=2$, $D=1$ and $F=1$.
+Using this hyperparameters, we optimize the weights and then run each of the three policies on the evaluation set, which consists of 500 randomly drawn initial rope states.
 % TODO: Add in what the hyperparameters are, once we decide on them
 As a baseline comparison, we also evaluate using the nearest neighbor policy presented in \citet{Schulmanetal_ISRR2013}.
 Their policy chooses the action associated with the state that has the smallest bidirectional registration cost with respect to the current state.
-The success rates obtained under these policies are summarized in Table~\ref{table:performance}. Note that our best results surpass the baseline by XX\%.
+The success rates obtained under these policies are summarized in Table~\ref{table:performance}. Note that our best results surpass the baseline by 26.4\%.
 % TODO: Add more analysis of the results, e.g. 1-10 and 2-5 lookahead perform approximately equally well
 
 \begin{table}
@@ -58,14 +58,14 @@ The success rates obtained under these policies are summarized in Table~\ref{tab
     \toprule
       Policy & Test Accuracy\\
     \midrule
-      Nearest neighbor \cite{Schulmanetal_ISRR2013} & XX\% \\
+      Nearest neighbor \cite{Schulmanetal_ISRR2013} & 68.8\% \\
     \midrule
-      Greedy & XX\% \\
-      Lookahead (depth 1, width 10) & XX\% \\
-      Lookahead (depth 2, width 5) & XX\% \\
+      Greedy & 85.6\% \\
+      Lookahead (depth 1, width 10) & 93.6\% \\
+      Lookahead (depth 2, width 5) & 95.2\% \\
     \bottomrule
   \end{tabular}
-  \caption{Success rate of tying an overhand knot under different policies.}
+  \caption{Success rate of tying a knot using the expert-labeled examples.}
   \label{table:performance}
 \end{table}
 
