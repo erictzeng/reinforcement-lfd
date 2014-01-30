@@ -579,7 +579,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
                 curr_state_i, next_state_i, _ = example.split('-')
                 curr_action_phi = constr['exp_features'][:]
                 next_action_phi = constr['rhs_phi'][:]
-                final_transtion = next_state_i in ignore_goal
+                final_transition = next_state_i in ignore_goal
                 if slack_name not in yi_names:
                     yi_var = self.add_yi(slack_name)
                     yi_names[slack_name] = yi_var
@@ -607,7 +607,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         infile.close()
         # add to the objective the values that are in the bellman constraint
         for features in action_phis.values():
-            assert len(features) > 3, "Some trajectories has less than 4 steps. Did you fix the the constraints file?"
+            assert len(features) > 2, "Some trajectories has less than 3 steps. Did you fix the the constraints file?"
             for feat in features.values():
                 for (i, w) in enumerate(self.w):
                     if abs(feat[i]) >= eps:
