@@ -1,23 +1,26 @@
-\section{Determining a Policy}
+\section{Greedy and Lookahead Policies}
 
 %%PA: -> "Greedy Policy and Lookahead Policies"
-
 
 %%PA: how about cutting to the point more directly and leading off with: "The solution to the (convex) optimization
 %%problem described in section~\ref{...} provides us with a weight
 %%vector \weights{}, which defines ...
-Given an appropriate choice of \featurefn{}, we can set up an optimization
-problem based on the formulation outlined in
-Section~\ref{sec:formulation}. Solving this optimization problem produces a
-weight vector \weights{}, which defines an approximate Q-function:
 
+%Given an appropriate choice of \featurefn{}, we can set up an optimization
+%problem based on the formulation outlined in
+%Section~\ref{sec:formulation}. Solving this optimization problem produces a
+%weight vector \weights{}, which defines an approximate Q-function:
+
+The solution to the optimization problem outlined in Section~\ref{sec:formulation}
+provides us with a weight vector \weights{}, which defines an approximate
+Q-function:
 \begin{equation}
   \approxq(s,a) = \weightst \features{s}{a}
 \end{equation}
 
-\et{This definition might be redundant, but for now I'm putting it here anyway.}
+%\et{This definition might be redundant, but for now I'm putting it here anyway.}
 
-Once we have solved for \approxq{}, the most natural choice of policy is the
+Once we obtain \approxq{}, the most natural choice of policy is the
 simple greedy policy, which always selects the action that yields the highest
 approximate Q-value:
 
