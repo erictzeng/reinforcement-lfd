@@ -2,19 +2,16 @@
 Related work for our contribution stems from three areas of research:
 learning from demonstrations, deformable object manipulation (in particular
 knot tying), and hierarchical reinforcement learning.
-\dhm{I took out sub section headings here b/c they looked a little wonky. Not super attached to that though.}
-\sh{I'm fine either way - I think it looks fine without the subsection headings.}
-
 
 %\subsection{Learning from Demonstrations}
 The problem of learning from demonstrations deals with the generalization of expert demonstrations to new scenarios. 
 This is a broad area of research with many different approaches and broad applicability~\cite{Argall_2009, Schaal_1999}.
-The approach to learning from demonstrations applied here is most closely linked to behavioral cloning, where an agent atempts to learn a function that directly maps states to actions in order to mimic the expert's behavior. 
+The approach to learning from demonstrations applied here is most closely linked to behavioral cloning, where an agent attempts to learn a function that directly maps states to actions in order to mimic the expert's behavior. 
 
 One of the first successful applications of this strategy is the ALVINN system~\cite{Pomerleau_NIPS1989}, which utilizes a neural network to learn a policy that enables an autonomous car to follow a road.
 ALVIN learns a function that maps image input and range finder input to left and right steering commands. 
 This research direction has been furthered more recently by \citet{muller2005off}, who use a convolutional network to learn a steering policy for off-road driving.
-\citet{Ratliff_Humanoids2007} uses multi-class classification to learn a function that scores actions to predict good foot steps for robot locomotion and good graps for robot manipulation.
+\citet{Ratliff_Humanoids2007} uses multi-class classification to learn a function that scores actions to predict good foot steps for robot locomotion and good grasps for robot manipulation.
 \citet{Ross_2013} propose a method to directly control a Micro UAV from RGB camera input and describe a method to account for differences in the training distribution derived from expert demonstrations and the induced distribution under a learned policy. 
 These approaches differ from our proposed method in that they learn in low-dimensional action spaces and directly imitate the expert.
 In contrast, \mmql{} copes with high-dimensional state and action spaces, and accounts for temporal constraints from demonstrated behavior.
@@ -74,8 +71,7 @@ recognition and did not apply their work to execution of knot tying. Matsuno et 
 also uses a topological model of the rope and knot theory to recognize knots with
 stereo vision input~\cite{Matsuno_RSJ2006}.
 Saha et al. and Wakamatsu et al. propose motion planning approaches for knot tying,
-using topological representations of rope states (i.e. sequences of rope crossings
-and their properties). Wakamatsu et al. define four basic operations for
+using topological representations of rope states. Wakamatsu et al. define four basic operations for
 transitioning between topological rope states,
 while Saha et al.'s approach requires a model of state-transition functions
 as input~\cite{Saha_ExpRobotics2008, Wakamatsu_IJRR2006}. Moll et al.'s approach
