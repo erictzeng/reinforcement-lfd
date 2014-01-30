@@ -97,3 +97,31 @@ T(\statesubsup{i}{(j)}, \actionsubsup{i}{(j)}) &= \statesubsup{i+1}{(j)} \text{ 
 
 
 \subsection{Max Margin Q-Learning Formulation}
+
+
+\subsection{Leave-One-Out Labeling}
+\label{subsec:lool}
+One major limitation of the formulation we have outlined is its dependence on
+the set of labeled sequences \labelset{}. We now propose an alternative method
+of bootstrapping the set of expert demonstrations \demoset{} to generate an
+unsupervised set of labeled sequences, $\labelset{}_u$, and we refer to this
+method as leave-one-out labeling.
+
+For each demonstration $\demovar{} \in \demoset{}$, we generate a corresponding
+$\labelvar \in \labelset_u$ as follows. For every other demonstration
+$\demovar{}' \neq \demovar{} \in \demoset{}$, we simply compute the TPS
+registration cost between $\policysub{\demovar{}'}{d_{pc}}$ and
+$\policysub{\demovar{}}{\demovar{}_{pc}}$. We choose the $\demovar{}^*$ with the
+lowest registration cost, and add $(\demovar{}_{pc}, \demovar{}^*_{traj})$ to
+$\labelset{}_u$ as an expert demonstration. Intuitively, this procedure looks to
+discover the expert demonstration $d'$ that, when applied to the start state of
+$d$, most closely mimics the optimal choice provided by the expert.
+
+This method of labeling requires slight modifications to our max-margin
+formulation. Since the expert's trajectory is assumed to be optimal for its
+corresponding state, we exclude each expert demonstration from the max margin
+constraints its corresponding unsupervisedexample generates. Additionally, note
+that this unsupervised method of generating labeled sequences does not include a
+temporal component. Thus, when forming the optimization problem with
+$\labelset{}_u$, we must omit Bellman constraints. \et{If time/space permits
+  this is where I'd talk about the second round of bootstrapping.}
