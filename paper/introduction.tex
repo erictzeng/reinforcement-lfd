@@ -25,6 +25,13 @@ Selecting a demonstration that will generalize well to a particular scenario is 
 Certain trajectories will generalize better than others and particular sequences of demonstrations may perform tasks more efficiently than others.
 Current approaches make use of a nearest-neighbor policy that does not account for these features of the problem and fail to solve many problems that are solvable with that set of demonstrations.
 
+\begin{figure}[t]
+  \centering
+    \includegraphics[width=0.9\linewidth]{figures/placeholder.png}
+  \caption{Cute picture of robot tying knot}
+  \label{fig:frontfig}
+\end{figure}
+
 In this paper, we present a solution to the demonstration selection problem that can account for the generalizability of demonstrations and the sequential nature of our applications.
 Given a set of demonstrations and a method for generalizing them, we construct a discrete action abstract MDP.
 Each action in this MDP is associated with a demonstration and our transition function is defined as applying trajectory transfer to generalize that demonstration.
