@@ -1,7 +1,9 @@
 \section{Related Work}
-Related work for our contribution stems from three areas of research: deformable object manipulation (in particular knot-tieing), learning from demonstrations, \dhm{and a third thing}
+Related work for our contribution stems from three areas of research: deformable object manipulation (in particular knot-tieing), learning from demonstrations, and hierarchical reinforcement learing.
+\dhm{I took out sub section headings here b/c they looked a little wonky. Not super attached to that though.}
 
-\subsection{Learning from Demonstrations}
+
+%\subsection{Learning from Demonstrations}
 The problem of learning from demonstrations deals with the generalization of expert demonstrations to new scenarios. 
 This is a broad area of research with many different approaches and broad applicabilty~\cite{Argall_2009, Schaal_1999}.
 The approach to learning from demonstrations applied here is most closely linked to behavioral cloning; where an agent atempts to learn a function that directly maps states to actions so as to mimic the experts behavior. 
@@ -33,7 +35,7 @@ relying on segments of expert demonstrations as a means of navigating the state
 space efficiently. \et{Someone who actually understands robotics should probably
   check this statement.}
 
-\subsection{Deformable Object Manipulation}
+%\subsection{Deformable Object Manipulation}
 Our approach can be applied towards a variety of tasks in robotics,
 including the manipulation of deformable objects.
 In particular, we demonstrate the effectiveness of our approach for
@@ -42,9 +44,20 @@ Previous approaches to knot tying usually depend on rope-specific knowledge
 and assumptions.
 For instance, in knot planning from observation (KPO), knot theory is used
 to recognize rope configurations and define movement primitives in visual
-observations of humans tying knots \cite{Morita_ICRA2003, Takamatsu_TransRob2006}.
+observations of humans tying knots~\cite{Morita_ICRA2003, Takamatsu_TransRob2006}.
 Existing motion planning approaches for knot tying use topological
 representations of rope states (i.e. sequences of rope crossings and their
-properties) and define a model for transitioning between topological states
-\cite{Saha_ExpRobotics2008, Wakamatsu_IJRR2006}.
-Robust open loop execution of knot tying has also been explored \cite{Bell_PhD2010}.
+properties) and define a model for transitioning between topological states~\cite{Saha_ExpRobotics2008, Wakamatsu_IJRR2006}.
+Robust open loop execution of knot tying has also been explored~\cite{Bell_PhD2010}.
+
+A final area of related work stems from hierarchical reinforcement learning. 
+In this setting, a policy, potentially initialized from expert demonstrations, is learned given the ability to experiment in the world.
+There is some similarity in our abstract MDP formulation to the options framework for temporal abstraction~\cite{sutton1999between}.
+In their framework, they make learning easier by allowing the ability to learn policy that will eventually reach a goal state.
+We make use of a similar type of abstraction, but our policies are learned from demonstrations and do not satisfy all the requirements to be an option.
+
+\citet{konidaris2010constructing} use learning from demonstrations to initialize a skill chaining reinforcement learning algorithm.
+However, they focus on taking a demonstration and decomposing it into explicit local policies.
+We simply make use of the associated trajectory transfer and leverage it to solve tasks beyond the reach of current reinforcement learning approaches.
+\citet{Neumann09learningcomplex} propose the idea of motion templates, parametrized local controllers as another way to elicit this behavior in RL.
+When they learn the templates, they must find an appropriate policy for setting these parameters, which is intractable in our setting.

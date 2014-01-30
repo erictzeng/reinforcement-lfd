@@ -36,42 +36,48 @@ the trajectory executed by the expert in that demonstration. The trajectory
 space \trajset{} spans the set of all possible trajectories.
 
 
-\subsection{Markov Decision Process}
+\subsection{Markov Decision Process Formulation}
 Selecting from multiple demonstrations can be framed as a Markov Decision
-Process (MDP), which allows us to learn a policy through applying Q-learning. The structure of our MDP is as follows:
-\begin{equation}\label{eq:mdp}
+Process (MDP), which enables us to apply Q-function approximation to derive a
+policy.
+
+In order to make planning in this space tractable, we use the set of
+demonstrations \demoset{} to define a set of abstract actions \actionset{}. Each
+action $\actionvar \in \actionset$ denotes the choice to use a corresponding
+policy $\pi_d$, where we apply $\pi_d$ to some state $s$ by transferring
+$d_{traj}$ to $s$ via TPS warping, then executing the resulting trajectory.
+
+Since each action $\actionvar \in \actionset$ has a corresponding demo $\demovar
+\in \demoset$, from here onward we refer to actions and demos
+interchangeably. Additionally, $\policysub{d}{\statevar} =
+\policysub{a}{\statevar}$ is most precisely defined as the trajectory that is
+found via trajectory transfer from $\demovar$ to $\statevar$. However, since our
+transition model is deterministic, applying this trajectory to $\statevar$ will
+always produce the same successor $s'$. Thus, for ease of notation we will use
+$\pi_{d}$ as the successor function for transferring $d_{traj}$ to a state $s$,
+and say that $\policysub{d}{\statevar} = s'$.
+
+Thus, the MDP for an \mmql{} problem is defined as
+$\langle\stateset,\goalset,\actionset,T,R\rangle$, where
+
+\begin{equation}
 \begin{aligned}
-\stateset{} &=  \text{all reachable underlying states of task} \\
-\actionset{} &= \{\policysub{\demovar{}}{\statevar{}}\ \| \text{ } \demovar{} \in \demoset{}\} \\
+\stateset{} &=  \text{all underlying states of the task} \\
+\goalset{} &=  \text{all goal states of the task} \\
+\actionset{} &= \{\policysub{\demovar{}}{\statevar{}}\ \mid \text{ } \demovar{} \in \demoset{}\} \\
 \transitionfn{}(\statevar{}, \actionvar{}, \nextstatevar{}) &=
     \begin{cases}
-    1[\policysub{\actionvar{}}{\statevar{}} = \nextstatevar{}] \text{ if } \statevar{} \not \in \goalset{} \\
-    1[\statevar{} = \statevar{}'] \text{ if } \statevar{} \in \goalset{}
+    1[\policysub{\actionvar{}}{\statevar{}} = \nextstatevar{}] &\text{ if } \statevar{} \not \in \goalset{} \\
+    1[\statevar{} = \statevar{}'] &\text{ if } \statevar{} \in \goalset{}
     \end{cases}\\
-\rewardfn{}(\statevar{}) &= -1 {[ \statevar{} \not \in \goalset{} ]} \\
+\rewardfn{}(\statevar{}) &= -1 {[ \statevar{} \not \in \goalset{} ]}. \\
 \end{aligned}
 \end{equation}
 
 In the above specification, \goalset{} denotes the goal set and contains all
-states that satisfy the predefined goal, i.e. tying a knot.
-For any \demovar{} $\in$ \demoset{}, \policysub{d}{s} denotes the trajectory
-resulting from applying trajectory transfer to \demosub{traj}, using
-the non-rigid registration from state \demosub{pc} to \statevar{}.
-There is a one-to-one mapping between demonstrations \demovar{}
-$\in$ \demoset{} and actions \actionvar{} $\in$ \actionset{}, so to simplify
-notation, from this point forwards we will refer to demonstrations and
-actions interchangeably.
-
-The MDP transition function \transitionfn{} is deterministic. For states
-\statevar{} in \goalset{}, we assume all actions lead back to the same
-goal state \statevar{}. For
-non-goal states, we loosely define \policysub{\actionvar}{\statevar{}}
-as the state that results from applying trajectory transfer to the corresponding
-demonstration \demovar{}'s trajectory and executing the resulting trajectory
-on the state \statevar{}. Then \policysub{\actionvar{}}{\statevar{}} is a
-policy belonging to the set of all policies, \policyset{} : \transitionfn{}
-\text{x} \stateset{} $\rightarrow$ \stateset{}. Our MDP's reward function is
-simply $-1$ for all non-goal states.
+states that satisfy the predefined goal. For example, in the knot-tying example,
+\goalset{} denotes the set of tied knots.  Our MDP's reward function is then
+simply $-1$ for all non-goal states and $0$ for goal states.
 
 \subsection{Labeled Examples}
 \label{subsec:labeledex}
