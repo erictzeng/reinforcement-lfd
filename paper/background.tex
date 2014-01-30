@@ -45,33 +45,22 @@ In it, the authors use maximum margin constraints for an MDP with known dynamics
 \subsection{Markov Decision Processes}
 Markov Decision Processes are the formalization of choice for most stochastic sequential decision making problems.
 They provide a way to account for stochasticity and there is a large array of techniques that can be used to solve them.
-Formally, an undiscounted, finite-horizon, MDP, M, is represented as tuple $\langle\stateset,\actionset,T,R, H\rangle$~\cite{puterman1994}.
+We formalize a finite-state, undiscounted MDP, M, as tuple: $M = \langle\stateset,\goalset, \actionset,T,R, \rangle$~\cite{puterman1994}.
 $\stateset{}$ is a set of states, that represent different configurations of our world.
+$\goalset{} \subset \stateset{}$ is a set of terminal states.  
 $\actionset{}$ is a set of action we can take.
 $T:\stateset{} \times \actionset{} \rightarrow \Delta_{\stateset{}}$ is a function that maps a state and action to a probability distribution over next states.
 $R:\stateset{}\times \actionset{} \times \stateset{} \rightarrow \mathbb{R}$ is a function that specifies the reward our agent receives as a function of state, action, and next state.
-$H$ is a horizon which determines the number of actions we will take in the MDP.
-A solution to an MDP is a mapping from each state and horizon to an action.
+The solution to an MDP is a mapping from each state and to an action which maximizes expected reward.
 
-The solution to an MDP is found by finding a value function, $V^*$, that satisfies the Bellman equations:
-$${\footnotesize V(s, h) = \left\{ \begin{array}{cl} \underset{a}{\max}\ \underset{s'}{\sum} T(s, a, s')[R(s, a, s') + V(s', h-1)] & h >0 \\ 0 & h = 0\end{array}\right.}$$
-It is sometimes easier to work with the right hand side of this equation, which we call a $Q$-function. Thus, $V^*(s, h) = \underset{a}{\max}Q^*(s, h, a)$.
+This solution is found by finding a value function, $V^*$, that satisfies the Bellman equations:
+$${\footnotesize V(s) = \left\{ \begin{array}{cl} \underset{a}{\max}\ \underset{s'}{\sum} T(s, a, s')[R(s, a, s') + V(s')] & s\notin \goalset{}\\ 0 & s\in \goalset{}\end{array}\right.}$$
+It is sometimes easier to work with the right hand side of this equation, which we call a $Q$-function. Thus, $V^*(s, h)~=~\underset{a}{\max}\ Q^*(s, h, a)$.
 There are many approaches to finding such a value function, but they require storing a vector that is $O(|\stateset{}|)$, which can be prohibitive in many applications. 
 
 
-When faced with large state spaces, a common approach is to resort to value (or Q) function approximation~\cite{schweitzer1985generalized}. 
-Given a set of basis functions $\phi: \stateset{}\times \actionset{} \rightarrow \mathbb{R}$ we can formulate an approximate linear program:
-\begin{equation}
-{\footnotesize
-\begin{aligned}
-\underset{w, \nu}{\min}\ \    &-w_0 + -\sum_{i, h} w^\top \phi(s_i, a_i, h) + C\sum \nu_i\\
-\text{s.t.}\ \   &w^\top \phi(\statevar{}_i, \actionvar{}_i, h) \leq \\ &\ \ \ \ \ \ \underset{s'}{\sum}[R(s_i, a_i, s') + T(s_i, a_i, s')\underset{a'}{\max}\ w^\top \phi(\statevar{}'_i, \actionvar{}', h-1)] -  \nu_i \\
-&w^\top \phi(\statevar{}_i, \actionvar{}_i, h) \leq 0
-\end{aligned}}
-\end{equation}
-The solution to this optimization is a lower bound on the Q function of the MDP and have many fewer variables than the exact value function computation~\cite{puterman1994}.
-However, we will still frequently have too many constraints in order to solve this optimization exactly.
-Thus, many approximate linear programming techniques will further approximate by subsampling constraints.
-While the result may no longer be an underestimator, contraints samples techniques have been quite successful in solving many large MDP problems.
-
+When faced with large state spaces, a common approach is to resort to value function approximation~\cite{schweitzer1985generalized}. 
+A standard approach is linear value function approximation. 
+Given a set of basis functions $\phi: \stateset{}\times \actionset{} \rightarrow \mathbb{R}$ we restrict ourselves to linear combinations of basis functions
+and minimize the error associated with the Bellman equations. 
 
