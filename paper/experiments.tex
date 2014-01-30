@@ -109,25 +109,47 @@ For most of the runs, the policy is able to reach the goal state in 3 steps, whi
            motivates the need to Q-function learning: minimizing registration cost in a forward search will \emph{harm} performance.}
 \end{figure}
 
-We also examine the relation between the number of expert-labeled examples and the success rate for each of the four policies, including the nearest-neighbor baseline policy.
-These success rates are shown in Figure~\ref{fig:number_examples}.
-The success rate of the baseline policy is a constant, since the nearest neighbor policy doesn't use the expert-labeled examples.
-As expected, the success rate increases as more labeled examples are used. However, these gains exhibit diminishing rewards; after
-a certain number of examples performance increases stop.
+We also examine the relation between the number of expert-labeled examples and
+the success rate for each of the four policies, including the nearest-neighbor
+baseline policy.  These success rates are shown in
+Table~\ref{table:number_examples}.  As expected, the success rate increases as
+we use more labeled examples. However, the resulting policies remain
+surprisingly resilient. Even with only 50 training examples, the greedy policy is able to beat the baseline by over 12\%.
 
-\begin{figure}[h!]
+\begin{table}
   \centering
-    \includegraphics[width=0.9\linewidth]{figures/placeholder.png}
-  \caption{Success rates as a function of the number of expert-labelled examples for the four policies. The nearest-neighbor policy is fixed
-           an appears as a constant. \mmql{} improves as the amount of data increased. However at a certain point, we approach the limits of this
-           method and improvements taper off.}
-  \label{fig:number_examples}
-\end{figure}
+  \begin{tabular}{lc}
+    \toprule
+      \# of Training Examples & Test Accuracy\\
+    \midrule
+      Nearest neighbor \cite{Schulmanetal_ISRR2013} & 68.8\% \\
+    \midrule
+      50 & 81.2\% \\
+      100 & 85.2\% \\
+      500 & 84.6\% \\
+      1000 & 85.6\%
+    \bottomrule
+  \end{tabular}
+  \caption{We vary the number of examples used to generate constraints for the
+    \mmql{} optimization problem and examine how task performance is affected
+    over 500 test trials using the resulting greedy policy. It turns out that
+    the number of examples has a relatively small influence on the performance
+    of the resulting policy.}
+  \label{table:number_examples}
+\end{table}
 
 \subsubsection{Leave-One-Out Labeled Examples}
 
 After holdout validation and evaluation, done in the same manner as our main
-experiment, we find that using a leave-one-out labeled example set achieves a
-performance of XX\%, a drop of XX\% from our supervised result.
-%\et{It feels difficult to do further analysis without an actual number here. I'll save this
-%for later, if that's alright with everyone.}
+experiment, we find that learning a greedy policy with a leave-one-out labeled
+example set achieves a performance of 78.0\%, a drop of 7.6\% from our
+supervised result. However, this result still surpasses the baseline by
+9.2\%. This indicates that, if expert demonstrations are in short supply, one
+can still improve significantly over a na\"{\i}ve nearest-neighbor policy by
+training with an example set generated through leave-one-out labeling.
+
+We do not present results for lookahead policies. Because the
+automatically-generated example set does not have temporal information, the
+optimization problem used to derive a greedy policy does not contain Bellman
+constraints. The absence of these constraints makes the resulting weight vector
+ill-suited for performing lookahead.
