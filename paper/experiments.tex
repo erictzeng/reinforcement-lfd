@@ -108,18 +108,19 @@ For most of the runs, the policy is able to reach the goal state in 3 steps, whi
            in the strong upward trend in Q-values as execution progresses. The lack of structure in the nearest-neighbor
            motivates the need to Q-function learning: minimizing registration cost in a forward search will \emph{harm} performance.}
 \end{figure}
-\al{Remove some plots of the state values figure}
 
-We also study the relation between the number of expert-labeled examples and the success rate for each of the four policies, including the nearest-neighbor baseline policy.
+We also examine the relation between the number of expert-labeled examples and the success rate for each of the four policies, including the nearest-neighbor baseline policy.
 These success rates are shown in Figure~\ref{fig:number_examples}.
 The success rate of the baseline policy is a constant, since the nearest neighbor policy doesn't use the expert-labeled examples.
-As expected, the success rate increases as more labeled-examples are used.
-%TODO: Mention that there are diminishing returns as you increase the number of expert examples (I assume the graph will look like that)
+As expected, the success rate increases as more labeled examples are used. However, these gains exhibit diminishing rewards; after
+a certain number of examples performance increases stop.
 
 \begin{figure}[h!]
   \centering
     \includegraphics[width=0.9\linewidth]{figures/placeholder.png}
-  \caption{Success rates as a function of the number of expert-labelled examples for the four policies}
+  \caption{Success rates as a function of the number of expert-labelled examples for the four policies. The nearest-neighbor policy is fixed
+           an appears as a constant. \mmql{} improves as the amount of data increased. However at a certain point, we approach the limits of this
+           method and improvements taper off.}
   \label{fig:number_examples}
 \end{figure}
 
