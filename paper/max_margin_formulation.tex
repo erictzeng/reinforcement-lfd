@@ -21,14 +21,6 @@ recover from failure states \cite{Schulmanetal_ISRR2013}.
 Ideally, the segments in \demoset{} contain at least several demonstrations
 of each movement primitive in the task.
 
-
-Each \labelsub{j} $\in$ \labelset{} corresponds to a labeled sequence of
-task executions of length \nsub{j}: [\sapairsub{1}, \sapairsub{2}, \ldots,
-\sapairsub{\nsub{j}}]. \sh{Not sure if we should talk about \labelset{}
-before or after describing MDP, since we need the transition function to
-completely specify \labelset{}. Opinions?}\dhm{I think its ok, we'll talk about MDPs 
-in the technical background}
-
 A demonstration \demovar{} is composed of (\demosub{pc}, \demosub{traj}),
 where \demosub{pc} is a point cloud representation of the underlying
 starting state of the demonstration, and \demosub{traj} stores
@@ -116,19 +108,23 @@ max-margin framework that incorporates max-margin constraints with a structured
 margin, as well as Bellman constraints for Q-learning. The weights of \approxq{}
 are then the solution of this optimization problem, which is as follows:
 \begin{align}
-& \underset{w, \xi}{\text{min}}  & & ||\weights{}||^2 + \marginslackc{} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} \marginslacksubsup{i}{(j)}
-                                                      + \bellmanslackc{} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j} - 1} \bellmanslacksubsup{i}{(j)} \notag \\
-&    & & - \bellmanc{} \weightszero{} - \bellmanc{} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} \weightst{}\features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}}\\
+& \underset{w, \xi, \nu}{\text{min}}  & & ||\weights{}||^2 + \marginslackc{} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} \marginslacksubsup{i}{(j)}
+                                                      + \bellmanslackc{} \sum_{j=1}^{\labelsetsize{}} \bellmanslacksup{(j)} \notag \\
+&    & & - \frac{\bellmanc{}}{\labelsatotal{}} \weightszero{} - \frac{\bellmanc{}}{\labelsatotal{}} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} \weightst{}\features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}}\\
 & \text{s.t.} & &\weightst{} \features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}} \geq \weightst{} \phi(\statesubsup{i}{(j)}, \actionvar{}') + \marginvar{}(\statesubsup{i}{(j)}, \actionsub{i}, \actionvar{}') - \marginslacksubsup{i}{(j)} \notag\\
     &&&\hspace{1.9cm}\forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j}; \notag\\
     &&&\hspace{1.9cm}\forall \actionvar{}' \in \actionset{}\setminus \actionvar{}_i  \label{eq:margin_constr}\\
 &    & & \marginslacksubsup{i}{(j)} \geq 0 \hspace{0.7cm} \forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j} \label{eq:margin_slacks}\\
-&    & & \weightst{}\features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}} \leq \rewardfn{}(\statesubsup{i}{(j)}) + \weightst{}\features{\statesubsup{i+1}{(j)}}{\actionsubsup{i+1}{(j)}} + \bellmanslacksubsup{i}{(j)} \notag \\
+&    & & \weightst{}\features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}} \leq \rewardfn{}(\statesubsup{i}{(j)}) + \weightst{}\features{\statesubsup{i+1}{(j)}}{\actionsubsup{i+1}{(j)}} + \bellmanslacksup{(j)} \notag \\
     &&&\hspace{1.9cm} \forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j} - 2 \label{eq:bellman_constr}\\
-&    & & \weightst{}\features{\statesubsup{\nsub{j}-1}{(j)}}{\actionsubsup{\nsub{j}-1}{(j)}} + \weightszero \leq \rewardfn{}(\statesubsup{\nsub{j}-1}{(j)}) + \bellmanslacksubsup{\nsub{j}-1}{(j)} \notag \\
+&    & & \weightst{}\features{\statesubsup{\nsub{j}-1}{(j)}}{\actionsubsup{\nsub{j}-1}{(j)}} + \weightszero \leq \rewardfn{}(\statesubsup{\nsub{j}-1}{(j)}) + \bellmanslacksup{(j)} \notag \\
     &&&\hspace{1.9cm} \forall j = 1, \ldots, \labelsetsize{} \label{eq:bellman_goal_constr}\\
-&    & & \bellmanslacksubsup{i}{(j)} \geq 0 \hspace{0.7cm} \forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j} - 1 \label{eq:bellman_slack}
+&    & & \bellmanslacksup{(j)} \geq 0 \hspace{0.7cm} \forall j = 1, \ldots, \labelsetsize{} \label{eq:bellman_slack}
 \end{align}
+
+where \labelsatotal{} is equal to the total number of
+(\statevar{}, \actionvar{}) pairs in \labelset{}, so \labelsatotal{} = 
+$\sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} 1$.
 
 In the optimization problem, the constraints in Equation~\ref{eq:margin_constr}
 enforce the max-margin requirements that the
@@ -158,7 +154,7 @@ states immediately prior to the goal in the labeled sequences.
 The \weightszero{} term allows for the \approxq{} to be affine; it exists on
 both sides of the inequality of Equation~\ref{eq:bellman_constr} and thus cancels out.
 We can also ignore \weightszero{} when using \approxq{} to define a policy. The slack variables
-\bellmanslacksubsup{i}{(j)} relax these constraints, with \bellmanslackc{} controlling
+\bellmanslacksup{(j)} relax these constraints, with \bellmanslackc{} controlling
 the degree of relaxation.
 \rewardfn{}(\statevar{}) is as defined in Equation~\ref{eq:mdp},
 -1 for non-goal states and 0 for goal states.

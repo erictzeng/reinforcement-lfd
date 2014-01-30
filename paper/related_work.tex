@@ -42,13 +42,23 @@ In particular, we demonstrate the effectiveness of our approach for
 knot tying, a commonly studied manipulation task in robotics.
 Previous approaches to knot tying usually depend on rope-specific knowledge
 and assumptions.
-For instance, in knot planning from observation (KPO), knot theory is used
-to recognize rope configurations and define movement primitives in visual
-observations of humans tying knots~\cite{Morita_ICRA2003, Takamatsu_TransRob2006}.
-Existing motion planning approaches for knot tying use topological
-representations of rope states (i.e. sequences of rope crossings and their
-properties) and define a model for transitioning between topological states~\cite{Saha_ExpRobotics2008, Wakamatsu_IJRR2006}.
-Robust open loop execution of knot tying has also been explored~\cite{Bell_PhD2010}.
+For instance, in knot planning from observation (KPO), Morita et al. and later
+Takamatsu et al. used knot theory to recognize rope configurations and define
+movement primitives in visual observations of humans tying
+knots~\cite{Morita_ICRA2003, Takamatsu_TransRob2006}. However, they focused on
+recognition and did not apply their work to execution of knot tying.
+Saha et al. and Wakamatsu et al. proposed motion planning approaches for knot tying,
+using topological representations of rope states (i.e. sequences of rope crossings
+and their properties). Wakamatsu et al. defined four basic operations for
+transitioning between topological rope states,
+while Saha et al. required a model of state-transition functions
+as input~\cite{Saha_ExpRobotics2008, Wakamatsu_IJRR2006}.
+Robust open loop execution of knot tying has also been explored by Bell~\cite{Bell_PhD2010}.
+In contrast to these previous approaches, our proposed appraoch does not
+explicitly make use of underlying rope-specific
+knowledge or directly model the rope; instead, it infers this knowledge by
+robustly applying human-guided demonstrations to new scenes thorugh
+\mmql{}-driven demonstration selection and trajectory transfer.
 
 A final area of related work stems from hierarchical reinforcement learning. 
 In this setting, a policy, potentially initialized from expert demonstrations, is learned given the ability to experiment in the world.
