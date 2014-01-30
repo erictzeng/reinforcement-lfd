@@ -419,7 +419,10 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         mm_model.gamma = param_f['gamma'][()]
         mm_model.f_sum_size = param_f['f_sum_size'][()]
         mm_model.F_no_norm = param_f['F_no_norm'][()]
-        mm_model._F = mm_model.F_no_norm/float(mm_model.f_sum_size)
+        if mm_model.f_sum_size:            
+            mm_model._F = mm_model.F_no_norm/float(mm_model.f_sum_size)
+        else:
+            mm_model._F = mm_model.F_no_norm
         return mm_model
 
     def populate_slacks(self):
@@ -448,6 +451,10 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
 
     @F.setter
     def F(self, value):
+        if not self.f_sum_size:
+            self.w0.Obj = 0
+            print 'not setting F, because no bellman constraints'
+            return
         self.w0.Obj = -1*value #flip
         for w in self.w:
             w.Obj = w.Obj/float(self._F)
@@ -635,7 +642,8 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         outfile['weights'] = self.weights
         outfile['w0'] = self.w0_val
         outfile['xi'] = self.xi_val
-        outfile['yi'] = self.yi_val
+        if self.yi_val:
+            outfile['yi'] = self.yi_val
         if self.zi_val:
             outfile['zi'] = self.zi_val
         outfile.close()
