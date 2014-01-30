@@ -1,28 +1,37 @@
 \section{Technical Background}
 
 \subsection{Trajectory Transfer through Non-Rigid Registration}
-Non-Rigid Registration is a method for computing a a function, $f$, to minimize error between landmark points subject to a regularization term.
-A regularizer that has seen widespread, and effective, use for registering spatial data is the Thin Plate Spline regularizer\dhm{Cite Wahba, other stuff}.
-Given a set of corresponding points $(x_i, y_i)$, we minimize the following objective:
-$$\min_f \sum_i ||x_i - y_i||^2 + C\int dx ||D^2(f)||^2_{Frob}.$$
-Where $C$ is a hyper-parameter that trades off between correspondance error and increased curvature.
-This problem has a finite dimensional solution in terms of basis functions around the correspondance points.
-The reader is referred to \dhm{survey on TPS} for more details.
+Non-rigid registration computes a function $f$ that minimizes error between landmark points, subject to a regularization term.
+A commonly-used, effective method for registering spatial data is the Thin Plate Spline (TPS) regularizer \dhm{Cite Wahba, other stuff}.
+Given a set of correspondence points $(x_i, y_i)$, we minimize the following objective:
+$$\min_f \sum_i ||x_i - y_i||^2 + C\int dx ||D^2(f)||^2_{Frob}$$,
+%%PA: move "," before the $$ for proper typesetting
+where $C$ is a hyper-parameter that trades off between correspondance error and increased curvature.
+This problem has a finite dimensional solution in terms of basis functions around the correspondence points.
+The reader is referred to \dhm{cite survey on TPS} for more details.
 
-Schulman et al. leveerage this technique to perform trajectory transfer. 
-Using a point cloud representation of both scenes, they use the TPS-RPM algorithm to jointy find point correspondances and a registration between them\dhm{Cite CHui}.
-TPS-RPM alternates between (1) estimating correspondences between the two scenes' point clouds and (2) fitting the optimal thin plate spline transformation based on these estimated correspondences. 
-The result of this procedure is used to warp the path traced by the end effector of the robot in the demonstration
+Schulman et al. %%PA: citation missing
+leverage TPS to perform trajectory transfer. 
+Using a point cloud representation of both scenes, they use the TPS-RPM algorithm to jointy find point correspondances and a registration between them \dhm{Cite CHui}.
+TPS-RPM alternates between (1) estimating correspondences between the point clouds of two scenes and (2) fitting the optimal TPS transformation based on these estimated scene correspondences. 
+The result of this procedure is used to warp the path traced by the end effector of the robot in the demonstration.
 Finally, this warped trajectory is used as a goal for trajectory following in order to find a similar trajectory that satisfies joint limits and collision constraints.
-The result of this step is executed, with the hope that the registration will account for changes in the environment but maintain the important aspects of the manipulation.
+The result trajectory is executed, with the hope that the registration will account for changes in the environment but maintain the important aspects of the manipulation.
 
+%%PA: i'd phrase this a bit differently; rather than considering each demonstration a policy; I'd say something about having an approach to generalize demonstrations to new situations;  hence a single demonstration can be seen as inducing a policy
+
+%%PA: there is a lot of "Schulman et al" here; would be nice to just say that at the beginning of a paragraph stating Schulman et al present the following approach to ... :     and then describe everything in that paragraph;  
 As a result, we can consider each demonstration as a policy that is parameterized by the environment around the robot.
-Given a demonstration state, demonstration trajectory, and current state it will produce a new trajectory to apply to the current state.
-This approach has been efffective in generalizing deformable object manipulations to new scenarios and has been explored for knot-tieing and automated suturing applications.
-Schulman et al. extend this to use multiple demonstrations by computing the registration for several candidate demonstrations and selecting the option with the least objective value at optimum.
-In this paper, we use leverage this technique to generalize individual demonstrations, but describe a novel method for selecting which demonstration to select.
+Given a demonstration state, demonstration trajectory, and current state, the induced policy will produce a new trajectory to apply to the current state.
+This approach has been effective in generalizing deformable object manipulations to new scenarios and has been explored for knot-tying and automated suturing.
+Schulman et al. extend this method to make use of multiple demonstrations by computing the registration cost to several candidate demonstrations and selecting the demonstration with the lowest registration cost.
+In this paper, we leverage trajectory transfer to generalize individual demonstrations, but describe a novel method for selecting from multiple demonstrations.
+%%PA: some motivation in preceding sentence would be good; currently that sentence makes it sound as a really minor increment ... (which it isn't!)
+
 \subsection{Structured Max Margin}
 One way to incorporate expert demonstrations into learning in through the use of max-margin learning.
+%%PA: in -> is
+%%PA: overall this paragraph feels a bit wordy and not exactly paper-writing style "would like to" etc; how about cutting it straight to the point, and lead off with "Max-margin approaches ... " and say what they do in one sentence, and present the optimization problem, and describe what it encodes.
 In this setting, we are given a set of labelled examples, \labelset{} (in our case pairings of states and expert demonstrations), and we would 
 like to learn a function so that the labelled examples are all ranked highly.
 To build a structured margin, we assume a similarity metric on labels, $m$,  so that we can leverage 
@@ -37,10 +46,15 @@ The max-margin framework formalizes these desires through the following optimiza
 \end{equation}
 
 
-This appraoch has proven useful in many different scenarios where there is structure to an estimation or learning problem.
-A notable, and related, example is that of Inverse Reinforcement Learning, where max-margin consrain reward functions that one might learn so that an expert's policy is optimal.
+This approach has proven useful in many different scenarios where there is structure to an estimation or learning problem.
+A notable, and related, example is that of Inverse Reinforcement Learning, where max-margin constrain reward functions that one might learn so that an expert's policy is optimal.
 Maximum Margin Planning is one such application\dhm{CITE}. 
 In it, the authors use maximum margin constraints for an MDP with known dynamics, but an unknown cost to place constraints on admissable cost functions.
+
+%%PA: could subsection below be called Markov Decision Processes instead?
+%%PA: also, do we really need to introduce the horizon?  It's good to minimize mental notational overhead; I think we can just say there are sink states where the process terminates which have a value of 0 ?  It'd be good to mention that to encode, let's say, tying a knot in a minimal number of segments, we could associate a reward of -1 with every segment execution.
+%%PA: do we need the linear program here?  or can we just say that at the solution the Bellman equation is satisfied (and we already have the Bellman equations earlier on); followed by introducing linear function approximation and saying that when using function approximation one goes after weights that make the Bellman equations approximately satisfied; this would cut down the number of equations to one in the section below
+
 \subsection{Q Function Approximation}
 Markov Decision Processes are the formalization of choice for most stochastic sequential decision making problems.
 They provide a way to account for stochasticity and there is a large array of techniques that can be used to solve them.

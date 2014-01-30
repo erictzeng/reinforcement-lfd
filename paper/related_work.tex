@@ -1,4 +1,14 @@
 \section{Related Work}
+
+%%PA: definitely a bit long;  maybe some cited work can be lumped
+%%together in some way rather than described individually
+
+%%PA: it says currently that behavioral cloning is closest, but then
+%%it comes across as if only the state-action mapping is learned,
+%%whereas we have both the state-action mapping constraints and the
+%%value function / Bellman equation constraints in our learning
+%%formulation
+
 Related work for our contribution stems from three areas of research:
 learning from demonstrations, deformable object manipulation (in particular
 knot tying), and hierarchical reinforcement learning.\dhm{We think this is too long, but haven't had time to clip it}
@@ -36,6 +46,13 @@ space efficiently. \et{Someone who actually understands robotics should probably
   check this statement.}
 
 %\subsection{Deformable Object Manipulation}
+
+%%PA: someone might challenge the fact that we don't make any
+%%assumptions; it's true we don't make any explicit assumptions for
+%%the max-margin formulation, but there is some assumptoin that the
+%%warping is meaningful relative to the dynamics, and then when doing
+%%lookahead we are actually simulating ...
+ 
 Because our approach of \mmql{} makes no assumptions about the state space
 or the dynamics of the model, it can be applied towards a variety of tasks
 in robotics, including the manipulation of deformable objects.

@@ -1,11 +1,16 @@
 \section{Introduction}
-The recent commercial availablity of relatively cheap mobile robots such 
-as Baxter and the UBR 1 creates a very real possiblity for widespread 
-appliation of robotics to mobile manipulation tasks.
-There are huge economic gains to be had from the deployment of robotics 
-in settings that range from homes to factories.
-Our goal is to endow robots with the ability to execute complex, goal-directed, 
-tasks in these unstructured settings.
+
+The recent commercial availablity of relatively cheap mobile robots such as
+Baxter and the UBR 1 has created a very real possiblity for widespread
+application of robotics to mobile manipulation tasks.  There are huge economic
+gains to be had from the deployment of robotics in a variety of settings that
+range from homes to factories.  
+
+%%PA: I might cut out the above as it's pretty generic (and
+%%potentially debatable)
+
+However, getting robots to execute complex,
+goal-directed tasks in such unstructured settings remains a major challenge.
 
 In particular, deformable object manipulation presents an interesting challenge.
 These problems are characterized by state and action spaces that are high-dimensional 
@@ -14,32 +19,66 @@ through contact.
 Determing a correct underlying representation of these objects is itself a difficult problem,
 and current approaches require complicated task specific implementations.
 
-Learning from demonstrations provides a way to sidestep these issues:
-rather than starting from scratch in each scenario, we generalize from 
-an expert demonstration.
-If it can be done robustly, adapting an example trajecotry to a new scene 
-gives an easy way for lay people to provide custom solutions a wide variety of tasks
-well beyond the state-of-the-art.
+%%PA: might cut the "current approaches ... " as it could put a
+%%reviewer on the defensive
 
-A recent approach makes use of \emph{trajectory transfer} through the use of non-rigid registration to solve this problem.
-Trajectory tranfers fits a function $f:\mathbb{R}^3 \rightarrow \mathbb{R}^3$ that warps a demonstration scene to a novel setting.
-The demonstrated trajectory is warped with this function and the result is executed. 
-This has been shown to be effective for many complex task, including knot-tying and suturing \cite{Schulmanetal_ISRR2013, Schulmanetal_IROS2013}.
+%%PA: there seems a bit of a jump here, going from the challenges in
+%%robotic manipulation of deformable object manipulation to learning
+%%from demonstrations; how about more or less just skipping the
+%%paragraph that follows and going straight into describing the recent
+%%work that has presented a learning from demonstrations approach that
+%%is suitable for deformable objects.
+ 
+Learning from demonstrations provides a way to sidestep these issues: rather
+than starting from scratch in each scenario, we generalize from an expert
+demonstration.  If this generalization can be done robustly, adapting an example
+trajectory to a new scene gives an easy way for laypeople to provide custom
+solutions a wide variety of tasks well beyond the state-of-the-art.
 
-This approach has its limits.
-A single demonstration cannot be expected to cover all possible scenarios.
+A recent approach makes use of \emph{trajectory transfer} through the use of
+non-rigid registration to solve this problem.  Trajectory transfer fits a
+function $f:\mathbb{R}^3 \rightarrow \mathbb{R}^3$ that warps a demonstration
+scene to a novel setting.  The demonstrated trajectory is warped with this
+function and the result is executed in the current scene.  This has been shown
+to be effective for many complex task, including knot-tying and suturing
+\cite{Schulmanetal_ISRR2013, Schulmanetal_IROS2013}.
+
+%%PA: there are some jumps in reasoning here; one aspect is to
+%%consider more than one demonstration; another aspect is that
+%%demonstrations consist of segments;  I'd introduce the concept of
+%%segments above already (e.g., explaining a demonstrated knot tie shown in Figure
+%%1 consists of 4 segments?);  it'll also be important to be
+%%consistent in terminology, right now the intro talks about
+%%sequencing trajectory generalizations, do we want to use the word
+%%segment?  (or something else?)
+
+Of course, a single demonstration cannot be expected to cover all possible scenarios.
 The natural solution to this is to use a library of demonstrations.
-In addition to increasing the number of state we can generalize to trajectory libraries
-enable the generalization beyond the demonstrations to complex tasks by sequencing 
-several trajecotry generalizations.
+In addition to increasing the number of states we can adapt to, trajectory libraries
+enable execution of complex tasks beyond mere cloning of demonstrations by sequencing 
+several trajectory generalizations.
 
-However, realizing these benefits requires a robost technique to select a good trajectory to
+However, realizing these benefits requires a robust technique to select a good trajectory to
 transfer.
 This is not an easy task.
-Certain trajectories will generalize better than others and particular sequences of 
+Certain trajectories will generalize better than others, and particular sequences of 
 demonstrations may perform tasks more efficiently than others.
+%%PA: it might be good to be specific here and give some examples;
+%%e.g., when generalizing from a demonstration segment that barely
+%%grasps the rope the resulting warped trajectory might fail to grasp
+%%the rope, or a placement that only ever so barely induces a crossing
+%%might result in a warped trajectory that doesn't achieve the
+%%crossing; you might know better examples
 Furthermore, the existence of poor or brittle demonstrations can very negatively 
 effect performance.
+
+%%PA: the original paper presenting this approach(cite isrr2013)
+%%prescribes choosing the trajectory segment from the demonstrations
+%%library with the lowest warping cost onto the current scene.   ---
+%%should lead the preceding paragraph with something like this
+%%sentence --- then go into why that might not be the right thing;
+%% 
+Na\"{\i}ve approaches that simply use the goodness of the warping fit discard much of this information and often fail to accomplish tasks that would be possible with a different sequence of trajectories.
 
 \begin{figure}[t]
   \centering
@@ -48,13 +87,25 @@ effect performance.
   \label{fig:frontfig}
 \end{figure}
 
-In this paper, we present a solution to the demonstration selection problem that can 
-account for the generalizability of demonstrations and the sequential nature of our 
-applications.
-Given a set of demonstrations and a method for generalizing them, we construct a 
-discrete-action abstract MDP.
-Each action in this MDP is associated with a demonstration and our transition 
-function is defined as applying trajectory transfer to generalize that demonstration.
+%%PA: how about being explicit here and leading with something like:
+%%"The contribution of this paper are: (i) ... (ii) ... with one
+%%paragraph per contribution, and every contribution having a (i)
+%%leading off the paragraph; it'd be good to also match this up with
+%%how the paper is organized in terms of sections/subsections; such
+%%that it's possible to flip to the (sub)section with a particular contribution
+
+%%PA: paragraph below is just a bit too general; I'd make it more directly
+%%fit with what we actually do (rather than trying to generalize it
+%%for this paragraph)
+
+In this paper, we present a solution to the demonstration selection problem that
+can account for the variability in robustness of demonstrations and the
+sequential nature of our tasks.  Given a set of demonstrations and a method for
+applying them to similar situations, we construct a discrete action abstract
+Markov decision process (MDP).  Each action in this MDP is associated with a
+demonstration, and our transition function is defined as applying trajectory
+transfer to generalize that demonstration.
+
 
 This construction allows us to learn a Q function from example sequences of 
 state and demonstration pairs.
@@ -62,6 +113,11 @@ Our Q-function learning is done through a novel Learning from Demonstrations
 technique that accounts for both the optimality of the expert trajecotries and the
 sequenatial nature of the task.
 We call this approach Max-Margin Q Learning, {\sc mmql}.
+
+%%PA: how about leading off this paragraph differently: "While our running example
+%%and all our experiments
+%%consider the problem of knot tying, the presented approach is not
+%%specific to knot tying.  It more generally applies to ... "
 
 Our approach relies only on features which are completely task 
 agnostic and can be applied to any problem where trajectory transfer applies. 
@@ -72,8 +128,25 @@ problems.
 We leverage the fact that we learn a Q function representation of our policy (as 
 opposed to a direct mapping from features to actions) to use a beam search to get 
 near perfect performance in this task.
-Finally, we present a method for bootstraping, though a process we call Leave-One-Out-Labelling, that enables us to do Max Margin Q-Learning with no additional human supervision beyond the initial demonstrations.
+Finally, we present a method for bootstrapping, though a process we call leave-one-out labeling, that enables us to apply {\sc mmql} with no additional human supervision beyond the initial demonstrations.
 
-The rest of this paper is organized as follows: \dhm{we will fill this in later}
+%%PA: last contribution paragraph should describe the experimental
+%%results;  Say we contributed a benchmark (or used the existing
+%%benchmark from ISRR 2013, not sure what's true) which is made
+%%available at the following url: ... .   Say that the ISRR paper
+%%achieves x % performance, the proposed approach achieves y %
+%%performance.   
 
 
+%%PA: paragraph below is redundant given what we will already have above;
+%%let's just cut it?
+
+The rest of this paper is organized as follows: first, we review related work in
+the field and discuss what differentiates our method. Next, we provide relevant
+technical background for our method. We then provide a formal formulation of the
+trajectory selection problem as a max-margin Q-learning problem, as well as a
+discussion of the various features and policies that can be used with this
+framework. We present experimental results in a knot-tying setting and provide
+results that show that our learned policy can successfully tie a knot
+significantly more often than the na\"{\i}ve nearest-neighbor approach. Finally,
+we conclude with a summary of our work and a discussion of future work.
