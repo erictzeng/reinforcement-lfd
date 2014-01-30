@@ -1,6 +1,8 @@
 % Variables used across report
+\newcommand{\mmql}{\textsc{mmql}}
+
 \newcommand{\actionset}{\ensuremath{\mathcal{A}}}
-\newcommand{\actionsetsize}{\ensuremath{\mathcal{|A|}}}
+\newcommand{\actionsetsize}{\ensuremath{|\mathcal{A}|}}
 \newcommand{\actionvar}{\ensuremath{a}}
 \newcommand{\actionsub}[1]{\ensuremath{a_{#1}}}
 \newcommand{\actionsubsup}[2]{\ensuremath{a_{#1}^{#2}}}
@@ -13,13 +15,15 @@
 \newcommand{\trajset}{\ensuremath{\mathcal{T}}}
 
 \newcommand{\labelset}{\ensuremath{\mathcal{L}}}
-\newcommand{\labelvar}{\ensuremath{l}}
+\newcommand{\labelsetsize}{\ensuremath{|\mathcal{L}|}}
+\newcommand{\labelvar}{\ensuremath{\ell}}
 \newcommand{\labelsub}[1]{\ensuremath{l_{#1}}}
 \newcommand{\nsub}[1]{\ensuremath{n_{#1}}}
-\newcommand{\sapairsub}[1]{\ensuremath{(s, a)_{#1}}}
+\newcommand{\sapairsub}[1]{\ensuremath{(s_{#1}, a_{#1})}}
 
 \newcommand{\stateset}{\ensuremath{\mathcal{S}}}
 \newcommand{\statevar}{\ensuremath{s}}
+\newcommand{\statesub}[1]{\ensuremath{s_{#1}}}
 \newcommand{\statesubsup}[2]{\ensuremath{s_{#1}^{#2}}}
 \newcommand{\nextstatevar}{\ensuremath{s'}}
 \newcommand{\transitionfn}{\ensuremath{T}}
@@ -30,8 +34,20 @@
 \newcommand{\policyvar}{\ensuremath{\pi}}
 \newcommand{\policysub}[2]{\ensuremath{\pi_{#1}(#2)}}
 
-\newcommand{\featurefn}{\ensuremath{\phi}}
 \newcommand{\regcost}{\ensuremath{r}}
 \newcommand{\indexvar}{\ensuremath{i}}
 
 \newcommand{\landmarkset}{\ensuremath{\mathcal{K}}}
+
+\newcommand{\marginvar}{\ensuremath{m}}
+\newcommand{\approxq}{\ensuremath{\tilde{Q}}}
+\newcommand{\weights}{\ensuremath{w}}
+\newcommand{\weightszero}{\ensuremath{w_0}}
+\newcommand{\weightst}{\ensuremath{w^\intercal}}
+\newcommand{\featurefn}{\ensuremath{\phi}}
+\newcommand{\features}[2]{\ensuremath{\phi({#1}, {#2})}}
+\newcommand{\marginslackc}{\ensuremath{C}}
+\newcommand{\marginslacksubsup}[2]{\ensuremath{\xi_{#1}^{#2}}}
+\newcommand{\bellmanslackc}{\ensuremath{D}}
+\newcommand{\bellmanslacksubsup}[2]{\ensuremath{\nu_{#1}^{#2}}}
+\newcommand{\bellmanc}{\ensuremath{F}}
