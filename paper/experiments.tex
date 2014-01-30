@@ -1,7 +1,6 @@
 \section{Experiments and Results}
 \label{sec:experiments}
 
-
 %%PA: let's be careful about overclaiming here, and make it clear
 %%up-front that we consider a simulated PR2 robot.  
 
@@ -13,30 +12,37 @@
 %% \subsection{Experiments}  and here we describe the different
 %% methods we consider;  
 
-% introduction of task being studied and description of the demonstration dataset
-We evaluate the greedy policy and two beam search lookahead policies using the Willow Garage PR2 robot, for the task of tying an overhand knot.
+\subsection{Experimental Setup}
+We evaluate the greedy policy and two beam search lookahead policies using the Willow Garage PR2 robot in a simulation environment, for the task of tying an overhand knot.
+
+\subsubsection{Demonstrations}
 We use the set of demonstrations collected by \citet{Schulmanetal_ISRR2013} for their rope-tying experiments.
 These demonstrations were collected in the real world and consist of 148 pairs of point clouds and gripper trajectories.
 The point clouds were collected using an RGBD camera and then filtered based on color to remove the green background of the table, and leave only the point cloud representation of the rope.
 The gripper trajectories were recorded kinesthetically, from human-guided demonstrations that move the robot's grippers to tie a knot.
 The dataset contains demonstrations for the three steps of tying an overhand knot, as well as demonstrations to recover from rope states that could lead to failure cases.
 
+\subsubsection{Simulation Environment for Knot Tying} 
 The training, validation, and evaluation of the trained policy are run in simulation.
-In simulation, the rope is represented as a linked chain of capsules with bending and torsional constraints using Bullet Physics~\cite{Bullet_Physics}.
-To evaluate, we run the trained policy in simulation on randomly drawn initial rope configurations, and measure the success rate. We define success as tying an overhand knot in a sequence of 5 or fewer actions.
-The initial rope states are perturbed configurations of randomly chosen initial rope states from the demonstrations.
+The simulation environment uses Bullet Physics~\cite{Bullet_Physics} as the physics engine.
+The rope is simulated as a linked chain of capsules with bending and torsional constraints.
+
+\subsubsection{Benchmark}
+For the labeled examples \labelset{} used to train our \mmql{} model, we distinguish between expert- (i.e. human-) labeled examples and automatically generated leave-one-out labeled examples.
+In both cases, the examples consists of point clouds, each associated with an optimal action.
+The point clouds in these examples consist of sequences of complete task executions, from a randomly drawn initial rope configuration to a knot (Section~\ref{subsec:labeledex}.
+The radomly drawn initial rope states are perturbed configurations of randomly chosen initial rope states from the demonstrations.
 The process of perturbing a rope state consists of selecting five uniformly-spaced points along the rope and dragging each in a random direction for a random radius of within 15 cm.
 The randomly generated initial rope configurations mentioned hereafter are drawn from this distribution.
+For the expert-labelled examples, the expert does not see the execution of all the actions to select the optimal action.
+Instead, the actions are ranked in increasing order of registration cost with respect to the current state and the expert selects an action as optimal if that action makes some progress on tying the rope.
+The leave-one-out labeled examples are generated as outlined in Section~\ref{subsec:lool}. \al{Do we need to say more about this in here?}
+The benchmark used is the success rate of running the trained policy in simulation on randomly drawn initial rope configurations. 
+We define success as tying an overhand knot in a sequence of 5 or fewer actions.
 
-\subsection{Expert-labeled Examples}
-For the labeled examples \labelset{} used to train our \mmql{} model, we distinguish between expert- (i.e. human-) labeled examples and automatically generated leave-one-out labeled examples.
-Our expert-labeled examples consist of point clouds, each associated with the action that the expert human chooses for that point cloud.
-The point clouds in these examples consist of sequences of complete task executions, from a randomly drawn initial rope configuration to a knot (Section~\ref{subsec:labeledex}.
-%In particular, we simulate sequences of actions for various random initial rope configurations, with a human in the loop selecting the actions to achieve a knot-tie.
-In practice, the expert does not select the optimal action for the current state among all the actions.
-Instead, the actions are ranked in increasing order of registration cost with respect to the current state, since actions with smaller registration cost are more likely to succeed.
-
-We evaluate the success rate of the proposed method under the following policies: greedy, one-step lookahead with width 10, and two-step lookahead with width 5.
+\subsection{Experiments}
+We evaluate the success rate using the following policies when using the expert-labeled and leave-one-out labeled examples: greedy, one-step lookahead with width 10, and two-step lookahead with width 5.
+\subsubsection{Expert-labeled Examples}
 For this evaluation, 1000 expert-labeled examples are used.
 For each of these policies, the optimization hyperparameters $C$, $D$ and $F$ are first tuned via holdout validation, using a holdout set of 100 randomly drawn initial rope states.
 Then the best-performing hyperparameters are used to calculate the weights and then run each of the three policies on the evaluation set, which consists of 500 randomly drawn initial rope states.
@@ -89,10 +95,7 @@ As expected, the success rate increases as more labeled-examples are used.
   \label{fig:number_examples}
 \end{figure}
 
-\subsection{Leave-One-Out Labeling}
-
-We now evaluate the performance when training on leave-one-out labeled
-examples, as outlined in Section~\ref{subsec:lool}.
+\subsubsection{Leave-One-Out Labeled Examples}
 
 After holdout validation and evaluation, done in the same manner as our main
 experiment, we find that using a leave-one-out labeled example set achieves a
