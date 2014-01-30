@@ -11,9 +11,9 @@ learning from demonstrations, deformable object manipulation (in particular
 knot tying), and hierarchical reinforcement learning.
 
 %\subsection{Learning from Demonstrations}
-The problem of learning from demonstrations(LfD) deals with the generalization of expert demonstrations to 
+The problem of learning from demonstrations (LfD) deals with the generalization of expert demonstrations to 
 new scenarios~\cite{Argall_2009, Schaal_1999}. Behavioral cloning is an approach to LfD that 
-directly learns a policy that to mimic an expert's behavior.
+directly learns a policy to mimic an expert's behavior.
 
 One of the first successful applications of this strategy is the ALVINN system~\cite{Pomerleau_NIPS1989}, which utilizes a 
 neural network to learn a steering policy that enables an autonomous car to follow a road.
@@ -32,6 +32,12 @@ However, this approach requires hand tuning of waypoints and does not generalize
 goal-directed, layer which sits on top of a low-level PID controller.
 This goal-directed learning is similar in spirit to ours, although it makes use of a different formalism
 and uses simpler low level controllers.
+
+Calinon et al. learn a mixture of Gaussians to represent the joint trajectory of the robot and environment
+state across multiple demonstrations, and infer the trajectory for a new
+environment state by conditioning on that state~\cite{Calinon_SMC2007, Calinon_HUM2009}. Their approach
+assumes access to a feature representation of the environment, so it cannot be applied to tasks in
+environments without fixed feature representations --- such as our application of knot tying.
 
 \citet{Dvijotham_ICML2010} directly
 learn a value function or Q-function for a MDP, given sample transitions
@@ -107,5 +113,5 @@ demonstrations and do not satisfy all the requirements to be an option.
 \citet{konidaris2010constructing} use learning from demonstrations to initialize a skill chaining reinforcement learning algorithm.
 However, they focus on taking a demonstration and decomposing it into explicit local policies.
 We simply make use of the associated trajectory transfer and leverage it to solve tasks beyond the reach of current reinforcement learning approaches.
-\citet{Neumann09learningcomplex} propose the idea of motion templates using parametrized local controllers as another way to elicit this behavior in RL.
-When they learn the templates, they must find an appropriate policy for setting these parameters, which is intractable in our setting.
+Neumann et al. and Stulp et al. both explore using optimizing motion primitive parameters as another way to elicit this behavior in RL ~\cite{Neumann09learningcomplex, Stulp_ROB2012}.
+When they learn the primitives, they must find an appropriate policy for setting these parameters, which is intractable in our setting.
