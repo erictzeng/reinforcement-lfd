@@ -77,25 +77,29 @@ For most of the runs, the policy is able to reach the goal state in 3 steps, whi
 
 \begin{figure}
   \centering
-  \begin{subfigure}[b]{0.9\linewidth}
+  \begin{subfigure}[b]{0.48\linewidth}
     \includegraphics[width=\textwidth]{figures/state_value_baseline.pdf}
     \caption{baseline}
     \label{fig:value_baseline}
   \end{subfigure}
-  \begin{subfigure}[b]{0.9\linewidth}
+  \begin{subfigure}[b]{0.48\linewidth}
     \includegraphics[width=\textwidth]{figures/state_value_greedy.pdf}
     \caption{greedy}
     \label{fig:value_greedy}
   \end{subfigure}
-  \begin{subfigure}[b]{0.9\linewidth}
+  \begin{subfigure}[b]{0.48\linewidth}
+    \includegraphics[width=\textwidth]{figures/state_value_lookahead1-10.pdf}
+    \caption{lookahead (depth 1, width 10)}
+    \label{fig:value_lookahead_1}
+  \end{subfigure}
+  \begin{subfigure}[b]{0.48\linewidth}
     \includegraphics[width=\textwidth]{figures/state_value_lookahead2-5.pdf}
     \caption{lookahead (depth 2, width 5)}
     \label{fig:value_lookahead_2}
   \end{subfigure}
   \caption{State values as a function of time steps under different policies}\label{fig:values}
 \end{figure}
-
-
+\al{Remove some plots of the state values figure}
 
 We also study the relation between the number of expert-labeled examples and the success rate for each of the four policies, including the nearest-neighbor baseline policy.
 These success rates are shown in Figure~\ref{fig:number_examples}.
