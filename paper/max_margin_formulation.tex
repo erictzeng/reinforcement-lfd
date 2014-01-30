@@ -58,7 +58,7 @@ $\pi_{d}$ as the successor function for transferring $d_{traj}$ to a state $s$,
 and say that $\policysub{d}{\statevar} = s'$.
 
 Thus, the MDP for an \textsc{mmql} problem is defined as
-$\langle\stateset,\goalset,\actionset,T,R\rangle$, where
+$\langle\stateset,\goalset,\actionset,T,R,H\rangle$, where
 
 \begin{align*}
 \stateset{} &=  \text{all underlying states of the task} \\
@@ -70,6 +70,7 @@ $\langle\stateset,\goalset,\actionset,T,R\rangle$, where
     1[\statevar{} = \statevar{}'] &\text{ if } \statevar{} \in \goalset{}
     \end{cases}\\
 \rewardfn{}(\statevar{}) &= -1 {[ \statevar{} \not \in \goalset{} ]}. \\
+H &= \text{finite horizon}
 \end{align*}
 
 In the above specification, \goalset{} denotes the goal set and contains all
