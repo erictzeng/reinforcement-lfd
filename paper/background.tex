@@ -41,4 +41,22 @@ This appraoch has proven useful in many different scenarios where there is struc
 A notable, and related, example is that of Inverse Reinforcement Learning, where max-margin consrain reward functions that one might learn so that an expert's policy is optimal.
 Maximum Margin Planning is one such application\dhm{CITE}. 
 In it, the authors use maximum margin constraints for an MDP with known dynamics, but an unknown cost to place constraints on admissable cost functions.
-\subsection{Reinforcement Learning}
+\subsection{Q Function Approximation}
+Markov Decision Processes are the formalization of choice for most stochastic sequential decision making problems.
+They provide a way to account for stochasticity and there is a large array of techniques that can be used to solve them.
+Formally, an undiscounted, finite-horizon, MDP, M, is represented as tuple $\langle\stateset,\actionset,T,R, H\rangle$~\cite{puterman1994}.
+$\stateset{}$ is a set of states, that represent different configurations of our world.
+$\actionset{}$ is a set of action we can take.
+$T:\stateset{} \times \actionset{} \rightarrow \Delta_{\stateset{}}$ is a function that maps a state and action to a probability distribution over next states.
+$R:\stateset{}\times \actionset{} \times \stateset{} \rightarrow \mathbb{R}$ is a function that specifies the reward our agent receives as a function of state, action, and next state.
+$H$ is a horizon which determines the number of actions we will take in the MDP.
+A solution to an MDP is a mapping from each state and horizon to an action.
+
+The solution to an MDP is found by finding a value function, $V^*$, that satisfies the Bellman equations:
+$$V(s, h) = \left\{ \begin{array}{cl} \underset{a}{\max} \underset{s'}{\sum} T(s, a, s')[R(s, a, s') + V(s', h-1)] & h >0 \\ 0 & h = 0\end{array}\right.$$
+It is sometimes easier to work with the right hand side of this equation, which we call a $Q$-function. Thus, $V^*(s, h) = \underset{a}{\max}Q^*(s, h, a)$.
+There are many approaches to finding such a value function, but they require storing a vector that is $O(|\stateset{}|)$, which can be prohibitive in many applications. 
+
+
+When faced with large state spaces, a common approach is to resort to value (or Q) function approximation~\cite{schweitzer1985generalized}. This can be done with 
+

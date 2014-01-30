@@ -8,8 +8,7 @@ These problems are characterized by state and action spaces that are high-dimens
 The computational complexity faced by a robotic agent makes general solution of these problems difficult.
 In modern factories, this is mitigated through intelligent design of environments and manipulation policies.
 However, the design time and the skill required on the part of system designers prohibits application of these approaches for unstructured settings and more complex task.
-Deformable object manipulation present an especially challenging scenario as modelling or tracking the underlying state of the world is a challenging task \cite{SchulmanLeeHoAbbeel_ICRA2013}, \cite{Javdanietal_2011}, \cite{Haehnel03a}.
-\al{more citations?}
+Deformable object manipulation present an especially challenging scenario as modelling or tracking the underlying state of the world is a challenging task \cite{SchulmanLeeHoAbbeel_ICRA2013,Javdanietal_2011,Haehnel03a}.
 
 One way to mitigate these issues is to frame our problem as one of learning from demonstrations.
 Rather than starting from scratch in each scenario, we generalize from an expert demonstration.
@@ -17,14 +16,13 @@ Rather than starting from scratch in each scenario, we generalize from an expert
 A recent approach makes use of \emph{trajectory transfer} through the use of non-rigid registration to solve this problem.
 When faced with a novel scenario, trajectory tranfers fits a function $f:\mathbb{R}^3 \rightarrow \mathbb{R}^3$ that warps a demonstration scene to a novel setting.
 The demonstrated trajectory is then warped with this function and the result is executed. 
-This has been shown to be effective for many complex task, including knot-tying and suturing \cite{Schulmanetal_ISRR2013}, \cite{Schulmanetal_IROS2013}.\dhm{needs several citations}
+This has been shown to be effective for many complex task, including knot-tying and suturing \cite{Schulmanetal_ISRR2013, Schulmanetal_IROS2013}.\dhm{needs several citations}
 
 There are limits to how well a single trajectory can transfer. 
 Instead we provide a library of demonstrations and a method that selects which trajectory to transfer.
 This enables our trajectory transfer systems to perform complex tasks by sequencing several trajecotry generalizations.
 Selecting a demonstration that will generalize well to a particular scenario is integral to successful trajectory transfer and presents a tought challenge. 
 Certain trajectories will generalize better than others and particular sequences of demonstrations may perform tasks more efficiently than others.
-\dhm{The analog of what we're doing is the discrete case is Knowledge-Based Planning, I think the issue of picking what to generalize is what killed that line of research.}
 Current approaches make use of a nearest-neighbor policy that does not account for these features of the problem and fail to solve many problems that are solvable with that set of demonstrations.
 
 In this paper, we present a solution to the demonstration selection problem that can account for the generalizability of demonstrations and the sequential nature of our applications.
