@@ -1,55 +1,56 @@
 \section{Experiments and Results}
 \label{sec:experiments}
 
-%%PA: let's be careful about overclaiming here, and make it clear
-%%up-front that we consider a simulated PR2 robot.  
-
-%%PA: how about structuring this section a bit more explicitly:
-%% \subsection{Experimental Setup} with further subsections
-%% {Simulation Environment for Knot Tying} and {Benchmark} where the
-%% benchmark clearly mentions the labeling process as well as how
-%% initial states are generated including the test states
-%% \subsection{Experiments}  and here we describe the different
-%% methods we consider;  
-
 \subsection{Experimental Setup}
-We evaluate the greedy policy and two beam search lookahead policies using the Willow Garage PR2 robot in a simulation environment, for the task of tying an overhand knot.
+We evaluate the greedy policy and two beam search lookahead policies using the Willow Garage PR2 robot in a simulation environment on the task of tying an overhand knot.
 
 \subsubsection{Demonstrations}
 We use the set of demonstrations collected by \citet{Schulmanetal_ISRR2013} for their rope-tying experiments.
 These demonstrations were collected in the real world and consist of 148 pairs of point clouds and gripper trajectories.
 The point clouds were collected using an RGBD camera and then filtered based on color to remove the green background of the table, and leave only the point cloud representation of the rope.
 The gripper trajectories were recorded kinesthetically, from human-guided demonstrations that move the robot's grippers to tie a knot.
-The dataset contains demonstrations for the three steps of tying an overhand knot, as well as demonstrations to recover from rope states that could lead to failure cases.
+The dataset contains demonstrations for a three steps method of tying an overhand knot and recovery demonstrations that
+enable recovery from common failures.
 
 \subsubsection{Simulation Environment for Knot Tying} 
-The training, validation, and evaluation of the trained policy are run in simulation.
+The training, validation, and evaluation of our policy are run in simulation.
 The simulation environment uses Bullet Physics~\cite{Bullet_Physics} as the physics engine.
-The rope is simulated as a linked chain of capsules with bending and torsional constraints.
+The rope is simulated with a linked chain of capsules with bending and torsional constraints.
 
 \subsubsection{Benchmark}
-For the labeled examples \labelset{} used to train our \mmql{} model, we distinguish between expert- (i.e. human-) labeled examples and automatically generated leave-one-out labeled examples.
-In both cases, the examples consists of point clouds, each associated with an optimal action.
-The point clouds in these examples consist of sequences of complete task executions, from a randomly drawn initial rope configuration to a knot (Section~\ref{subsec:labeledex}.
-The radomly drawn initial rope states are perturbed configurations of randomly chosen initial rope states from the demonstrations.
-The process of perturbing a rope state consists of selecting five uniformly-spaced points along the rope and dragging each in a random direction for a random radius of within 15 cm.
-The randomly generated initial rope configurations mentioned hereafter are drawn from this distribution.
-For the expert-labelled examples, the expert does not see the execution of all the actions to select the optimal action.
-Instead, the actions are ranked in increasing order of registration cost with respect to the current state and the expert selects an action as optimal if that action makes some progress on tying the rope.
-The leave-one-out labeled examples are generated as outlined in Section~\ref{subsec:lool}. \al{Do we need to say more about this in here?}
-The benchmark used is the success rate of running the trained policy in simulation on 500 randomly drawn initial rope configurations. 
-We define success as tying an overhand knot in a sequence of 5 or fewer actions.
+For the labeled examples \labelset{} used to train our \mmql{} model, we distinguish between human-labeled examples 
+and automatically generated leave-one-out labeled examples.
+In both cases, an example is a pairing of a point cloud and an optimal action.
+For the human-labeled examples, we use traces of complete task executions, from a randomly drawn initial 
+rope configuration to a successfully tied knot.
+Each example contains a reference to its predecessor, so we can represent the associated Bellman equations.
+
+Initial rope states are randomly perturbed configurations of uniformly drawn samples from the initial rope states in the demonstration library.
+The process of perturbing a rope state consists of selecting five uniformly-spaced points along the rope and dragging each in a random direction for a random radius between 0 and 15 cm.
+All initial rope configurations in our experiments are drawn from this distribution.
+
+Our labeling interface shows the user simulations of applying demonstrations in decreasing order a registration cost, which is a rough measure of the quality of an action.
+When human labeler see an action that she deems optimal (or close enough to optimal) she indicates that, the simulated robot commits to that action and the process 
+proceeds until a knot is tied.
+The leave-one-out labeled examples are generated as outlined in Section~\ref{subsec:lool}. 
+
+In addition, the benchmark contains an evaluation set of 500 randomly drawn initial configurations. 
+We define success to be tying an overhand knot in a sequence of 5 or fewer actions.
 
 \subsection{Experiments}
 We evaluate the success rate using the following policies when using the expert-labeled and leave-one-out labeled examples: greedy, one-step lookahead with width 10, and two-step lookahead with width 5.
 \subsubsection{Expert-labeled Examples}
 For this evaluation, 1000 expert-labeled examples are used.
-For each of these policies, the optimization hyperparameters $C$, $D$ and $F$ are first tuned via holdout validation, using a holdout set of 100 randomly drawn initial rope states. For this case, the best-performing hyperparameters we found are $C=2$, $D=1$ and $F=1$.
-Using this hyperparameters, we optimize the weights and then run each of the three policies on the evaluation set, which consists of 500 randomly drawn initial rope states.
+For each of these policies, the optimization hyperparameters $C$, $D$ and $F$ are first tuned via holdout 
+validation, using a holdout set of 100 randomly drawn initial rope states (distinct from the evaluation set). 
+For this case, the best-performing hyperparameters we found are $C=2$, $D=1$ and $F=1$.
+We applied \mmql{} with these hyper-parameter settings and ran each of the three policies 
+on the evaluation set.
 % TODO: Add in what the hyperparameters are, once we decide on them
 As a baseline comparison, we also evaluate using the nearest neighbor policy presented in \citet{Schulmanetal_ISRR2013}.
-Their policy chooses the action associated with the state that has the smallest bidirectional registration cost with respect to the current state.
+Their policy chooses the action associated with the state that has the smallest registration cost with respect to the current state.
 The success rates obtained under these policies are summarized in Table~\ref{table:performance}. Note that our best results surpass the baseline by 26.4\%.
+A little over half of our improvement stems from 
 % TODO: Add more analysis of the results, e.g. 1-10 and 2-5 lookahead perform approximately equally well
 
 \begin{table}
@@ -65,13 +66,17 @@ The success rates obtained under these policies are summarized in Table~\ref{tab
       Lookahead (depth 2, width 5) & 95.2\% \\
     \bottomrule
   \end{tabular}
-  \caption{Success rate of tying a knot using the expert-labeled examples.}
+  \caption{Success rate of tying a knot using the expert-labeled examples. The neareast-neighbor method selects
+           the demonstration that minimizes a bi-directional registration cost associated with the trajectory transfer.
+           Other policies maximize the approximate Q-function we learn through \mmql{}. Greedy maximizes this value in the current
+           state. The lookahead policies act to maximize a back up value computed by beam search with the specified parameters. The greedy
+           succeeds in an additional 17\% of examples when compared with the baseline. Lookahead policies acheive very high performance rates
+           and approach the best possible with our demonstration library (\al{fill in upper bound on performance})}
   \label{table:performance}
 \end{table}
 
 The approximate values of the states for the 500 evaluated runs in the validation set are plotted in Figure~\ref{fig:values} as a function of time steps 1 through 5.
-%TODO: shift plot from 1 to 5
-Observe that the state values are generally increasing; we expect this since the Bellman constraints in our formulation pushes states closer to the goal to have higher values.
+Observe that Q values are generally increasing; we expect this since the Bellman constraints in our formulation pushes states closer to the goal to have higher values.
 Also, recall that the state value of the tied knot is close to zero, which is visible in the figure (Equation~\ref{eq:bellman_goal_constr}).
 For most of the runs, the policy is able to reach the goal state in 3 steps, which is optimal since the expert took a minimun of three actions to tie a knot.
 
@@ -97,7 +102,11 @@ For most of the runs, the policy is able to reach the goal state in 3 steps, whi
     \caption{lookahead (depth 2, width 5)}
     \label{fig:value_lookahead_2}
   \end{subfigure}
-  \caption{State values as a function of time steps under different policies}\label{fig:values}
+  \caption{Plots of Q values over executions on the evaluation set. The x-axis indicates which step in the execution
+           the evaluation comes from. A value of 0 corresponds to successfully tying a knot. For comparison, we show the 
+           negative registration cost of the nearest-neighbor baseline. The structure in our learned function can be seen
+           in the strong upward trend in Q-values as execution progresses. The lack of structure in the nearest-neighbor
+           motivates the need to Q-function learning: minimizing registration cost in a forward search will \emph{harm} performance.}
 \end{figure}
 \al{Remove some plots of the state values figure}
 
