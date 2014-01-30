@@ -1,3 +1,23 @@
 \begin{abstract}
-Very.
+We consider the problem of learning to manipulate deformable objects
+through learning from demonstrations.  Recent
+work~\cite{Schulmanetal_IROS2013, Schulmanetal_ISRR2013} has shown
+promising results in enabling robotic manipulation of deformable
+objects through learning from demonstrations.  Their approach is able
+to generalize from a single demonstration, and suggests a nearest
+neighbor approach to decide which demonstration to generalize from for
+a given test situation.  Such a nearest neighbor approach, however,
+ignores important aspects of the problem:  brittleness (versus
+robustness) of demonstrations when generalized through this process,
+and the extent to which a demonstration makes progress towards the goal.
+
+In this paper, we present a max-margin q-learning-based solution
+to the demonstration selection problem that
+can account for the variability in robustness of demonstrations and the
+sequential nature of our tasks.   We also present experimental
+validation of our approach.  We developed a knot-tying benchmark for
+evaluating the effectiveness of
+our proposed approach.   The
+nearest neighbor approach described in \citet{Schulmanetal_ISRR2013} achieves a
+68.8\% success rate. Our approach achieves a success rate of 95.2\%.
 \end{abstract}
