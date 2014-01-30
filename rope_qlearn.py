@@ -1000,7 +1000,7 @@ def build_model(args):
     if args.model == 'multi':
         mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, args.F, .9, num_features, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, args.F, 1, num_features, feature_fn, margin_fn) # changed
     else:
         mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
     if not args.goal_constraints and args.model == 'bellman':
