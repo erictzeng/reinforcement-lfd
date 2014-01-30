@@ -1,38 +1,78 @@
-\section{Experiments}
+\section{Experiments and Results}
 \label{sec:experiments}
 
-The proposed method for choosing an action is evaluated for the task of tying an overhand knot using the Willow Garage PR2 robot platform. 
-The demonstrations were collected in the real world, where a human controlled the PR2's gripper to tie a knot.
-The training, validation and evaluation of the trained policy are ran in a simulation environment containing the rope and the PR2.
-The rope is simulated as a linked chain of capsules with bending and torsional constraints using Bullet Physics.
-To evaluate the trained policy, we measure the success rate, where we define success as tying an overhand knot in a sequence of 5 or less actions.
-
-The set of demonstrations consists of 148 pairs of point clouds and gripper trajectories.
-These demonstrations are from the dataset collected by Schulman et al. \cite{Schulmanetal_ISRR2013} in their rope experiments.
+% introduction of task being studied and description of the demonstration dataset
+The proposed methods for choosing an action is evaluated for the task of tying an overhand knot using the Willow Garage PR2 robot platform.
+The dataset of demonstrations that we use is the one collected by \citet{Schulmanetal_ISRR2013} for their rope-tying experiments.
+The demonstrations were collected in the real world and they consist of 148 pairs of point clouds and gripper trajectories.
 The point clouds of the ropes were collected using an RGBD camera and then filtered based on color to remove the background.
 The gripper trajectories were recorded kinesthetically, by moving the robot's gripper to tie a knot.
-The dataset contains 93 demonstrations that demonstrates tying a knot in a sequence of 3 demonstrations, as well as 55 demonstrations that demonstrates recovering from failure states.
+The dataset contains demonstrations to tie an overhand knot and also demonstrations to recover from rope states that could lead to failure cases.
 
-The expert labelled examples consists of 1000 pairs of point clouds and actions.
-To collect this data, we simulate sequences of actions for various initial rope configurations, with a human in the loop selecting the actions.
-These initial rope states are perturbed configurations of randomly chosen initial rope states from the demontrations.
-In order to perturb an initial rope state, five points uniformly spaced along the rope, are dragged uniformly at random within a radius of 15 cm in a random direction.
-For every initial rope configuration, a human expert selects the sequence of actions to tie a knot.
-In practice, not all the actions are applied and simulated to the current state.
-Instead, the actions are ranked in increasing order of registration cost with respect to the current state, under the assumption that actions with smaller registration cost are more likely to be better.
+The training, validation and evaluation of the trained policy are ran in a simulation environment containing the rope and the PR2.
+The rope is simulated as a linked chain of capsules with bending and torsional constraints using Bullet Physics.
+To evaluate, we run the trained policy in simulation on various initial rope configurations, and measure the success rate, where we define success as tying an overhand knot in a sequence of 5 or less actions.
+These initial rope states are perturbed configurations of randomly chosen initial rope states from the demonstrations.
+The process of perturbing a rope state consists on taking five points uniformly spaced along the rope and dragging them uniformly at random within a radius of 15 cm in a random direction.
+Notice that this is the distribution of problems that we consider in our experiments.
+The randomly generated initial rope configurations mentioned hereafter are drawn from this distribution.
 
-To tune the optimization hyperparameters $C$, $D$ and $F$, we perform holdout validation on a validation set.
-\al{replace hyperparameters name.}
-The validation set consists of 100 random initial rope states, which are generated in the same way as in the training set.
-We run the trained policy on this validation set with no lookahead for different values of hyperparameters, and choose the set of hyperparameters that gives the highes sucess rate. Even though we also evaluate using lookahead, we don't revalidate the hyperparameters due to lack of computation time.
+\subsection{Expert-labelled examples}
+The expert-labelled examples consist of point clouds labelled with the action that the expert human chooses.
+The point clouds in the examples are from rope states that are drawn from the distribution of initial rope configurations and the rope states resulting from simulating the chosen actions.
+In particular, we simulate sequences of actions for various random initial rope configurations, with a human in the loop selecting the actions to achieve a knot-tie.
+In practice, not all the actions are applied and simulated to the current state for the expert to choose from.
+Instead, the actions are ranked in increasing order of registration cost with respect to the current state, under the assumption that actions with smaller registration cost are likely to be better.
 
-The evaluation set consists of 500 initial rope states from the same distribution as the training and validation set.
-We evaluate the proposed method under the following policies:
-\begin{itemize}
-  \item no lookahead
-  \item one-step lookahead with width 10
-  \item two-step lookahead with width 5
-  \item \al{do we want to do variable width lookahead?}
-\end{itemize}
-We also evaluate using the method presented in Schulman et al. as a baseline to compare our results. Their policy is to choose the action that has the smallest bidirectional registration cost with respect to the current state.
+We evaluate the success rate of the proposed method under the following policies: greedy, one-step lookahead with width 10, and two-step lookahead with width 5.
+For this evaluation, 1000 expert-labelled examples were used.
+For each of these policies, the optimization hyperparameters $C$, $D$ and $F$ are first tuned via holdout validation, using a validation set of 100 random initial rope states.
+The evaluation set consists of 500 random initial rope states.
+We also evaluate using the nearest neighbor policy presented in \citet{Schulmanetal_ISRR2013} as a baseline comparison.
+Their policy chooses the action that has the smallest bidirectional registration cost with respect to the current state.
+The success rates obtained under these policies are summarized in Table~\ref{table:performance}. Notice that our best results surpasses the baseline by XX\%.
+
+\begin{table}
+  \centering
+  \begin{tabular}{lc}
+    \toprule
+      Policy & Test Accuracy\\
+    \midrule
+      Nearest neighbor \cite{Schulmanetal_ISRR2013} & XX\% \\
+    \midrule
+      Greedy & XX\% \\
+      Lookahead (depth 1, width 10) & XX\% \\
+      Lookahead (depth 2, width 5) & XX\% \\
+    \bottomrule
+  \end{tabular}
+  \caption{Success rate of tying an overhand knot under different policies.}
+  \label{table:performance}
+\end{table}
+
+The learned state values for the 500 evaluated runs for the three policies are plotted in Figure~\ref{fig:values} as a function of time steps 1 through 5.
+\al{shift plot from 1 to 5.}
+Notice that the state values are generally increasing as we would expect since our formulation is encoding that states closer to the goal have higher values.
+Also, recall that the state value of the tied knot is close to zero. \al{cite bellman constraints equation.}
+Thus, we notice that in most of the runs, the policy is able to reach the goal state in 3 steps, which is the optimal number of actions to reach the goal since the expert had to take a minimun of 3 actions to tie a knot.
+
+\begin{figure}[h!]
+  \centering
+    \includegraphics[width=0.9\linewidth]{figures/placeholder.png}
+  \caption{State values as a function of time steps}
+  \label{fig:values}
+\end{figure}
+
+We also study the relation between the number of expert-labelled examples and the success rate for the four policies.
+These success rates are shown in Figure~\ref{fig:number_examples}.
+The success rate of the baseline policy is a constant since the nearest neighbor policy doesn't use the expert-labelled examples.
+As expected, the success rate increases as more labelled-examples are used.
+
+\begin{figure}[h!]
+  \centering
+    \includegraphics[width=0.9\linewidth]{figures/placeholder.png}
+  \caption{Success rates as a function of the number of expert-labelled examples for the four policies}
+  \label{fig:number_examples}
+\end{figure}
+
+\subsection{Leave-One-Out-Labelling}
 
