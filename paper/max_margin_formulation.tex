@@ -2,7 +2,7 @@
 \label{sec:formulation}
 %\input{variables.tex}
 
-In this section, we will formulate our approach to doing {\sc mmpl}, and
+In this section, we will formulate our approach to doing \mmql{}, and
 specify our assumptions regarding the problems it is applied to.
 
 %%PA: throughout the paper there are quite a few abbreviations used
@@ -11,9 +11,6 @@ specify our assumptions regarding the problems it is applied to.
 %%PA: either way, never use an abbreviation without introducing it;
 %%and it's tricky if it's been introduced a long time ago; let's not
 %%burden our reviewers ...
-
-%%PA: and what's MMPL ? :)
-
 
 %%PA: could it make sense to build it up with first presenting
 %%max-margin direct policy learning
@@ -45,7 +42,7 @@ of expert demonstrations and a set \labelset{} of labeled sequences of
 task executions (Section~\ref{subsec:labeledex}).
 Each \demovar{} $\in$ \demoset{} corresponds to a complete expert-guided
 demonstration of the given robotic task or a movement primitive of a complete
-demonstration --- our {\sc mmpl} formulation assumes the latter,
+demonstration --- our \mmql{} formulation assumes the latter,
 since it is often necessary for complex, multi-step tasks.
 In our application of knot tying, we split each expert demonstration of
 tying a knot into three or four movement primitives. The movement primitives
@@ -175,7 +172,7 @@ the state \statesubsup{i}{(j)}. More precisely, we first apply trajectory
 transfer on both actions \actionsub{i} and \actionvar{}' to transfer
 each trajectory to the state \statesubsup{i}{(j)}. Then, we use dynamic
 time warping of the trajectories for robust comparison of trajectories that
-vary in time and speed. \sh{Add citation here for DTW}
+vary in time and speed~\cite{Sakoe_IEEE1978, Vakanski_2012}.
 
 The Bellman constraints in Equation~\ref{eq:bellman_constr} and~\ref{eq:bellman_goal_constr}
 are key for learning a valid Q-function approximation \approxq. These constraints specify that
