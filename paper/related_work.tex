@@ -50,56 +50,47 @@ space efficiently. \et{Someone who actually understands robotics should probably
 %%warping is meaningful relative to the dynamics, and then when doing
 %%lookahead we are actually simulating ...
  
-Because our approach of \mmql{} makes no assumptions about the state space
-or the dynamics of the model, it can be applied towards a variety of tasks
+Because our approach of \mmql{} makes limited assumptions about the state space
+and dynamics of the model, it can be applied towards a variety of tasks
 in robotics, including the manipulation of deformable objects.
-It is challenging to manipulate deformable objects due to their nonlinearity,
+It is challenging to manipulate deformable objects due to their nonlinearity
 and because the configuration spaces of such objects may be
 infinite-dimensional~\cite{Lamiraux_IJRR2001}.
 
-In previous work on manipulation of deformable objects,
-Wada et al. perform indirect simultaneous positioning of
-textile fabric and sponge blocks by modeling the
-the objects coarsely and then applying a control method robust
+In previous work, Wada et al. model textile fabric and sponge blocks
+coarsely and then apply a control method that is robust
 to discrepancies between the coarse model and the
-object~\cite{Wada_ArticMotion2000}. Howard et al. present a
+object~\cite{Wada_ArticMotion2000}. Howard et al. present a more
 general approach for grasping 3D deformable objects
 that does not assume prior knowledge of the object.
 They model particle motion of the object using nonlinear partial differential
 equations, and train a neural network for determining the minimum force
 required for manipulating the object~\cite{Howard_AutRobots2000}.
-In contrast, our approach enables manipulation of deformable objects without
-the need to directly model the object. In addition, for tasks
-where a model of state-transitions is available, our use of
+In contrast, our approach enables manipulation of deformable objects
+without directly modeling the object, and makes no assumptions beyond
+those of trajectory transfer. When a model of state-transitions
+is available, our use of
 lookahead to augment \mmql{} reduces uncertainty in execution through
 simulation of transferred trajectories.
 
-In particular, we demonstrate the effectiveness of our approach for
-knot tying, a commonly studied manipulation task in robotics.
+We demonstrate the effectiveness of our approach for
+knot tying, a commonly studied deformable object manipulation task in robotics.
 Previous approaches to knot tying usually depend on rope-specific knowledge
 and assumptions.
-For instance, in knot planning from observation (KPO), Morita et al. and later
-Takamatsu et al. use knot theory to recognize rope configurations and define
+For instance, in knot planning from observation (KPO), knot theory is used
+to recognize rope configurations and define
 movement primitives from visual observations of humans tying
-knots~\cite{Morita_ICRA2003, Takamatsu_TransRob2006}. However, they focus on
-recognition and did not apply their work to execution of knot tying. Matsuno et al.
-also uses a topological model of the rope and knot theory to recognize knots with
-stereo vision input~\cite{Matsuno_RSJ2006}.
-Saha et al. and Wakamatsu et al. propose motion planning approaches for knot tying,
-using topological representations of rope states. Wakamatsu et al. define four basic operations for
-transitioning between topological rope states,
-while Saha et al.'s approach requires a model of state-transition functions
-as input~\cite{Saha_ExpRobotics2008, Wakamatsu_IJRR2006}. Moll et al.'s approach
-to motion planning is based on restricting the planner to minimal-energy
-configurations of the deformable linear object, e.g. a wire or rope~\cite{Moll_IEEERobot2006}.
-Robust open loop execution of knot tying has also been explored by Bell~\cite{Bell_PhD2010}.
+knots~\cite{Morita_ICRA2003, Takamatsu_TransRob2006}.
+Existing motion planning approaches for knot tying use topological
+representations of rope states (i.e. sequences of rope crossings and their
+properties) and define a model for transitioning between topological
+states~\cite{Moll_IEEERobot2006, Saha_ExpRobotics2008, Wakamatsu_IJRR2006}.
+Robust open loop execution of knot tying has also been explored~\cite{Bell_PhD2010}.
 In contrast to these previous approaches, our proposed approach does not
 explicitly make use of underlying rope-specific
 knowledge or directly model the rope; instead, it infers this knowledge by
 robustly applying human-guided demonstrations to new scenes through
 \mmql{}-driven demonstration selection and trajectory transfer.
-
-
 
 A final area of related work stems from hierarchical reinforcement learning. 
 In this setting, a policy is learned given the ability to experiment in the world.
