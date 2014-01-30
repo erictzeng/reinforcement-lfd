@@ -1,46 +1,46 @@
 \section{Determining a Policy}
 
-Given an appropriate choice of $\featurefn{}$, we can set up an optimization
+Given an appropriate choice of \featurefn{}, we can set up an optimization
 problem based on the formulation outlined in
 Section~\ref{sec:formulation}. Solving this optimization problem produces a
-weight vector $w$, which defines an approximate Q-function:
+weight vector \weights{}, which defines an approximate Q-function:
 
 \begin{equation}
-  \tilde{Q}(s,a) = w^\intercal \phi(s,a)
+  \approxq(s,a) = \weightst \features{s}{a}
 \end{equation}
 
 \et{This definition might be redundant, but for now I'm putting it here anyway.}
 
-Once we have solved for $\tilde{Q}$, the most natural choice of policy is the
+Once we have solved for \approxq{}, the most natural choice of policy is the
 simple greedy policy, which always selects the action that yields the highest
 approximate Q-value:
 
 \begin{equation}
-  \pi(s) = \argmax_{a \in \mathcal{A}} \tilde{Q}(s,a)
+  \policyvar(s) = \argmax_{\actionvar \in \actionset} \approxq(s,a)
 \end{equation}
 
-In the case where $\tilde{Q}$ exactly represents the true Q-function of the MDP,
-$\pi$ is an optimal policy. However, since the constraints in the optimization
+In the case where \approxq{} exactly represents the true Q-function of the MDP,
+\policyvar{} is an optimal policy. However, since the constraints in the optimization
 problem are only a subset of the full set of constraints imposed by the MDP, and
 the approximate Q-function is simply a linear combination of the features, in
-practice $\tilde{Q}$ serves as only a loose approximation of the true function
-$Q$. Thus, other choices of $\policyvar{}$ instead of the na\"{\i}ve greedy
+practice \approxq{} serves as only a loose approximation of the true function
+$Q$. Thus, other choices of \policyvar{} instead of the na\"{\i}ve greedy
 policy have the potential to improve the robustness of action selection.
 
 One such strategy for determining a policy takes advantage of the fact that
 learning an approximate Q-function confers the ability to compare the value of
 states directly. If we allow for simulation of the task in question, then we can
-use $\tilde{Q}$ as a heuristic to look ahead to promising states.
+use \approxq{} as a heuristic to look ahead to promising states.
 
 One way of performing this lookahead is through beam search. Beam search defines
-a family of policies based on a particular $\tilde{Q}$, in which each policy is
-characterized by a lookahead width $w$ and depth $d$. To select an action under
-one of these policies, we repeatedly simulate the $w$ most promising actions up
-to a depth of $d$, then select the initial action which yields the successor
+a family of policies based on a particular \approxq{}, in which each policy is
+characterized by a lookahead width $w_\ell$ and depth $d_\ell$. To select an action under
+one of these policies, we repeatedly simulate the $w_\ell$ most promising actions up
+to a depth of $d_\ell$, then select the initial action which yields the successor
 with the highest $\tilde{V}$, where $\tilde{V}$ is defined as
 
 \begin{equation}
-  \tilde{V}(\statevar) = \max_{\actionvar \in \actionset} \tilde{Q}(\statevar, \actionvar).
+  \tilde{V}(\statevar) = \max_{\actionvar \in \actionset} \approxq(\statevar, \actionvar).
 \end{equation}
 
 
