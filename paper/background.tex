@@ -18,7 +18,7 @@ The result trajectory is executed, with the hope that the registration will acco
 
 As a result, we can consider each demonstration as a policy that is parameterized by the environment around the robot.
 Given a demonstration state, demonstration trajectory, and current state, the induced policy will produce a new trajectory to apply to the current state.
-This approach has been efffective in generalizing deformable object manipulations to new scenarios and has been explored for knot-tying and automated suturing.
+This approach has been effective in generalizing deformable object manipulations to new scenarios and has been explored for knot-tying and automated suturing.
 Schulman et al. extend this method to make use of multiple demonstrations by computing the registration cost to several candidate demonstrations and selecting the demonstration with the lowest registration cost.
 In this paper, we leverage trajectory transfer to generalize individual demonstrations, but describe a novel method for selecting from multiple demonstrations.
 \subsection{Structured Max Margin}
@@ -37,8 +37,8 @@ The max-margin framework formalizes these desires through the following optimiza
 \end{equation}
 
 
-This appraoch has proven useful in many different scenarios where there is structure to an estimation or learning problem.
-A notable, and related, example is that of Inverse Reinforcement Learning, where max-margin consrain reward functions that one might learn so that an expert's policy is optimal.
+This approach has proven useful in many different scenarios where there is structure to an estimation or learning problem.
+A notable, and related, example is that of Inverse Reinforcement Learning, where max-margin constrain reward functions that one might learn so that an expert's policy is optimal.
 Maximum Margin Planning is one such application\dhm{CITE}. 
 In it, the authors use maximum margin constraints for an MDP with known dynamics, but an unknown cost to place constraints on admissable cost functions.
 \subsection{Q Function Approximation}
