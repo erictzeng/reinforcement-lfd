@@ -20,7 +20,34 @@ specify our assumptions regarding the problems it is applied to.
 %%can't do lookahead planning with this; so now let's take a look at
 %%how to add that to our formulation;  
 
-%%PA: overall this is a long and heavy section
+\subsection{Demonstration Set and Labeled Examples}
+
+The required inputs of our pipeline are a library \demoset{}
+of expert demonstrations and a set \labelset{} of labeled sequences of
+task executions.
+Each demonstration \demovar{} $\in$ \demoset{} corresponds to a step
+of the given robotic task. Ideally, the segments in \demoset{} contain
+at least several demonstrations of each step of the task.
+
+A demonstration \demovar{} is composed of (\demosub{pc}, \demosub{traj}),
+where \demosub{pc} is a point cloud representation of the underlying
+starting state of the demonstration, and \demosub{traj} stores
+the trajectory executed by the expert in that demonstration.
+
+Each \labelsub{j} $\in$ \labelset{}
+corresponds to a labeled sequence of
+task executions of length \nsub{j}:
+\begin{equation*}
+\labelsub{j} = [\sapairsubsup{1}{(j)},
+\sapairsubsup{2}{(j)}, \ldots, \sapairsubsup{\nsub{j}}{(j)}],
+\end{equation*}
+where \statesubsup{i}{(j)}
+is a state and \actionsubsup{i}{(j)} is the action taken in that state, described in
+Section~\ref{subsec:form_mdp}. Each labeled sequence \labelsub{j} corresponds
+to a single complete task execution, ordered in the chronological sequence of
+states and actions taken in those states: \statesubsup{i}{(j)} should
+be the result of taking action \actionsubsup{i-1}{(j)} in state \statesubsup{i-1}{(j)},
+and the last state \statesubsup{\nsub{j}}{(j)} should be a goal state.
 
 %%PA: How about in subsection1 presenting the problem formulation, in which the
 %%demonstration set is described as well as the labeled examples; then
@@ -34,31 +61,10 @@ specify our assumptions regarding the problems it is applied to.
 %%but either way, as long as they understand from the first few
 %%motivating sentences of subsection3 what it's getting it, they get
 %%the idea anyway even if they don't get the math); 
- 
-\subsection{Demonstration Set}
-
-The required inputs of our pipeline are a set \demoset{}
-of expert demonstrations and a set \labelset{} of labeled sequences of
-task executions (Section~\ref{subsec:labeledex}).
-Each \demovar{} $\in$ \demoset{} corresponds to a complete expert-guided
-demonstration of the given robotic task or a movement primitive of a complete
-demonstration --- our \mmql{} formulation assumes the latter,
-since it is often necessary for complex, multi-step tasks.
-In our application of knot tying, we split each expert demonstration of
-tying a knot into three or four movement primitives. The movement primitives
-also include demonstration segments that attempt to
-recover from failure states \cite{Schulmanetal_ISRR2013}.
-Ideally, the segments in \demoset{} contain at least several demonstrations
-of each movement primitive in the task.
-
-A demonstration \demovar{} is composed of (\demosub{pc}, \demosub{traj}),
-where \demosub{pc} is a point cloud representation of the underlying
-starting state of the demonstration, and \demosub{traj} stores
-the trajectory executed by the expert in that demonstration. The trajectory
-space \trajset{} spans the set of all possible trajectories.
-
 
 \subsection{Markov Decision Process Formulation}
+\label{subsec:form_mdp}
+
 Selecting from multiple demonstrations can be framed as a Markov Decision
 Process (MDP), which enables us to apply Q-function approximation to derive a
 policy.
@@ -102,22 +108,6 @@ In the above specification, \goalset{} denotes the goal set and contains all
 states that satisfy the predefined goal. For example, in the knot-tying example,
 \goalset{} denotes the set of tied knots.  Our MDP's reward function is then
 simply $-1$ for all non-goal states and $0$ for goal states.
-
-\subsection{Labeled Examples}
-\label{subsec:labeledex}
-
-As mentioned, one of the required inputs to our pipeline is a set \labelset{}
-of labeled sequences of task executions. Each \labelsub{j} $\in$ \labelset{}
-corresponds to a labeled sequence of
-task executions of length \nsub{j}: \labelsub{j} = [\sapairsub{1},
-\sapairsub{2}, \ldots, \sapairsub{\nsub{j}}]. Each labeled sequence corresponds
-to a single complete task execution, ordered in the sequence of states and
-actions taken. More formally, it is required that for each trajectory
-\labelsub{j} $\in$ \labelset{}, for $1 \leq i \leq$ \nsub{j},
-\begin{align*}
-\transitionfn(\statesubsup{i}{(j)}, \actionsubsup{i}{(j)}) &= \statesubsup{i+1}{(j)} \text{ for } i < \nsub{j} \\
-\text{and } T(\statesubsup{\nsub{j}}{(j)}, \actionsubsup{\nsub{j}}{(j)}) &\in \goalset{}
-\end{align*}
 
 \subsection{Max-Margin Q-Learning Formulation}
 Our goal is to use the labeled sequences \labelset{} in order to learn an
@@ -190,7 +180,7 @@ the degree of relaxation.
 \rewardfn{}(\statevar{}) is as defined in Equation~\ref{eq:mdp},
 -1 for non-goal states and 0 for goal states.
 
-\subsection{Leave-One-Out Labeling}
+\subsection{Elimination of Manual Labeling}
 \label{subsec:lool}
 One major limitation of the formulation we have outlined is its dependence on
 the set of labeled sequences \labelset{}. We now propose an alternative method
