@@ -14,6 +14,7 @@ The approach to learning from demonstrations applied here is most closely linked
 One of the first successful applications of this strategy is the ALVINN system~\cite{Pomerleau_NIPS1989}, which utilizes a neural network to learn a policy that enables an autonomous car to follow a road.
 ALVIN learns a function that maps image input and range finder input to left and right steering commands. 
 This research direction has been furthered more recently by \citet{muller2005off}, who use a convolutional network to learn a steering policy for off-road driving.
+\citet{Ratliff_Humanoids2007} uses multi-class classification to learn a function that scores actions to predict good foot steps for robot locomotion and good graps for robot manipulation.
 \citet{Ross_2013} propose a method to directly control a Micro UAV from RGB camera input and describe a method to account for differences in the training distribution derived from expert demonstrations and the induced distribution under a learned policy. 
 These approaches differ from our proposed method in that they learn in low-dimensional action spaces and directly imitate the expert.
 In contrast, \mmql{} copes with high-dimensional state and action spaces, and accounts for temporal constraints from demonstrated behavior.
