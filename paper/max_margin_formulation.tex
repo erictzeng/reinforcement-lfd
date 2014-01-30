@@ -57,8 +57,13 @@ always produce the same successor $s'$. Thus, for ease of notation we will use
 $\pi_{d}$ as the successor function for transferring $d_{traj}$ to a state $s$,
 and say that $\policysub{d}{\statevar} = s'$.
 
+<<<<<<< HEAD
 Thus, the MDP for an \mmql{} problem is defined as
 $\langle\stateset,\goalset,\actionset,T,R\rangle$, where
+=======
+Thus, the MDP for an \textsc{mmql} problem is defined as
+$\langle\stateset,\goalset,\actionset,T,R,H\rangle$, where
+>>>>>>> 89cfa0907fb2ee3dc78104d88a2bddd7efd2924b
 
 \begin{equation}
 \begin{aligned}
@@ -71,8 +76,13 @@ $\langle\stateset,\goalset,\actionset,T,R\rangle$, where
     1[\statevar{} = \statevar{}'] &\text{ if } \statevar{} \in \goalset{}
     \end{cases}\\
 \rewardfn{}(\statevar{}) &= -1 {[ \statevar{} \not \in \goalset{} ]}. \\
+<<<<<<< HEAD
 \end{aligned}
 \end{equation}
+=======
+H &= \text{finite horizon}
+\end{align*}
+>>>>>>> 89cfa0907fb2ee3dc78104d88a2bddd7efd2924b
 
 In the above specification, \goalset{} denotes the goal set and contains all
 states that satisfy the predefined goal. For example, in the knot-tying example,
@@ -95,6 +105,7 @@ actions taken. More formally, it is required that for each trajectory
 \text{and } T(\statesubsup{\nsub{j}}{(j)}, \actionsubsup{\nsub{j}}{(j)}) &\in \goalset{}
 \end{align*}
 
+<<<<<<< HEAD
 \subsection{Max-Margin Q-Learning Formulation}
 Our goal is to use the labeled sequences \labelset{} in order to learn an
 approximate Q-function that determines, for a given state, which actions
@@ -161,3 +172,37 @@ We can also ignore \weightszero{} when using \approxq{} to define a policy. The 
 the degree of relaxation.
 \rewardfn{}(\statevar{}) is as defined in Equation~\ref{eq:mdp},
 -1 for non-goal states and 0 for goal states.
+=======
+\subsection{Max Margin Formulation}
+
+
+\subsection{Max Margin Q-Learning Formulation}
+
+
+\subsection{Leave-One-Out Labeling}
+\label{subsec:lool}
+One major limitation of the formulation we have outlined is its dependence on
+the set of labeled sequences \labelset{}. We now propose an alternative method
+of bootstrapping the set of expert demonstrations \demoset{} to generate an
+unsupervised set of labeled sequences, $\labelset{}_u$, and we refer to this
+method as leave-one-out labeling.
+
+For each demonstration $\demovar{} \in \demoset{}$, we generate a corresponding
+$\labelvar \in \labelset_u$ as follows. For every other demonstration
+$\demovar{}' \neq \demovar{} \in \demoset{}$, we simply compute the TPS
+registration cost between $\policysub{\demovar{}'}{d_{pc}}$ and
+$\policysub{\demovar{}}{\demovar{}_{pc}}$. We choose the $\demovar{}^*$ with the
+lowest registration cost, and add $(\demovar{}_{pc}, \demovar{}^*_{traj})$ to
+$\labelset{}_u$ as an expert demonstration. Intuitively, this procedure looks to
+discover the expert demonstration $d'$ that, when applied to the start state of
+$d$, most closely mimics the optimal choice provided by the expert.
+
+This method of labeling requires slight modifications to our max-margin
+formulation. Since the expert's trajectory is assumed to be optimal for its
+corresponding state, we exclude each expert demonstration from the max margin
+constraints its corresponding unsupervisedexample generates. Additionally, note
+that this unsupervised method of generating labeled sequences does not include a
+temporal component. Thus, when forming the optimization problem with
+$\labelset{}_u$, we must omit Bellman constraints. \et{If time/space permits
+  this is where I'd talk about the second round of bootstrapping.}
+>>>>>>> 89cfa0907fb2ee3dc78104d88a2bddd7efd2924b
