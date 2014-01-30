@@ -4,7 +4,12 @@ The recent commercial availablity of relatively cheap mobile robots such as
 Baxter and the UBR 1 has created a very real possiblity for widespread
 application of robotics to mobile manipulation tasks.  There are huge economic
 gains to be had from the deployment of robotics in a variety of settings that
-range from homes to factories.  However, getting robots to execute complex,
+range from homes to factories.  
+
+%%PA: I might cut out the above as it's pretty generic (and
+%%potentially debatable)
+
+However, getting robots to execute complex,
 goal-directed tasks in such unstructured settings remains a major challenge.
 
 In particular, deformable object manipulation presents an interesting challenge.
@@ -14,6 +19,16 @@ through contact.
 Determing a correct underlying representation of these objects is itself a difficult problem,
 and current approaches require complicated task specific implementations.
 
+%%PA: might cut the "current approaches ... " as it could put a
+%%reviewer on the defensive
+
+%%PA: there seems a bit of a jump here, going from the challenges in
+%%robotic manipulation of deformable object manipulation to learning
+%%from demonstrations; how about more or less just skipping the
+%%paragraph that follows and going straight into describing the recent
+%%work that has presented a learning from demonstrations approach that
+%%is suitable for deformable objects.
+ 
 Learning from demonstrations provides a way to sidestep these issues: rather
 than starting from scratch in each scenario, we generalize from an expert
 demonstration.  If this generalization can be done robustly, adapting an example
@@ -28,6 +43,15 @@ function and the result is executed in the current scene.  This has been shown
 to be effective for many complex task, including knot-tying and suturing
 \cite{Schulmanetal_ISRR2013, Schulmanetal_IROS2013}.
 
+%%PA: there are some jumps in reasoning here; one aspect is to
+%%consider more than one demonstration; another aspect is that
+%%demonstrations consist of segments;  I'd introduce the concept of
+%%segments above already (e.g., explaining a demonstrated knot tie shown in Figure
+%%1 consists of 4 segments?);  it'll also be important to be
+%%consistent in terminology, right now the intro talks about
+%%sequencing trajectory generalizations, do we want to use the word
+%%segment?  (or something else?)
+
 Of course, a single demonstration cannot be expected to cover all possible scenarios.
 The natural solution to this is to use a library of demonstrations.
 In addition to increasing the number of states we can adapt to, trajectory libraries
@@ -39,8 +63,21 @@ transfer.
 This is not an easy task.
 Certain trajectories will generalize better than others, and particular sequences of 
 demonstrations may perform tasks more efficiently than others.
+%%PA: it might be good to be specific here and give some examples;
+%%e.g., when generalizing from a demonstration segment that barely
+%%grasps the rope the resulting warped trajectory might fail to grasp
+%%the rope, or a placement that only ever so barely induces a crossing
+%%might result in a warped trajectory that doesn't achieve the
+%%crossing; you might know better examples
 Furthermore, the existence of poor or brittle demonstrations can very negatively 
 effect performance.
+
+%%PA: the original paper presenting this approach(cite isrr2013)
+%%prescribes choosing the trajectory segment from the demonstrations
+%%library with the lowest warping cost onto the current scene.   ---
+%%should lead the preceding paragraph with something like this
+%%sentence --- then go into why that might not be the right thing;
+%% 
 Na\"{\i}ve approaches that simply use the goodness of the warping fit discard much of this information and often fail to accomplish tasks that would be possible with a different sequence of trajectories.
 
 \begin{figure}[t]
@@ -50,6 +87,17 @@ Na\"{\i}ve approaches that simply use the goodness of the warping fit discard mu
   \label{fig:frontfig}
 \end{figure}
 
+%%PA: how about being explicit here and leading with something like:
+%%"The contribution of this paper are: (i) ... (ii) ... with one
+%%paragraph per contribution, and every contribution having a (i)
+%%leading off the paragraph; it'd be good to also match this up with
+%%how the paper is organized in terms of sections/subsections; such
+%%that it's possible to flip to the (sub)section with a particular contribution
+
+%%PA: paragraph below is just a bit too general; I'd make it more directly
+%%fit with what we actually do (rather than trying to generalize it
+%%for this paragraph)
+
 In this paper, we present a solution to the demonstration selection problem that
 can account for the variability in robustness of demonstrations and the
 sequential nature of our tasks.  Given a set of demonstrations and a method for
@@ -58,12 +106,18 @@ Markov decision process (MDP).  Each action in this MDP is associated with a
 demonstration, and our transition function is defined as applying trajectory
 transfer to generalize that demonstration.
 
+
 This construction allows us to learn a Q function from example sequences of 
 state and demonstration pairs.
 Our Q-function learning is done through a novel Learning from Demonstrations
 technique that accounts for both the optimality of the expert trajecotries and the
 sequenatial nature of the task.
 We call this approach Max-Margin Q Learning, {\sc mmql}.
+
+%%PA: how about leading off this paragraph differently: "While our running example
+%%and all our experiments
+%%consider the problem of knot tying, the presented approach is not
+%%specific to knot tying.  It more generally applies to ... "
 
 Our approach relies only on features which are completely task 
 agnostic and can be applied to any problem where trajectory transfer applies. 
@@ -75,6 +129,17 @@ We leverage the fact that we learn a Q function representation of our policy (as
 opposed to a direct mapping from features to actions) to use a beam search to get 
 near perfect performance in this task.
 Finally, we present a method for bootstrapping, though a process we call leave-one-out labeling, that enables us to apply {\sc mmql} with no additional human supervision beyond the initial demonstrations.
+
+%%PA: last contribution paragraph should describe the experimental
+%%results;  Say we contributed a benchmark (or used the existing
+%%benchmark from ISRR 2013, not sure what's true) which is made
+%%available at the following url: ... .   Say that the ISRR paper
+%%achieves x % performance, the proposed approach achieves y %
+%%performance.   
+
+
+%%PA: paragraph below is redundant given what we will already have above;
+%%let's just cut it?
 
 The rest of this paper is organized as follows: first, we review related work in
 the field and discuss what differentiates our method. Next, we provide relevant

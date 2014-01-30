@@ -5,6 +5,39 @@
 In this section, we will formulate our approach to doing {\sc mmpl}, and
 specify our assumptions regarding the problems it is applied to.
 
+%%PA: throughout the paper there are quite a few abbreviations used
+%%that we are introducing in this paper ; are they really necessary,
+%%or could we just spell things out (which tends to be clearer)
+%%PA: either way, never use an abbreviation without introducing it;
+%%and it's tricky if it's been introduced a long time ago; let's not
+%%burden our reviewers ...
+
+%%PA: and what's MMPL ? :)
+
+
+%%PA: could it make sense to build it up with first presenting
+%%max-margin direct policy learning
+
+%%PA: and then say, well, we are not using some information (about
+%%Bellman updates for sequential states in the demonstration) and we
+%%can't do lookahead planning with this; so now let's take a look at
+%%how to add that to our formulation;  
+
+%%PA: overall this is a long and heavy section
+
+%%PA: How about in subsection1 presenting the problem formulation, in which the
+%%demonstration set is described as well as the labeled examples; then
+%%in subsection2 present max-margin direct policy learning; then in
+%%subsection3 present max-margin Q-learning, which also explains the
+%%MDP formalization; and then in subsection4 Elimination of Manual
+%%Labeling;  I think this way the subsection titles will reflect the
+%%structure; the reader should be able to follow easily through
+%%subsection2 and also have an easy time understanding the motivation
+%%for subsection3 (maybe be lost in subsection3, though hopefully not,
+%%but either way, as long as they understand from the first few
+%%motivating sentences of subsection3 what it's getting it, they get
+%%the idea anyway even if they don't get the math); 
+ 
 \subsection{Demonstration Set}
 
 The required inputs of our pipeline are a set \demoset{}
