@@ -39,4 +39,4 @@ if __name__ == '__main__':
 
     perf, _, not_inds = estimate_performance(args.results_file)
     print "not_inds", not_inds    
-    print "success rate is", 
+    print "success rate is", perf
