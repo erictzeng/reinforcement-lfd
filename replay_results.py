@@ -138,10 +138,10 @@ if __name__ == "__main__":
             q_values = resultfile[i_task][str(i_step)]['values'][()]
 
             simulate_demo_traj(new_xyz, actionfile[best_action], trajs, animate=args.animation)
-            
-            if is_knot(Globals.sim.rope.GetControlPoints()):
-                num_knots += 1
-            else:
-                num_not_knots += 1
+        
+        if is_knot(Globals.sim.rope.GetControlPoints()):
+            num_knots += 1
+        else:
+            num_not_knots += 1
                 
     print "success rate is", float(num_knots) / (num_knots + num_not_knots)
