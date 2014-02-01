@@ -130,14 +130,14 @@ class MaxMarginModel(object):
         if update:
             self.model.update()
 
-    def add_example(self, state, expert_action, xi_name = None, verbose = False):
+    def add_example(self, state, expert_action, xi_name = None, verbose = False, orig_action = ""):
         """
         add the constraint that this action be preferred to all other actions in the action set
         to the optimization problem
         """
         expert_action_phi = self.feature(state, expert_action)
         for (i, other_a) in enumerate(self.actions):
-            if other_a == expert_action:
+            if other_a == expert_action or other_a == orig_action:
                 continue
             # TODO: compute this for loop in parallel
             rhs_action_phi = self.feature(state, other_a)
@@ -287,7 +287,7 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         self.model.update()
         return new_xi
         
-    def add_example(self, state, expert_action, xi_name = None, verbose = False):
+    def add_example(self, state, expert_action, xi_name = None, verbose = False, orig_action = ""):
         """
         add the constraint that this action be preferred to all other actions in the action set
         to the optimization problem
@@ -295,7 +295,7 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         expert_action_phi = self.feature(state, expert_action)
         cur_slack = self.add_xi(xi_name)
         for (i, other_a) in enumerate(self.actions):
-            if other_a == expert_action:
+            if other_a == expert_action or other_a == orig_action:
                 continue
             # TODO: compute this for loop in parallel
             rhs_action_phi = self.feature(state, other_a)

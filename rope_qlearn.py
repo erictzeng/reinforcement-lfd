@@ -67,12 +67,16 @@ def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile
         action = group['action'][()]
         if action.startswith('endstate'): # this is a knot
             continue
+        if 'orig_action' in group.keys():
+            orig_action = group['orig_action'][()]
+        else:
+            orig_action = ""
         if verbose:
             print 'adding constraints for:\t', action        
         lhs_phi = feature_fn(state, action)
         xi_name = str('xi_') + str(key)
         for (i, other_a) in enumerate(actions):
-            if other_a == action:
+            if other_a == action or other_a == orig_action:
                 continue
             if verbose:
                 print "added {}/{}".format(i, len(actions))
@@ -201,10 +205,14 @@ def add_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1, outfil
         action = group['action'][()]
         if action.startswith('endstate'): # this is a knot
             continue
+        if 'orig_action' in group.keys():
+            orig_action = group['orig_action'][()]
+        else:
+            orig_action = ""
         if verbose:
             print 'adding constraints for:\t', action
         xi_name = str('xi_') + str(key)
-        mm_model.add_example(state, action, xi_name=xi_name, verbose=verbose)
+        mm_model.add_example(state, action, xi_name=xi_name, verbose=verbose, orig_action=orig_action)
         #mm_model.clear_asm_cache()
         if outfile:
             mm_model.save_constraints_to_file(outfile)
