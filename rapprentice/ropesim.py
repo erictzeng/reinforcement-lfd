@@ -79,11 +79,29 @@ class Simulation(object):
         self.bt_robot = self.bt_env.GetObjectByName(self.robot.GetName())
         self.rope = bulletsimpy.CapsuleRope(self.bt_env, 'rope', rope_pts, self.rope_params)
 
+        cc = trajoptpy.GetCollisionChecker(self.env)
+        for gripper_link in [link for link in self.robot.GetLinks() if 'gripper' in link.GetName()]:
+            for rope_link in self.rope.GetKinBody().GetLinks():
+                cc.ExcludeCollisionPair(gripper_link, rope_link)
+
         # self.rope.UpdateRave()
         # self.env.UpdatePublishedBodies()
         # trajoptpy.GetViewer(self.env).Idle()
 
         self.settle()
+
+    def __del__(self):
+        if self.rope:
+            cc = trajoptpy.GetCollisionChecker(self.env)
+            for gripper_link in [link for link in self.robot.GetLinks() if 'gripper' in link.GetName()]:
+                for rope_link in self.rope.GetKinBody().GetLinks():
+                    cc.IncludeCollisionPair(gripper_link, rope_link)
+            # remove all capsule-capsule exclude to prevent memory leak
+            # TODO: only interate through the capsule pairs that actually are excluded
+            for rope_link0 in self.rope.GetKinBody().GetLinks():
+                for rope_link1 in self.rope.GetKinBody().GetLinks():
+                    cc.IncludeCollisionPair(rope_link0, rope_link1)
+            self.env.Remove(self.rope.GetKinBody())
 
     def step(self):
         self.bt_robot.UpdateBullet()
