@@ -70,15 +70,15 @@ A little over half of our improvement stems from
            the demonstration that minimizes a bi-directional registration cost associated with the trajectory transfer.
            Other policies maximize the approximate Q-function we learn through \mmql{}. Greedy maximizes this value in the current
            state. The lookahead policies act to maximize a back up value computed by beam search with the specified parameters. The greedy
-           succeeds in an additional 17\% of examples when compared with the baseline. Lookahead policies acheive very high performance rates
-           and approach the best possible with our demonstration library (\al{fill in upper bound on performance})}
+           succeeds in an additional 17\% of examples when compared with the baseline. Lookahead policies achieve very high performance rates
+           and approach the best possible with our demonstration library.}
   \label{table:performance}
 \end{table}
 
 The approximate values of the states for the 500 evaluated runs in the validation set are plotted in Figure~\ref{fig:values} as a function of time steps 1 through 5.
 Observe that Q values are generally increasing; we expect this since the Bellman constraints in our formulation pushes states closer to the goal to have higher values.
 Also, recall that the state value of the tied knot is close to zero, which is visible in the figure (Equation~\ref{eq:bellman_goal_constr}).
-For most of the runs, the policy is able to reach the goal state in 3 steps, which is optimal since the expert took a minimun of three actions to tie a knot.
+For most of the runs, the policy is able to reach the goal state in 3 steps, which is optimal since the expert took a minimum of three actions to tie a knot.
 
 \begin{figure}
   \centering
