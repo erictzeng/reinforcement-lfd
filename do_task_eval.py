@@ -2,27 +2,19 @@
 
 from __future__ import division
 
-import pprint
 import argparse
-import eval_util, sim_util, util
+import eval_util, sim_util
 
-from rapprentice import registration, colorize, berkeley_pr2, \
-     animate_traj, ros2rave, plotting_openrave, task_execution, \
-     planning, tps, func_utils, resampling, ropesim, rope_initialization, clouds
-from rapprentice import math_utils as mu
-from rapprentice.yes_or_no import yes_or_no
+from rapprentice import colorize, task_execution, planning, resampling, clouds, math_utils as mu
 import pdb, time
 
-import cloudprocpy, trajoptpy, openravepy
-from rope_qlearn import *
+import trajoptpy, openravepy
+from rope_qlearn import select_feature_fn, warp_hmats
 from knot_classifier import isKnot as is_knot
 import os, os.path, numpy as np, h5py
 from numpy import asarray
 import atexit
-import importlib
-from itertools import combinations
 import IPython as ipy
-import random
 
 COLLISION_DIST_THRESHOLD = 0.0
 DS_SIZE = .025
