@@ -401,15 +401,8 @@ def replay_on_holdout(args, sim_env):
             time_machine.set_checkpoint('preexec_%i'%i_step, sim_env)
 
             time_machine.restore_from_checkpoint('preexec_%i'%i_step, sim_env)
-            start_time = time.time()
             eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs = simulate_demo_traj(sim_env, new_xyz, GlobalVars.actions[best_action], full_trajs, animate=args.animation, interactive=args.interactive)
-            eval_stats.exec_elapsed_time += time.time() - start_time
 
-            if eval_stats.feasible:
-                 eval_stats.found_feasible_action = True
-
-            if not eval_stats.feasible:  # If not feasible, restore_from_checkpoint
-                time_machine.restore_from_checkpoint('preexec_%i'%i_step, sim_env)
             print "BEST ACTION:", best_action
 
             replay_trans, replay_rots = sim_util.get_rope_transforms(sim_env)
@@ -419,11 +412,6 @@ def replay_on_holdout(args, sim_env):
                 yellowprint("Reproducible results OK")
             
             eval_util.save_task_results_step(args.resultfile, sim_env, i_task, i_step, eval_stats, best_action, full_trajs, q_values)
-            
-            if not eval_stats.found_feasible_action:
-                # Skip to next knot tie if the action is infeasible -- since
-                # that means all future steps (up to 5) will have infeasible trajectories
-                break
             
             if is_knot(sim_env.sim.rope.GetControlPoints()):
                 break;
