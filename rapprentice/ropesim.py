@@ -57,7 +57,7 @@ def retime_traj(robot, inds, traj, max_cart_vel=.02, upsample_time=.1):
 
 
 class Simulation(object):
-    def __init__(self, env, robot):
+    def __init__(self, env, robot, rope_params=None):
         self.env = env
         self.robot = robot
         self.bt_env = None
@@ -65,13 +65,16 @@ class Simulation(object):
         self.rope = None
         self.constraints = {"l": [], "r": []}
 
-        self.rope_params = bulletsimpy.CapsuleRopeParams()
-        self.rope_params.radius = 0.005
-        self.rope_params.angStiffness = .1
-        self.rope_params.angDamping = 1
-        self.rope_params.linDamping = .75
-        self.rope_params.angLimit = .4
-        self.rope_params.linStopErp = .2
+        if rope_params:
+            self.rope_params = rope_params
+        else:
+            self.rope_params = bulletsimpy.CapsuleRopeParams()
+            self.rope_params.radius = 0.005
+            self.rope_params.angStiffness = .1
+            self.rope_params.angDamping = 1
+            self.rope_params.linDamping = .75
+            self.rope_params.angLimit = .4
+            self.rope_params.linStopErp = .2
 
     def create(self, rope_pts):
         self.bt_env = bulletsimpy.BulletEnvironment(self.env, [])

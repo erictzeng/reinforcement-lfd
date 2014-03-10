@@ -233,6 +233,8 @@ def parse_input_args():
 
     parser_eval = subparsers.add_parser('eval')
     parser_eval.add_argument("weightfile", type=str)
+    parser_eval.add_argument("--exec_rope_params", type=str, choices=sim_util.ROPE_PARAMS_CHOICES, default='default')
+    parser_eval.add_argument("--lookahead_rope_params", type=str, choices=sim_util.ROPE_PARAMS_CHOICES, default='default')
     parser_eval.add_argument("--lookahead_width", type=int, default=1)
     parser_eval.add_argument('--lookahead_depth', type=int, default=0)
     parser_eval.add_argument('--ensemble', action='store_true')
@@ -282,7 +284,7 @@ def eval_on_holdout(args, sim_env):
         if args.animation:
             sim_env.viewer.Step()
 
-        eval_util.save_task_results_init(args.resultfile, sim_env, i_task, rope_nodes)
+        eval_util.save_task_results_init(args.resultfile, sim_env, i_task, rope_nodes, args.exec_rope_params)
 
         for i_step in range(args.num_steps):
             print "task %s step %i" % (i_task, i_step)
@@ -304,7 +306,7 @@ def eval_on_holdout(args, sim_env):
             for depth in range(args.lookahead_depth):
                 expansion_results = []
                 for (branch, (q, a, chkpt, r_a)) in enumerate(agenda):
-                    time_machine.restore_from_checkpoint(chkpt, sim_env)
+                    time_machine.restore_from_checkpoint(chkpt, sim_env, sim_util.get_rope_params(args.lookahead_rope_params))
                     cur_xyz = sim_env.sim.observe_cloud()
                     success, _, _, full_trajs = \
                         compute_trans_traj(sim_env, cur_xyz, GlobalVars.actions[a], animate=args.animation, interactive=False)
@@ -339,7 +341,7 @@ def eval_on_holdout(args, sim_env):
             if best_root_action is None:
                 best_root_action = agenda[0][-1]
             
-            time_machine.restore_from_checkpoint('depth_0_%i'%i_step, sim_env)
+            time_machine.restore_from_checkpoint('depth_0_%i'%i_step, sim_env, sim_util.get_rope_params(args.exec_rope_params))
             eval_stats = eval_util.EvalStats()
             eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs = \
                 compute_trans_traj(sim_env, new_xyz, GlobalVars.actions[best_root_action], animate=args.animation, interactive=args.interactive)
@@ -369,15 +371,16 @@ def replay_on_holdout(args, sim_env):
         print "task %s" % i_task
         sim_util.reset_arms_to_side(sim_env)
         redprint("Replace rope")
-#         rope_nodes, _, _ = eval_util.load_task_results_init(args.loadresultfile, i_task) # TODO temporary since results file don't have right rope_nodes
-        rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
+        rope_nodes, rope_params, _, _ = eval_util.load_task_results_init(args.loadresultfile, i_task)
+        # uncomment if the results file don't have the right rope nodes
+        #rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
         # don't call replace_rope and sim.settle() directly. use time machine interface for deterministic results!
         time_machine = sim_util.RopeSimTimeMachine(rope_nodes, sim_env)
 
         if args.animation:
             sim_env.viewer.Step()
 
-        eval_util.save_task_results_init(args.resultfile, sim_env, i_task, rope_nodes)
+        eval_util.save_task_results_init(args.resultfile, sim_env, i_task, rope_nodes, rope_params)
 
         for i_step in range(args.num_steps):
             print "task %s step %i" % (i_task, i_step)
@@ -390,9 +393,8 @@ def replay_on_holdout(args, sim_env):
 
             best_action, full_trajs, q_values, trans, rots = eval_util.load_task_results_step(args.loadresultfile, sim_env, i_task, i_step)
             
-            time_machine.set_checkpoint('preexec_%i'%i_step, sim_env)
-
-            time_machine.restore_from_checkpoint('preexec_%i'%i_step, sim_env)
+            time_machine.set_checkpoint('depth_0_%i'%i_step, sim_env)
+            time_machine.restore_from_checkpoint('depth_0_%i'%i_step, sim_env, sim_util.get_rope_params(rope_params))
             eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs = simulate_demo_traj(sim_env, new_xyz, GlobalVars.actions[best_action], full_trajs, animate=args.animation, interactive=args.interactive)
 
             print "BEST ACTION:", best_action

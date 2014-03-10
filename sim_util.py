@@ -3,6 +3,7 @@
 # the various instantiations of do_task_eval.py
 
 import h5py
+import bulletsimpy
 import openravepy, trajoptpy
 import numpy as np
 from numpy import asarray
@@ -265,7 +266,7 @@ def unif_resample(traj, max_diff, wt = None):
 def get_rope_transforms(sim_env):
     return (sim_env.sim.rope.GetTranslations(), sim_env.sim.rope.GetRotations())    
 
-def replace_rope(new_rope, sim_env):
+def replace_rope(new_rope, sim_env, rope_params=None):
     if sim_env.sim:
         for lr in 'lr':
             sim_env.sim.release_rope(lr)
@@ -275,12 +276,33 @@ def replace_rope(new_rope, sim_env):
             sim_env.viewer.RemoveKinBody(rope_kin_body)
     if sim_env.sim:
         del sim_env.sim
-    sim_env.sim = ropesim.Simulation(sim_env.env, sim_env.robot)
+    sim_env.sim = ropesim.Simulation(sim_env.env, sim_env.robot, rope_params)
     sim_env.sim.create(new_rope)
 
 def set_rope_transforms(tfs, sim_env):
     sim_env.sim.rope.SetTranslations(tfs[0])
     sim_env.sim.rope.SetRotations(tfs[1])
+
+ROPE_PARAMS_CHOICES = ['default', 'thick']
+def get_rope_params(params_id):
+    rope_params = bulletsimpy.CapsuleRopeParams()
+    if params_id == 'default':
+        rope_params.radius = 0.005
+        rope_params.angStiffness = .1
+        rope_params.angDamping = 1
+        rope_params.linDamping = .75
+        rope_params.angLimit = .4
+        rope_params.linStopErp = .2
+    elif params_id == 'thick':
+        rope_params.radius = 0.008
+        rope_params.angStiffness = .1
+        rope_params.angDamping = 1
+        rope_params.linDamping = .75
+        rope_params.angLimit = .4
+        rope_params.linStopErp = .2
+    else:
+        raise RuntimeError("Invalid rope parameter id")
+    return rope_params
 
 class RopeSimTimeMachine(object):
     """
@@ -290,25 +312,24 @@ class RopeSimTimeMachine(object):
     time_machine.restore_from_checkpoint(id) should restore the same simulation
     state everytime it is called)
     """
-    def __init__(self, new_rope, sim_env):
+    def __init__(self, new_rope, sim_env, rope_params=None):
         """
         new_rope is the initial rope_nodes of the machine for a particular task
         """
         self.rope_nodes = new_rope
         self.checkpoints = {}
-        replace_rope(self.rope_nodes, sim_env)
+        replace_rope(self.rope_nodes, sim_env, rope_params)
         sim_env.sim.settle()
         
     def set_checkpoint(self, id, sim_env):
         if id in self.checkpoints:
             raise RuntimeError("Can not set checkpoint with id %s since it has already been set"%id)
         self.checkpoints[id] = get_rope_transforms(sim_env)
-        self.restore_from_checkpoint(id, sim_env)
 
-    def restore_from_checkpoint(self, id, sim_env):
+    def restore_from_checkpoint(self, id, sim_env, rope_params=None):
         if id not in self.checkpoints:
             raise RuntimeError("Can not restore checkpoint with id %s since it has not been set"%id)
-        replace_rope(self.rope_nodes, sim_env)
+        replace_rope(self.rope_nodes, sim_env, rope_params)
         set_rope_transforms(self.checkpoints[id], sim_env)
         sim_env.sim.settle()
 

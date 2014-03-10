@@ -34,7 +34,7 @@ def get_holdout_items(holdoutfile, tasks):
     else:
         return [(unicode(t), holdoutfile[unicode(t)]) for t in tasks]
 
-def save_task_results_init(fname, sim_env, task_index, rope_nodes):
+def save_task_results_init(fname, sim_env, task_index, rope_nodes, rope_params):
     if fname is None:
         return
     result_file = h5py.File(fname, 'a')
@@ -45,6 +45,7 @@ def save_task_results_init(fname, sim_env, task_index, rope_nodes):
     result_file[task_index].create_group('init')
     trans, rots = sim_util.get_rope_transforms(sim_env)
     result_file[task_index]['init']['rope_nodes'] = rope_nodes
+    result_file[task_index]['init']['rope_params'] = rope_params
     result_file[task_index]['init']['trans'] = trans
     result_file[task_index]['init']['rots'] = rots
     result_file.close()
@@ -56,9 +57,10 @@ def load_task_results_init(fname, task_index):
     result_file = h5py.File(fname, 'r')
     task_index = str(task_index)
     rope_nodes = result_file[task_index]['init']['rope_nodes'][()]
+    rope_params = result_file[task_index]['init']['rope_params'][()]
     trans = result_file[task_index]['init']['trans'][()]
     rots = result_file[task_index]['init']['rots'][()]
-    return rope_nodes, trans, rots
+    return rope_nodes, rope_params, trans, rots
 
 def save_task_results_step(fname, sim_env, task_index, step_index, eval_stats, best_root_action, full_trajs, q_values_root):
     if fname is None:
