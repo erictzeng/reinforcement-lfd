@@ -11,10 +11,9 @@ def estimate_performance(results_file):
     num_knots = 0
     knot_inds = []
     not_inds = []
-    for i_task in range(len(results_file)):
-        task_info = results_file[str(i_task)]
+    for (i_task, task_info) in sorted(results_file.iteritems(), key=lambda item: int(item[0])):
         is_knot = False
-        for i_step in range(len(task_info)):
+        for i_step in range(len(task_info) - (1 if 'init' in task_info else 0)):
             step_info = task_info[str(i_step)]
             try:
                 rope_nodes = step_info['rope_nodes'][()]
@@ -26,17 +25,20 @@ def estimate_performance(results_file):
                 is_knot = True
                 break
         if is_knot:
-            knot_inds.append(i_task)
+            knot_inds.append(int(i_task))
         else:
-            not_inds.append(i_task)
+            not_inds.append(int(i_task))
     
-    return float(num_knots)/len(results_file), knot_inds, not_inds
+    return num_knots, knot_inds, not_inds
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("results_file", type=str)
     args = parser.parse_args()
 
-    perf, _, not_inds = estimate_performance(args.results_file)
+    results_file = h5py.File(args.results_file, 'r')
+    
+    num_successes, _, not_inds = estimate_performance(args.results_file)
     print "not_inds", not_inds    
-    print "success rate is", perf
+    print "Successes / Total: %d/%d" % (num_successes, len(results_file))
+    print "Success rate:", float(num_successes)/float(len(results_file))

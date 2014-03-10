@@ -1,7 +1,9 @@
 import openravepy,trajoptpy, numpy as np, json
-
+import util
 
 def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj):
+    orig_dof_inds = robot.GetActiveDOFIndices()
+    orig_dof_vals = robot.GetDOFValues()
         
     n_steps = len(new_hmats)
     assert old_traj.shape[0] == n_steps
@@ -12,7 +14,6 @@ def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj):
     ee_linkname = ee_link.GetName()
     
     init_traj = old_traj.copy()
-    #init_traj[0] = robot.GetDOFValues(arm_inds)
 
     request = {
         "basic_info" : {
@@ -53,22 +54,22 @@ def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj):
             })
 
     s = json.dumps(request)
-    prob = trajoptpy.ConstructProblem(s, robot.GetEnv()) # create object that stores optimization problem
-    result = trajoptpy.OptimizeProblem(prob) # do optimization
+    with openravepy.RobotStateSaver(robot):
+        with util.suppress_stdout():
+            prob = trajoptpy.ConstructProblem(s, robot.GetEnv()) # create object that stores optimization problem
+            result = trajoptpy.OptimizeProblem(prob) # do optimization
     traj = result.GetTraj()    
-        
-    saver = openravepy.RobotStateSaver(robot)
-    with robot:
-        pos_errs = []
-        for i_step in xrange(1,n_steps):
-            row = traj[i_step]
-            robot.SetDOFValues(row, arm_inds)
-            tf = ee_link.GetTransform()
-            pos = tf[:3,3]
-            pos_err = np.linalg.norm(poses[i_step][4:7] - pos)
-            pos_errs.append(pos_err)
-        pos_errs = np.array(pos_errs)
-        
-    print "planned trajectory for %s. max position error: %.3f. all position errors: %s"%(manip_name, pos_errs.max(), pos_errs)
-            
-    return traj, pos_errs
+
+    pose_costs = 0
+    for (cost_type, cost_val) in result.GetCosts():
+        if cost_type == 'pose':
+            pose_costs += cost_val
+
+    print "planned trajectory for %s. total pose error: %.3f."%(manip_name, pose_costs)
+
+    # make sure this function doesn't change state of the robot
+    assert not np.any(orig_dof_inds - robot.GetActiveDOFIndices())
+    assert not np.any(orig_dof_vals - robot.GetDOFValues())
+    
+    return traj, pose_costs
+
