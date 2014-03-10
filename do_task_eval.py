@@ -295,12 +295,12 @@ def eval_on_holdout(args, sim_env):
             state = ("eval_%i"%get_unique_id(), new_xyz)
             
             redprint("Choosing an action")
-            q_values = [q_value_fn(state, action, feature_fn, weights, w0) for action in GlobalVars.actions]
+            q_values = [q_value_fn(state, action, feature_fn, weights, w0) for action in actions]
             q_values_root = q_values
             time_machine.set_checkpoint('depth_0_%i'%i_step, sim_env)
 
             assert args.lookahead_width>= 1, 'Lookahead branches set to zero will fail to select any action'
-            agenda = sorted(zip(q_values, GlobalVars.actions), key = lambda v: -v[0])[:args.lookahead_width]
+            agenda = sorted(zip(q_values, actions), key = lambda v: -v[0])[:args.lookahead_width]
             agenda = [(v, a, 'depth_0_%i'%i_step, a) for (v, a) in agenda] # state is (value, most recent action, checkpoint id, root action)
             best_root_action = None
             for depth in range(args.lookahead_depth):
@@ -326,10 +326,10 @@ def eval_on_holdout(args, sim_env):
                 agenda = []
                 for (cld, incoming_a, success, chkpt, r_a) in expansion_results:
                     if not success:
-                        agenda.append((-np.inf, GlobalVars.actions[0], chkpt, r_a)) # TODO why first action?
+                        agenda.append((-np.inf, actions[0], chkpt, r_a)) # TODO why first action?
                         continue
                     next_state = ("eval_%i"%get_unique_id(), cld)
-                    q_values = [(q_value_fn(next_state, action, feature_fn, weights, w0), action, chkpt, r_a) for action in GlobalVars.actions]
+                    q_values = [(q_value_fn(next_state, action, feature_fn, weights, w0), action, chkpt, r_a) for action in actions]
                     agenda.extend(q_values)
                 agenda.sort(key = lambda v: -v[0])
                 agenda = agenda[:args.lookahead_width]                    
