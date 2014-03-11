@@ -364,12 +364,13 @@ def eval_on_holdout(args, sim_env):
 def replay_on_holdout(args, sim_env):
     holdoutfile = h5py.File(args.holdoutfile, 'r')
     tasks = eval_util.get_specified_tasks(args.tasks, args.taskfile, args.i_start, args.i_end)
-    holdout_items = eval_util.get_holdout_items(holdoutfile, tasks)
+    loadresultfile = h5py.File(args.loadresultfile, 'r')
+    loadresult_items = eval_util.get_holdout_items(loadresultfile, tasks)
 
     num_successes = 0
     num_total = 0
     
-    for i_task, demo_id_rope_nodes in holdout_items:
+    for i_task, demo_id_rope_nodes in loadresult_items:
         print "task %s" % i_task
         sim_util.reset_arms_to_side(sim_env)
         redprint("Replace rope")
