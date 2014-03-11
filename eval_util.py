@@ -188,9 +188,9 @@ def traj_collisions(sim_env, full_traj, collision_dist_threshold, n=100):
             #    col_now2 = cc.PlotCollisionGeometry()
             col_now = [cn for cn in col_now if cn.GetDistance() < collision_dist_threshold]
             if col_now:
-                print [cn.GetDistance() for cn in col_now]
+                #print [cn.GetDistance() for cn in col_now]
                 col_times.append(i)
-                print "trajopt.CollisionChecker: ", len(col_now)
+                #print "trajopt.CollisionChecker: ", len(col_now)
             #print col_now2
         
     return col_times
