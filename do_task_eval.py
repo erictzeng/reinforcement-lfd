@@ -252,6 +252,7 @@ def parse_input_args():
     
     parser_replay = subparsers.add_parser('replay')
     parser_replay.add_argument("loadresultfile", type=str)
+    parser_replay.add_argument("--replay_rope_params", type=str, choices=sim_util.ROPE_PARAMS_CHOICES, default=None, help="if not specified, uses the rope_params that is saved in the result file")
 
     return parser.parse_args()
 
@@ -377,6 +378,8 @@ def replay_on_holdout(args, sim_env):
         rope_nodes, rope_params, _, _ = eval_util.load_task_results_init(args.loadresultfile, i_task)
         # uncomment if the results file don't have the right rope nodes
         #rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
+        if args.replay_rope_params:
+            rope_params = args.replay_rope_params
         # don't call replace_rope and sim.settle() directly. use time machine interface for deterministic results!
         time_machine = sim_util.RopeSimTimeMachine(rope_nodes, sim_env)
 
