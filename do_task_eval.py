@@ -388,7 +388,7 @@ def replay_on_holdout(args, sim_env):
 
         eval_util.save_task_results_init(args.resultfile, sim_env, i_task, rope_nodes, rope_params)
 
-        for i_step in range(args.num_steps):
+        for i_step in range(len(loadresultfile[i_task]) - (1 if 'init' in loadresultfile[i_task] else 0)):
             print "task %s step %i" % (i_task, i_step)
             sim_util.reset_arms_to_side(sim_env)
 
