@@ -235,8 +235,8 @@ def parse_input_args():
 
     parser_eval = subparsers.add_parser('eval')
     parser_eval.add_argument("weightfile", type=str)
-    parser_eval.add_argument("--exec_rope_params", type=str, choices=sim_util.ROPE_PARAMS_CHOICES, default='default')
-    parser_eval.add_argument("--lookahead_rope_params", type=str, choices=sim_util.ROPE_PARAMS_CHOICES, default='default')
+    parser_eval.add_argument("--exec_rope_params", type=str, default='default')
+    parser_eval.add_argument("--lookahead_rope_params", type=str, default='default')
     parser_eval.add_argument("--lookahead_width", type=int, default=1)
     parser_eval.add_argument('--lookahead_depth', type=int, default=0)
     parser_eval.add_argument('--ensemble', action='store_true')
@@ -252,7 +252,7 @@ def parse_input_args():
     
     parser_replay = subparsers.add_parser('replay')
     parser_replay.add_argument("loadresultfile", type=str)
-    parser_replay.add_argument("--replay_rope_params", type=str, choices=sim_util.ROPE_PARAMS_CHOICES, default=None, help="if not specified, uses the rope_params that is saved in the result file")
+    parser_replay.add_argument("--replay_rope_params", type=str, default=None, help="if not specified, uses the rope_params that is saved in the result file")
 
     return parser.parse_args()
 
