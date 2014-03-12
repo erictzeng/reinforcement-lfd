@@ -80,6 +80,8 @@ The approximate values of the states for the 500 evaluated runs in the validatio
 Observe that Q values are generally increasing; we expect this since the Bellman constraints in our formulation pushes states closer to the goal to have higher values.
 Also, recall that the state value of the tied knot is close to zero, which is visible in the figure (Equation~\ref{eq:bellman_goal_constr}).
 For most of the runs, the policy is able to reach the goal state in 3 steps, which is optimal since the expert took a minimum of three actions to tie a knot.
+Examination of the baseline graph shows that, even in the cases where it successfully ties a knot, it often requires 4 steps to do so, demonstrating that our learned
+policy is able to more quickly tie a knot in additional to being more robust.
 
 \begin{figure}
   \centering
