@@ -26,7 +26,10 @@ policy have the potential to improve the robustness of action selection.
 One such strategy for determining a policy takes advantage of the fact that
 learning an approximate Q-function confers the ability to compare the value of
 states directly. If we allow for simulation of the task in question, then we can
-use \approxq{} as a heuristic to look ahead to promising states.
+use \approxq{} as a heuristic to look ahead to promising states. This method of
+value function approximation paired with lookahead is a standard approach to
+determining a policy.
+% TODO: Add a citation at the end of this paragraph
 
 One way of performing this lookahead is through beam search. Beam search defines
 a family of policies based on a particular \approxq{}, in which each policy is
@@ -45,5 +48,6 @@ action that leads to it---this is equivalent to enforcing
 $\tilde{V}(\statevar{}) > \tilde{V}(\statevar{}')$ for $\statevar{} \in
 \goalset{}, \statevar{}' \not\in \goalset{}$.
 
-We evaluate the effectiveness of the greedy policy and the family of beam search
-lookahead policies in Section~\ref{sec:experiments}.
+We use a knot-tying simulation environment to evaluate the effectiveness of the
+greedy policy and the family of beam search lookahead policies in
+Section~\ref{sec:experiments}.

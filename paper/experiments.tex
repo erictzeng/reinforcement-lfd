@@ -18,11 +18,12 @@ The simulation environment uses Bullet Physics~\cite{Bullet_Physics} as the phys
 The rope is simulated with a linked chain of capsules with bending and torsional constraints.
 
 \subsubsection{Benchmark}
-For the labeled examples \labelset{} used to train our \mmql{} model, we distinguish between human-labeled examples 
+For the labeled examples \labelset{} used to train our \mmql{} model, we experiment with both human-labeled examples 
 and automatically generated leave-one-out labeled examples.
 In both cases, an example is a pairing of a point cloud and an optimal action.
 For the human-labeled examples, we use traces of complete task executions, from a randomly drawn initial 
 rope configuration to a successfully tied knot.
+% TODO: Add description of how we choose the best action
 Each example contains a reference to its predecessor, so we can represent the associated Bellman equations.
 
 Initial rope states are randomly perturbed configurations of uniformly drawn samples from the initial rope states in the demonstration library.
@@ -46,18 +47,18 @@ validation, using a holdout set of 100 randomly drawn initial rope states (disti
 For this case, the best-performing hyperparameters we found are $C=2$, $D=1$ and $F=1$.
 We applied \mmql{} with these hyper-parameter settings and ran each of the three policies 
 on the evaluation set.
-% TODO: Add in what the hyperparameters are, once we decide on them
 As a baseline comparison, we also evaluate using the nearest neighbor policy presented in \citet{Schulmanetal_ISRR2013}.
 Their policy chooses the action associated with the state that has the smallest registration cost with respect to the current state.
 The success rates obtained under these policies are summarized in Table~\ref{table:performance}. Note that our best results surpass the baseline by 26.4\%.
-A little over half of our improvement stems from 
-% TODO: Add more analysis of the results, e.g. 1-10 and 2-5 lookahead perform approximately equally well
+Almost two-thirds of this improvement results from the greedy approach of choosing the action that
+maximizes the Q-value, given the current state. The remaining improvement is gained through lookahead; the
+performance of depth 1, width 10 lookahead and depth 2, width 5 lookahead are approximately the same (Table~\ref{table:performance}).
 
 \begin{table}
   \centering
   \begin{tabular}{lc}
     \toprule
-      Policy & Test Accuracy\\
+      Policy & Success Rate\\
     \midrule
       Nearest neighbor \cite{Schulmanetal_ISRR2013} & 68.8\% \\
     \midrule
@@ -79,6 +80,8 @@ The approximate values of the states for the 500 evaluated runs in the validatio
 Observe that Q values are generally increasing; we expect this since the Bellman constraints in our formulation pushes states closer to the goal to have higher values.
 Also, recall that the state value of the tied knot is close to zero, which is visible in the figure (Equation~\ref{eq:bellman_goal_constr}).
 For most of the runs, the policy is able to reach the goal state in 3 steps, which is optimal since the expert took a minimum of three actions to tie a knot.
+Examination of the baseline graph shows that, even in the cases where it successfully ties a knot, it often requires 4 steps to do so, demonstrating that our learned
+policy is able to more quickly tie a knot in additional to being more robust.
 
 \begin{figure}
   \centering
@@ -121,7 +124,7 @@ surprisingly resilient. Even with only 50 training examples, the greedy policy i
   \centering
   \begin{tabular}{lc}
     \toprule
-      \# of Training Examples & Test Accuracy\\
+      \# of Training Examples & Success Rate\\
     \midrule
       Nearest neighbor \cite{Schulmanetal_ISRR2013} & 68.8\% \\
     \midrule
