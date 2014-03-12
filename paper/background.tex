@@ -33,12 +33,15 @@ This enables us to get more bang for our demonstration buck.
 
 \subsection{Structured Max Margin}
 One way to incorporate expert demonstrations into learning is through the use of a max-margin framework.
-Max-margin approaches find a separating hyperplane between an expert action and all other actions that maximizes the margin.
-This is formalized as the following optimization problem, where $m$ is a similarity metric between actions, and $phi$ is a function mapping state-action pairs to feature vectors:
+Given a set of actions $\actionset{}$,
+the max-margin approach finds a separating hyperplane between an expert action $a_i$ and all other actions $a' \in \actionset{}\setminus a_i$ for state $s_i$,
+for all expert-chosen state-action pairs ($s_i$, $a_i$).
+The separating hyperplane is chosen to maximize the distance in the feature space between the hyperplane and feature vectors for state-action pairs.
+This is formalized as the following linear programming problem, where $m$ is a similarity metric between actions, and $\phi$ is a function mapping state-action pairs to feature vectors:
 \begin{equation}
 \begin{aligned}
-& \underset{w, \xi}{\text{minimize}}  & & ||w||^2 + C\sum \xi_i\\
-& \text{subject to} & &w^\top \phi(\statevar{}_i, \actionvar{}_i) \geq w^\top \phi(\statevar{}_i, \actionvar{}') + m(\statevar{}_i, \actionvar{}_i, \actionvar{}') - \xi_i 
+& \underset{\mathbf{w}, \xi}{\text{minimize}}  & & ||\mathbf{w}||^2 + C\sum \xi_i\\
+& \text{subject to} & &\mathbf{w}^\top \phi(\statevar{}_i, \actionvar{}_i) \geq \mathbf{w}^\top \phi(\statevar{}_i, \actionvar{}') + m(\statevar{}_i, \actionvar{}_i, \actionvar{}') - \xi_i 
 \\&&&\hspace{2.5cm}\forall (\statevar{}_i, \actionvar{}_i) \in \labelset{}, \forall \actionvar{}' \in \actionset{}\setminus \actionvar{}_i \\
 & & &\xi_i \geq 0 \hspace{1.6cm} \forall i
 \end{aligned}
