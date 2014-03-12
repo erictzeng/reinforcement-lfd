@@ -56,7 +56,7 @@ We can encode a overhand knot tying task in this framework with a constant rewar
 and setting $\goalset{}$ to be the set of states when the rope a overhand knot.
 
 This solution is found by finding a value function, $V^*$, that satisfies the Bellman equations:
-$${\footnotesize V(s) = \left\{ \begin{array}{cl} \underset{a}{\max}\ \underset{s'}{\sum} T(s, a, s')[R(s, a, s') + V(s')] & s\notin \goalset{}\\ 0 & s\in \goalset{}\end{array}\right.}$$
+$${V(s) = \left\{ \begin{array}{cl} \underset{a}{\max}\ \underset{s'}{\sum} T(s, a, s')[R(s, a, s') + V(s')] & s\notin \goalset{}\\ 0 & s\in \goalset{}\end{array}\right.}$$
 It is sometimes easier to work with the right hand side of this equation, which we call a $Q$-function. Thus, $V^*(s, h)~=~\underset{a}{\max}\ Q^*(s, h, a)$.
 There are many approaches to finding such a value function, but they require storing a vector that is $O(|\stateset{}|)$, which can be prohibitive in many applications. 
 
