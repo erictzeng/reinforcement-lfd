@@ -7,6 +7,7 @@ import bulletsimpy
 import openravepy, trajoptpy
 import numpy as np
 from numpy import asarray
+import re
 
 from rapprentice import animate_traj, ropesim, ros2rave, math_utils as mu
 
@@ -283,7 +284,6 @@ def set_rope_transforms(tfs, sim_env):
     sim_env.sim.rope.SetTranslations(tfs[0])
     sim_env.sim.rope.SetRotations(tfs[1])
 
-ROPE_PARAMS_CHOICES = ['default', 'thick']
 def get_rope_params(params_id):
     rope_params = bulletsimpy.CapsuleRopeParams()
     if params_id == 'default':
@@ -296,6 +296,17 @@ def get_rope_params(params_id):
     elif params_id == 'thick':
         rope_params.radius = 0.008
         rope_params.angStiffness = .1
+        rope_params.angDamping = 1
+        rope_params.linDamping = .75
+        rope_params.angLimit = .4
+        rope_params.linStopErp = .2
+    elif params_id.startswith('stiffness'):
+        try:
+            stiffness = float(re.search(r'stiffness(.*)', params_id).group(1))
+        except:
+            raise RuntimeError("Invalid rope parameter id")
+        rope_params.radius = 0.005
+        rope_params.angStiffness = stiffness
         rope_params.angDamping = 1
         rope_params.linDamping = .75
         rope_params.angLimit = .4

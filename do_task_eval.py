@@ -33,7 +33,7 @@ def redprint(msg):
 def yellowprint(msg):
     print colorize.colorize(msg, "yellow", bold=True)
 
-def compute_trans_traj(sim_env, new_xyz, seg_info, animate=False, interactive=False):
+def compute_trans_traj(sim_env, new_xyz, seg_info, ignore_infeasibility=True, animate=False, interactive=False):
     sim_util.reset_arms_to_side(sim_env)
     
     redprint("Generating end-effector trajectory")    
@@ -119,9 +119,10 @@ def compute_trans_traj(sim_env, new_xyz, seg_info, animate=False, interactive=Fa
             if not eval_util.traj_is_safe(sim_env, full_traj, COLLISION_DIST_THRESHOLD):
                 redprint("Trajectory not feasible")
                 feasible = False
-                success = False
-            else:  # Only execute feasible trajectories
+            if feasible or ignore_infeasibility:
                 success &= sim_util.sim_full_traj_maybesim(sim_env, full_traj, animate=animate, interactive=interactive)
+            else:
+                success = False
 
         if not success: break
 
@@ -134,7 +135,7 @@ def compute_trans_traj(sim_env, new_xyz, seg_info, animate=False, interactive=Fa
     
     return success, feasible, misgrasp, full_trajs
 
-def simulate_demo_traj(sim_env, new_xyz, seg_info, full_trajs, animate=False, interactive=False):
+def simulate_demo_traj(sim_env, new_xyz, seg_info, full_trajs, ignore_infeasibility=True, animate=False, interactive=False):
     sim_util.reset_arms_to_side(sim_env)
     
     old_xyz = np.squeeze(seg_info["cloud_xyz"])
@@ -171,9 +172,10 @@ def simulate_demo_traj(sim_env, new_xyz, seg_info, full_trajs, animate=False, in
             if not eval_util.traj_is_safe(sim_env, full_traj, COLLISION_DIST_THRESHOLD):
                 redprint("Trajectory not feasible")
                 feasible = False
-                success = False
-            else:  # Only execute feasible trajectories
+            if feasible or ignore_infeasibility:
                 success &= sim_util.sim_full_traj_maybesim(sim_env, full_traj, animate=animate, interactive=interactive)
+            else:
+                success = False
 
         if not success: break
 
@@ -233,8 +235,8 @@ def parse_input_args():
 
     parser_eval = subparsers.add_parser('eval')
     parser_eval.add_argument("weightfile", type=str)
-    parser_eval.add_argument("--exec_rope_params", type=str, choices=sim_util.ROPE_PARAMS_CHOICES, default='default')
-    parser_eval.add_argument("--lookahead_rope_params", type=str, choices=sim_util.ROPE_PARAMS_CHOICES, default='default')
+    parser_eval.add_argument("--exec_rope_params", type=str, default='default')
+    parser_eval.add_argument("--lookahead_rope_params", type=str, default='default')
     parser_eval.add_argument("--lookahead_width", type=int, default=1)
     parser_eval.add_argument('--lookahead_depth', type=int, default=0)
     parser_eval.add_argument('--ensemble', action='store_true')
@@ -250,6 +252,7 @@ def parse_input_args():
     
     parser_replay = subparsers.add_parser('replay')
     parser_replay.add_argument("loadresultfile", type=str)
+    parser_replay.add_argument("--replay_rope_params", type=str, default=None, help="if not specified, uses the rope_params that is saved in the result file")
 
     return parser.parse_args()
 
@@ -332,7 +335,7 @@ def eval_on_holdout(args, sim_env):
                     q_values = [(q_value_fn(next_state, action, feature_fn, weights, w0), action, chkpt, r_a) for action in actions]
                     agenda.extend(q_values)
                 agenda.sort(key = lambda v: -v[0])
-                agenda = agenda[:args.lookahead_width]                    
+                agenda = agenda[:args.lookahead_width]
                 first_root_action = agenda[0][-1]
                 if all(r_a == first_root_action for (_, _, _, r_a) in agenda):
                     best_root_action = first_root_action
@@ -362,18 +365,21 @@ def eval_on_holdout(args, sim_env):
 def replay_on_holdout(args, sim_env):
     holdoutfile = h5py.File(args.holdoutfile, 'r')
     tasks = eval_util.get_specified_tasks(args.tasks, args.taskfile, args.i_start, args.i_end)
-    holdout_items = eval_util.get_holdout_items(holdoutfile, tasks)
+    loadresultfile = h5py.File(args.loadresultfile, 'r')
+    loadresult_items = eval_util.get_holdout_items(loadresultfile, tasks)
 
     num_successes = 0
     num_total = 0
     
-    for i_task, demo_id_rope_nodes in holdout_items:
+    for i_task, demo_id_rope_nodes in loadresult_items:
         print "task %s" % i_task
         sim_util.reset_arms_to_side(sim_env)
         redprint("Replace rope")
         rope_nodes, rope_params, _, _ = eval_util.load_task_results_init(args.loadresultfile, i_task)
         # uncomment if the results file don't have the right rope nodes
         #rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
+        if args.replay_rope_params:
+            rope_params = args.replay_rope_params
         # don't call replace_rope and sim.settle() directly. use time machine interface for deterministic results!
         time_machine = sim_util.RopeSimTimeMachine(rope_nodes, sim_env)
 
@@ -382,7 +388,7 @@ def replay_on_holdout(args, sim_env):
 
         eval_util.save_task_results_init(args.resultfile, sim_env, i_task, rope_nodes, rope_params)
 
-        for i_step in range(args.num_steps):
+        for i_step in range(len(loadresultfile[i_task]) - (1 if 'init' in loadresultfile[i_task] else 0)):
             print "task %s step %i" % (i_task, i_step)
             sim_util.reset_arms_to_side(sim_env)
 
