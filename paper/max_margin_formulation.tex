@@ -2,8 +2,64 @@
 \label{sec:formulation}
 %\input{variables.tex}
 
-In this section, we will formulate our approach to doing \mmql{}, and
-specify our assumptions regarding the problems it is applied to.
+In this section, we will formulate the Max Margin Q-Learning (\mmql{}) approach and
+specify our assumptions regarding its applicability.
+
+\subsection{Motivation and Overview}
+% shortcomings of NN approach (motivation)
+The nearest-neighbor selection method is capable of selecting demonstration trajectories, 
+but is limited in several ways. To facilitate discussion, consider a simple problem with 
+states $s_i$ and two expert demonstrations, $A, B$. If we let $rc(s_0, A)$ be the registration
+cost associated with transferring $A$ to $s_0$, then nearest neighbor selection rule from 
+\citet{Schulmanetal_ISRR2013} proposesto select $\argmax_{D \in \{A, B\}} rc(s_0, D)$ in 
+state $s_0$.
+
+A drawback of this approach is that all demonstrations are treated 
+identically, while, in fact, some may be more easily generalized than others. 
+It may be the case that $A$ will transfer successfully if the registration cost is 
+below 10, while trajectory $B$ will only transfer successfully if registration cost 
+is below 1. We would like to be able to incorporate these differences into our decision. 
+Additionally, this measure does not incorporate cost-to-go. If $A$ and $B$ have a
+comparable chance of successfully transferring, but $B$ make more progress towards the goal,
+one should transfer $B$.
+
+Another key issue is that, while registration cost can provides a relative 
+ranking of options for a given state, it is incorrect to compare different states on this 
+basis. Let $rc(s, D)$ be the registration cost between state $s$ and demonstration 
+$D$. It is reasonable to compare $rc(s, A)$ and $rc(s, B)$, but not to compare $rc(s_1, A)$ 
+and $rc(s_1, B)$.This prevents the use of explicit search over options (e.g. simulating 
+transfer of different trajectories and comparing the results). As an example, the minimum 
+registration cost increases over the course of a successful overhand-knot tie. Minimizing 
+registration cost over a search horizon will actually prefer transferring trajectories that 
+do not make progress towards the goal.
+
+We approach this problem by formulating our trajectory transfer problem as an abstract MDP. 
+In this MDP, 
+the state space is the same, but the actions correspond to selecting a trajectory and 
+transferring it to the current state. The state-action pair $(s, A)$ corresponds
+to transferring demonstration $A$ to $s$ and executing the result. This MDP has a reward 
+of 0 for tying a knot and a reward of -1 otherwise (to elicit goal-directed behavior). The 
+$Q$-function in this MDP meets the crieria above. It gives a ranking of different actions 
+given state that incorporate cost-to-go. Furthermore, it is an absolute measure of quality
+and can be compared across different states.
+
+One could imagine applying reinforcement learning to this problem to learn this Q-function.
+While possible, this presents several challenges as there is still a large action space
+and many actions will simply cause failure. Thus, we propose \mmql{} as a way to learn
+a Q-function from sequences of successful trajectory transfers. We take as input 
+sequences of states that successfully tie a knot, where each state is labelled with the
+demonstration (action for our abstract MDP), that was transferred to it.
+
+From these sequences, there are two types of constraints placed on the Q-function. First, it 
+should rank the actions selected above the other options. This is most naturally represented as 
+max-margin constraints. Second, Q-values of subsequent states should be higher than those 
+that precede them, because we are making progress towards the goal. This is most naturally 
+represented through the Bellman equations from the ALP formuations of value iteration. The 
+\mmql{} formalization combines these into a single optimization and finds an approximate 
+Q-function such that our input sequences are optimal. 
+
+
+% what does combining them entail and why do we think it will work
 
 %%PA: throughout the paper there are quite a few abbreviations used
 %%that we are introducing in this paper ; are they really necessary,
