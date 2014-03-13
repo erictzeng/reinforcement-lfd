@@ -15,7 +15,7 @@ The problem of learning from demonstrations (LfD) deals with the generalization 
 new scenarios~\cite{Argall_2009, Schaal_1999}. Behavioral cloning is an approach to LfD that 
 directly learns a policy to mimic an expert's behavior.
 
-One of the first successful applications of this strategy is the ALVINN system~\cite{Pomerleau_NIPS1989}, which utilizes a 
+One of the first successful applications of behavioral cloning is the ALVINN system~\cite{Pomerleau_NIPS1989}, which utilizes a 
 neural network to learn a steering policy that enables an autonomous car to follow a road.
 \citet{muller2005off} use a convolutional network to learn a steering policy for off-road driving.
 \citet{Ratliff_Humanoids2007} uses multi-class classification to learn a function that scores actions 
@@ -45,7 +45,7 @@ from an optimal control policy. They learn the expert's
 reward function and are limited to models with tractable discrete representations 
 or linear dynamics models.
 In contrast, our approach fixes a cost function 
-and use learning to account for the prohibitive size and
+and uses learning to account for prohibitive state-action space size and
 complex dynamics.
 
 %\subsection{Deformable Object Manipulation}
@@ -59,7 +59,7 @@ complex dynamics.
 Because our approach of \mmql{} makes limited assumptions about the state space
 and dynamics of the model, it can be applied towards a variety of tasks
 in robotics, including the manipulation of deformable objects.
-It is challenging to manipulate deformable objects due to their nonlinearity
+It is challenging to manipulate deformable objects because of their nonlinearity
 and because the configuration spaces of such objects may be
 infinite-dimensional~\cite{Lamiraux_IJRR2001}.
 
@@ -75,11 +75,11 @@ required for manipulating the object~\cite{Howard_AutRobots2000}.
 In contrast, our approach enables manipulation of deformable objects
 without directly modeling the object, and makes no assumptions beyond
 those of trajectory transfer. When a model of state-transitions
-is available, our use of
-lookahead to augment \mmql{} reduces uncertainty in execution through
-simulation of transferred trajectories.
+is available, we are able to use
+lookahead to augment \mmql{}, thus reducing uncertainty in execution through
+the simulation of transferred trajectories.
 
-We demonstrate the effectiveness of our approach for
+We demonstrate the effectiveness of using \mmql{}} for
 knot tying, a commonly studied deformable object manipulation task in robotics.
 Previous approaches to knot tying usually depend on rope-specific knowledge
 and assumptions.
@@ -105,13 +105,14 @@ There is some similarity in our abstract MDP formulation to the options
 framework for temporal abstraction~\cite{sutton1999between}.
 The options framework simplifies learning by enabling temporal abstraction through
 policies that are guaranteed to reach a target state. 
-This lets learning agent abstract away low-level details of a task and focus on 
-high level interactions. 
+This allows a learning agent to abstract away the low-level details of a task and
+focus on high level interactions instead.
 We make use of a similar type of abstraction, but our policies are learned from 
 demonstrations and do not satisfy all the requirements to be an option.
 
-\citet{konidaris2010constructing} use learning from demonstrations to initialize a skill chaining reinforcement learning algorithm.
+\citet{konidaris2010constructing} use LfD to initialize a skill chaining reinforcement learning algorithm.
 However, they focus on taking a demonstration and decomposing it into explicit local policies.
 We simply make use of the associated trajectory transfer and leverage it to solve tasks beyond the reach of current reinforcement learning approaches.
-Neumann et al. and Stulp et al. both explore using optimizing motion primitive parameters as another way to elicit this behavior in RL ~\cite{Neumann09learningcomplex, Stulp_ROB2012}.
+Neumann et al. and Stulp et al. both explore using optimizing motion primitive parameters as another way to
+elicit this behavior in reinforcement learning~\cite{Neumann09learningcomplex, Stulp_ROB2012}.
 When they learn the primitives, they must find an appropriate policy for setting these parameters, which is intractable in our setting.
