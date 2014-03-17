@@ -332,10 +332,13 @@ class RopeSimTimeMachine(object):
         replace_rope(self.rope_nodes, sim_env, rope_params)
         sim_env.sim.settle()
         
-    def set_checkpoint(self, id, sim_env):
+    def set_checkpoint(self, id, sim_env, tfs=None):
         if id in self.checkpoints:
             raise RuntimeError("Can not set checkpoint with id %s since it has already been set"%id)
-        self.checkpoints[id] = get_rope_transforms(sim_env)
+        if tfs:
+            self.checkpoints[id] = tfs
+        else:
+            self.checkpoints[id] = get_rope_transforms(sim_env)
 
     def restore_from_checkpoint(self, id, sim_env, rope_params=None):
         if id not in self.checkpoints:
