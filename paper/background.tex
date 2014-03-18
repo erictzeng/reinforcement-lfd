@@ -3,41 +3,58 @@
 \subsection{Trajectory Transfer through Non-Rigid Registration}
 Non-rigid registration computes a function $f$ that minimizes error between landmark points, subject to a regularization term.
 A commonly-used, effective method for registering spatial data is the Thin Plate Spline (TPS) regularizer~\cite{Carr_SIGGRAPH2001, Wahba_TPS1990}.
-Given a set of correspondence points $(x_i, y_i)$, we minimize the following objective:
-$$\min_f \sum_i ||x_i - y_i||^2 + C\int dx ||D^2(f)||^2_{Frob},$$
-where $C$ is a hyper-parameter that trades off between correspondance error and increased curvature.
+Given a set of correspondence points $(\mathbf{x}_i, \mathbf{y}_i)$, the goal is to find the warping function $\mathbf{f} : \mathbb{R}^3 \rightarrow \mathbb{R}^3$ that minimizes the following objective:
+$$\min_{\mathbf{f}} \sum_i ||\mathbf{x}_i - \mathbf{y}_i||^2 + C\int dx ||\text{D}^2(\mathbf{f})||^2_{\text{Frob}},$$
+where $C$ is a hyper-parameter that trades off between correspondence error and increased curvature.
+The second term measures curvature: $\text{D}^2(\mathbf{f})$ is the matrix of second order partial derivatives of $\mathbf{f}$, and $||\cdot||^2_{\text{Frob}}$
+denotes the Frobenius norm.
 This problem has a finite dimensional solution in terms of basis functions around the correspondence points.
+More concretely, $\mathbf{f}$ has the form
+$$\mathbf{f}(\mathbf{x}) = \sum_i \mathbf{a}_i K(\mathbf{x}_i, \mathbf{x}) + \mathbf{B}\mathbf{x} + \mathbf{c}$$
+where $K$ is the 3D TPS kernel $K(\mathbf{x}, \mathbf{x}') = - ||\mathbf{x} - \mathbf{x}'||$, and $\mathbf{a}_i \in \mathbb{R}^3$, $\mathbf{B} \in \mathbb{R}^{3\text{x}3}$, and $\mathbf{c} \in \mathbb{R}^3$.
+
+The Thin Plate Spline Robust Point Matching (TPS-RPM) algorithm solves the problem of unknown point correspondences
+by iteratively alternating between (1) estimating correspondences between the point clouds of two scenes and (2) fitting the optimal TPS transformation based on these estimated scene correspondences~\cite{Chui_CVIU2003}.
 
 Schulman et al. leverage TPS to perform trajectory transfer~\cite{Schulmanetal_ISRR2013}.
-Using a point cloud representation of both scenes, they use a modification of the TPS-RPM algorithm to jointly find point correspondences and a registration between them~\cite{Chui_CVIU2003}.
-TPS-RPM alternates between (1) estimating correspondences between the point clouds of two scenes and (2) fitting the optimal TPS transformation based on these estimated scene correspondences. 
-The result of this procedure is used to warp the path traced by the end effector of the robot in the demonstration.
-Finally, this warped trajectory is used as a goal for trajectory following in order to find a similar trajectory that satisfies joint limits and collision constraints.
-The result trajectory is executed, with the hope that the registration will account for changes in the environment but maintain the important aspects of the manipulation.
+Using a point cloud representation of both scenes, they use a modification of the TPS-RPM algorithm to jointly find point correspondences and a transformation between them.
+The resulting transformation function is used to warp the path traced by the end effector of the robot in the demonstration, which is
+represented as a sequence of positions and rotations of the end effector.
+This warped trajectory is used as a goal for trajectory following in order to find a similar trajectory that satisfies joint limits and collision constraints.
+Finally, the resulting trajectory is executed, with the hope that the registration will account for changes in the environment but maintain the important aspects of the manipulation.
 They extend this method to make use of multiple demonstrations by computing the registration cost to several candidate demonstrations and selecting the demonstration with the lowest registration cost.
 
 With trajectory transfer, we can associate each demonstration with a policy parameterized by the environment around the robot.
-Given a demonstration state, demonstration trajectory, and current state, the induced policy will produce a new trajectory to apply to the current state.
+Given a demonstration state, a demonstration trajectory, and a current state, the induced policy will produce a new trajectory to apply to the current state.
 This approach has been effective in generalizing deformable object manipulations to new scenarios and has been explored for knot-tying and automated suturing.
-In this paper, we leverage trajectory transfer to generalize individual demonstrations, and provide a novel method for selecting a demonstration to generalize, from multiple demonstrations. This enables us to get more bang for our demonstration buck.
+In this paper we provide a novel method for selecting which demonstration (out of multiple demonstrations) to generalize,
+leveraging trajectory transfer for the generalization of individual demonstrations.
+This enables us to get more bang for our demonstration buck.
 
 \subsection{Structured Max Margin}
 One way to incorporate expert demonstrations into learning is through the use of a max-margin framework.
-Max-margin approaches find a separating hyperplane between an expert action and all other actions that maximizes the margin.
-This is formalized as the following optimization problem, where $m$ is a similarity metric between actions, and $phi$ is a function mapping state-action pairs to feature vectors:
+Given a set of actions $\actionset{}$,
+the max-margin approach finds a separating hyperplane between an expert action $a_i$ and all other actions $a' \in \actionset{}\setminus a_i$ for state $s_i$,
+for all expert-chosen state-action pairs ($s_i$, $a_i$).
+The separating hyperplane is chosen to maximize the distance in the feature space between the hyperplane and feature vectors for state-action pairs.
+This is formalized as the following linear programming problem, where $m$ is a similarity metric between actions, and $\phi$ is a function mapping state-action pairs to feature vectors:
 \begin{equation}
 \begin{aligned}
-& \underset{w, \xi}{\text{minimize}}  & & ||w||^2 + C\sum \xi_i\\
-& \text{subject to} & &w^\top \phi(\statevar{}_i, \actionvar{}_i) \geq w^\top \phi(\statevar{}_i, \actionvar{}') + m(\statevar{}_i, \actionvar{}_i, \actionvar{}') - \xi_i 
+& \underset{\mathbf{w}, \xi}{\text{minimize}}  & & ||\mathbf{w}||^2 + C\sum \xi_i\\
+& \text{subject to} & &\mathbf{w}^\top \phi(\statevar{}_i, \actionvar{}_i) \geq \mathbf{w}^\top \phi(\statevar{}_i, \actionvar{}') + m(\statevar{}_i, \actionvar{}_i, \actionvar{}') - \xi_i 
 \\&&&\hspace{2.5cm}\forall (\statevar{}_i, \actionvar{}_i) \in \labelset{}, \forall \actionvar{}' \in \actionset{}\setminus \actionvar{}_i \\
 & & &\xi_i \geq 0 \hspace{1.6cm} \forall i
 \end{aligned}
 \end{equation}
 
 This approach has proven useful in many different scenarios where there is structure to an estimation or learning problem.
-A notable, and related, example is that of Inverse Reinforcement Learning, where max-margin constrain reward functions that one might learn so that an expert's policy is optimal.
-Maximum Margin Planning is one such application~\cite{Ratliff_ICML06}. 
-In it, the authors use maximum margin constraints for an MDP with known dynamics, but an unknown cost to place constraints on admissable cost functions.
+A notable, and related, example is that of Inverse Reinforcement Learning, where max-margin constrains reward functions that one might learn so that an expert's policy is optimal.
+Maximum Margin Planning is one such application~\cite{Ratliff_ICML06}.
+In it, the authors use maximum margin constraints for an MDP with known dynamics and an unknown cost, to place constraints on admissable cost functions.
+Our convex optimization formulation is similar to theirs, in that we both use a combination of max-margin constraints and Bellman constraints.
+The difference is that Max-Margin Planning learns a reward function whereas our formulation learns a Q-function.
+Our motivation for learning a Q-function instead of a reward function is that in our application the reward function is known (the goal of a tied knot defines the reward), but a Q-function is needed to help with action selection and estimating distance to a goal.
+
 
 %%PA: also, do we really need to introduce the horizon?  It's good to minimize mental notational overhead; I think we can just say there are sink states where the process terminates which have a value of 0 ?  It'd be good to mention that to encode, let's say, tying a knot in a minimal number of segments, we could associate a reward of -1 with every segment execution.
 %%PA: do we need the linear program here?  or can we just say that at the solution the Bellman equation is satisfied (and we already have the Bellman equations earlier on); followed by introducing linear function approximation and saying that when using function approximation one goes after weights that make the Bellman equations approximately satisfied; this would cut down the number of equations to one in the section below
@@ -56,8 +73,8 @@ We can encode a overhand knot tying task in this framework with a constant rewar
 and setting $\goalset{}$ to be the set of states when the rope a overhand knot.
 
 This solution is found by finding a value function, $V^*$, that satisfies the Bellman equations:
-$${\footnotesize V(s) = \left\{ \begin{array}{cl} \underset{a}{\max}\ \underset{s'}{\sum} T(s, a, s')[R(s, a, s') + V(s')] & s\notin \goalset{}\\ 0 & s\in \goalset{}\end{array}\right.}$$
-It is sometimes easier to work with the right hand side of this equation, which we call a $Q$-function. Thus, $V^*(s, h)~=~\underset{a}{\max}\ Q^*(s, h, a)$.
+$${V(s) = \left\{ \begin{array}{cl} \underset{a}{\max}\ \underset{s'}{\sum} T(s, a, s')[R(s, a, s') + V(s')] & s\notin \goalset{}\\ 0 & s\in \goalset{}\end{array}\right.}$$
+It is sometimes easier to work with the right hand side of this equation, which we call a $Q$-function. Thus, $V^*(s)~=~\underset{a}{\max}\ Q^*(s, a)$.
 There are many approaches to finding such a value function, but they require storing a vector that is $O(|\stateset{}|)$, which can be prohibitive in many applications. 
 
 

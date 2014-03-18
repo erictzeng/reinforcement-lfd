@@ -2,8 +2,68 @@
 \label{sec:formulation}
 %\input{variables.tex}
 
-In this section, we will formulate our approach to doing \mmql{}, and
-specify our assumptions regarding the problems it is applied to.
+In this section, we will formulate the Max Margin Q-Learning (\mmql{}) approach and
+specify our assumptions regarding its applicability.
+
+\subsection{Motivation and Overview}
+% shortcomings of NN approach (motivation)
+To facilitate discussion, consider a simple trajectory transfer
+problem with states $s_i$ and two expert demonstrations, $A, B$. Let
+$rc(s_0, A)$ be the registration cost associated with transferring $A$
+to $s_0$. The nearest neighbor selection rule from
+\citet{Schulmanetal_ISRR2013} proposes to select $\argmax_{D \in \{A,
+  B\}} rc(s_0, D)$ in state $s_0$.
+
+A drawback of this approach is that all demonstrations are treated
+identically but some may transfer more readily.  $A$ may transfer
+successfully if its registration cost is below 10, while $B$ will only
+transfer successfully if its registration cost is below 1.
+Additionally, this measure does not incorporate cost-to-go. If $A$ and
+$B$ have a comparable chance of successfully transferring, but $B$
+makes more progress towards the goal, one should transfer
+$B$. Finally, while registration cost provides a relative ranking of
+options for a given state, it is incorrect as a comparison between
+different states. That is, it is reasonable to compare $rc(s_1, A)$
+and $rc(s_1, B)$, but not to compare $rc(s_1, A)$ and $rc(s_2,
+B)$. This prevents explicit search over options (e.g. simulating
+transfer of different trajectories and comparing the results). As an
+example, the minimum registration cost increases over the course of a
+successful overhand-knot tie, so minimizing registration cost over a
+search horizon is easily at odds with making progress towards the
+goal.
+
+We approach this problem by formulating our trajectory transfer
+problem as an abstract MDP.  In this MDP, the state space is the same,
+but the actions correspond to selecting a trajectory and transferring
+it to the current state. The state-action pair $(s, A)$ corresponds to
+transferring demonstration $A$ to $s$ and executing the result. This
+MDP has a reward of 0 for tying a knot and a reward of -1 otherwise
+(to elicit goal-directed behavior). The Q-function for this MDP meets
+the criteria above. It gives a ranking of different actions given a
+state that incorporates cost-to-go. Furthermore, it is an absolute
+measure of quality and can be compared across different states.
+
+One could apply reinforcement learning to learn this
+Q-function. However, efficient exploration presents a significant
+challenge, as there is still a large action space and many actions
+will simply cause failure. Thus, we propose \mmql{} as a way to learn
+a Q-function from sequences of successful trajectory transfers. We
+take as input sequences of state-action pairs that successfully tie a
+knot, where each state is labelled with the demonstration (action for
+our abstract MDP) that was transferred to it.
+
+From these sequences, there are two types of constraints on the
+Q-function. First, it should rank the demonstrated actions above other
+options. This is naturally represented as max-margin
+constraints. Second, Q-values of subsequent states should be higher
+than those that precede them, because we are making progress towards
+the goal. This is naturally represented through the Bellman equations
+from the ALP formulations of approximate value iteration. \mmql{}
+formalizes these into a single optimization and finds an approximate
+Q-function that satisfies our desiderata.
+
+
+% what does combining them entail and why do we think it will work
 
 %%PA: throughout the paper there are quite a few abbreviations used
 %%that we are introducing in this paper ; are they really necessary,
@@ -31,7 +91,7 @@ at least several demonstrations of each step of the task.
 
 A demonstration \demovar{} is composed of (\demosub{pc}, \demosub{traj}),
 where \demosub{pc} is a point cloud representation of the underlying
-starting state of the demonstration, and \demosub{traj} stores
+starting state of the demonstration, and \demosub{traj} is
 the trajectory executed by the expert in that demonstration.
 
 Each \labelsub{j} $\in$ \labelset{}
@@ -39,15 +99,15 @@ corresponds to a labeled sequence of
 task executions of length \nsub{j}:
 \begin{equation*}
 \labelsub{j} = [\sapairsubsup{1}{(j)},
-\sapairsubsup{2}{(j)}, \ldots, \sapairsubsup{\nsub{j}}{(j)}],
+\sapairsubsup{2}{(j)}, \ldots, \sapairsubsup{\nsub{j}}{(j)}].
 \end{equation*}
-where \statesubsup{i}{(j)}
-is a state and \actionsubsup{i}{(j)} is the action taken in that state, described in
-Section~\ref{subsec:form_mdp}. Each labeled sequence \labelsub{j} corresponds
-to a single complete task execution, ordered in the chronological sequence of
-states and actions taken in those states: \statesubsup{i}{(j)} should
-be the result of taking action \actionsubsup{i-1}{(j)} in state \statesubsup{i-1}{(j)},
-and the last state \statesubsup{\nsub{j}}{(j)} should be a goal state.
+\statesubsup{i}{(j)} is a state of the task (which is represented as
+the point cloud associated with that state). \actionsubsup{i}{(j)} is
+the demonstration we transferred to that state. Each labeled sequence
+\labelsub{j} corresponds to a single complete task execution and is ordered
+chronologically: \statesubsup{i}{(j)} is the result of taking action
+\actionsubsup{i-1}{(j)} in state \statesubsup{i-1}{(j)}, and
+\statesubsup{\nsub{j}}{(j)} is a goal state.
 
 %%PA: How about in subsection1 presenting the problem formulation, in which the
 %%demonstration set is described as well as the labeled examples; then
@@ -65,28 +125,25 @@ and the last state \statesubsup{\nsub{j}}{(j)} should be a goal state.
 \subsection{Markov Decision Process Formulation}
 \label{subsec:form_mdp}
 
-Selecting from multiple demonstrations can be framed as a Markov Decision
+We frame the problem of demonstration selection as a Markov Decision
 Process (MDP), which enables us to apply Q-function approximation to derive a
 policy.
 
-In order to make planning in this space tractable, we use the set of
-demonstrations \demoset{} to define a set of abstract actions \actionset{}. Each
-action $\actionvar \in \actionset$ denotes the choice to use a corresponding
-policy $\pi_d$, where we apply $\pi_d$ to some state $s$ by transferring
-$d_{traj}$ to $s$ via TPS warping, then executing the resulting trajectory.
-
-Since each action $\actionvar \in \actionset$ has a corresponding demo $\demovar
-\in \demoset$, from here onward we refer to actions and demos
-interchangeably. Additionally, $\policysub{d}{\statevar} =
-\policysub{a}{\statevar}$ is most precisely defined as the trajectory that is
-found via trajectory transfer from $\demovar$ to $\statevar$. However, since our
+We use the set of demonstrations \demoset{} to define a set of abstract actions 
+\actionset{}. Each abstract action $\actionvar \in \actionset$ represents a 
+policy $\pi_a$, that transfers the corresponding demonstration and executes 
+the result. Each action $\actionvar \in \actionset$ has a corresponding demonstration $\demovar
+\in \demoset$, we will refer to actions and demonstrations
+interchangeably. $\policysub{a}{\statevar} =
+\policysub{d}{\statevar}$ is most precisely defined as the result of 
+trajectory transfer from $\demovar$ to $\statevar$. However, since our
 transition model is deterministic, applying this trajectory to $\statevar$ will
-always produce the same successor $s'$. Thus, for ease of notation we will use
-$\pi_{d}$ as the successor function for transferring $d_{traj}$ to a state $s$,
-and say that $\policysub{d}{\statevar} = s'$.
+always produce the same successor $s'$. We overload
+$\pi_{d}$ to be the successor function for transferring $d_{traj}$ to a state $s$ 
+and executing it,and say that $\policysub{d}{\statevar} = s'$.
 
 Thus, the MDP for an \mmql{} problem is defined as
-$\langle\stateset,\goalset,\actionset,T,R,H\rangle$, where
+$\langle\stateset,\goalset,\actionset,T,R\rangle$, where
 
 \begin{equation}
 \begin{aligned}
@@ -98,16 +155,14 @@ $\langle\stateset,\goalset,\actionset,T,R,H\rangle$, where
     1[\policysub{\actionvar{}}{\statevar{}} = \nextstatevar{}] &\text{ if } \statevar{} \not \in \goalset{} \\
     1[\statevar{} = \statevar{}'] &\text{ if } \statevar{} \in \goalset{}
     \end{cases}\\
-\rewardfn{}(\statevar{}) &= -1 {[ \statevar{} \not \in \goalset{} ]}. \\
-H &= \text{finite horizon}
+\rewardfn{}(\statevar{}) &= -1 {[ \statevar{} \not \in \goalset{} ]}.
 \end{aligned}
 \label{eq:mdp}
 \end{equation}
 
 In the above specification, \goalset{} denotes the goal set and contains all
-states that satisfy the predefined goal. For example, in the knot-tying example,
-\goalset{} denotes the set of tied knots.  Our MDP's reward function is then
-simply $-1$ for all non-goal states and $0$ for goal states.
+states that satisfy the predefined goal. In the knot-tying example,
+\goalset{} denotes the set of tied knots. 
 
 \subsection{Max-Margin Q-Learning Formulation}
 Our goal is to use the labeled sequences \labelset{} in order to learn an
@@ -117,18 +172,18 @@ Recall that actions in \actionset{} have a one-to-one correspondence with the
 expert-guided demonstrations in \demoset{}, and are defined by executing the
 transferred trajectory from the corresponding demonstration to the given state.
 
-The functions we learn of linear combinations of features on states and actions.
+The functions we learn are linear combinations of features on states and actions.
 For a given state \statevar{} and action
 \actionvar{} the corresponding feature vector is \features{\statevar{}}{\actionvar{}}
-(described in Section~\ref{sec:features}). Thus our approximate Q function is defined as
+(described in Section~\ref{sec:features}). Thus our approximate Q-function is defined as
 \begin{equation}
-\approxq(\statevar{}, \actionvar{}) = \weightst{} \features{\statevar{}}{\actionvar{}}.
+\approxq(\statevar{}, \actionvar{}) = \weightszero{} + \weightst{} \features{\statevar{}}{\actionvar{}}.
 \end{equation}
 
-An initial approach to learning in this problem is just do max margin behavior cloning. 
+An initial approach is to directly apply max margin behavior cloning. 
 This corresponds to computing the weights, $w$, as the solution to the following  convex optimization problem: 
 \begin{align}
-& \underset{w, \xi, \nu}{\text{min}}  & & ||\weights{}||^2 + \marginslackc{} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} \marginslacksubsup{i}{(j)}\notag \\
+& \underset{w, \xi, \nu}{\min}  & & ||\weights{}||^2 + \marginslackc{} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} \marginslacksubsup{i}{(j)}\notag \\
 & \text{s.t.} & &\weightst{} \features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}} \geq \weightst{} \phi(\statesubsup{i}{(j)}, \actionvar{}') + \marginvar{}(\statesubsup{i}{(j)}, \actionsub{i}, \actionvar{}') - \marginslacksubsup{i}{(j)} \notag\\
     &&&\hspace{1.9cm}\forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j}; \notag\\
     &&&\hspace{1.9cm}\forall \actionvar{}' \in \actionset{}\setminus \actionvar{}_i  \label{eq:margin_constr}\\
@@ -163,9 +218,11 @@ of the approximate linear program for an MDP into our formulation. This is forma
 following optimization:
 
 \begin{align}
-& \underset{w, \xi, \nu}{\text{min}}  & & ||\weights{}||^2 + \marginslackc{} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} \marginslacksubsup{i}{(j)}
-                                                      + \bellmanslackc{} \sum_{j=1}^{\labelsetsize{}} \bellmanslacksup{(j)} \notag \\
-&    & & - \frac{\bellmanc{}}{\labelsatotal{}} \weightszero{} - \frac{\bellmanc{}}{\labelsatotal{}} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} \weightst{}\features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}}\\
+& \underset{w, \xi, \nu}{\min}  & & ||\weights{}||^2 - \frac{\bellmanc{}}{\labelsatotal{}} \sum_{j=1}^{\labelsetsize{}} 
+  \sum_{i=1}^{\nsub{j}} (\weightszero{} + \weightst{}\features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}})\\
+&    & & + \marginslackc{} \sum_{j=1}^{\labelsetsize{}} \sum_{i=1}^{\nsub{j}} 
+            \marginslacksubsup{i}{(j)}+ \bellmanslackc{} \sum_{j=1}^{\labelsetsize{}} 
+            \bellmanslacksup{(j)} \\
 & \text{s.t.} & &\weightst{} \features{\statesubsup{i}{(j)}}{\actionsubsup{i}{(j)}} \geq \weightst{} \phi(\statesubsup{i}{(j)}, \actionvar{}') + \marginvar{}(\statesubsup{i}{(j)}, \actionsub{i}, \actionvar{}') - \marginslacksubsup{i}{(j)} \notag\\
     &&&\hspace{1.9cm}\forall j = 1, \ldots, \labelsetsize{}; \text{ } \forall i = 1, \ldots, \nsub{j}; \notag\\
     &&&\hspace{1.9cm}\forall \actionvar{}' \in \actionset{}\setminus \actionvar{}_i  \notag\\
