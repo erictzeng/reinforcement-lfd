@@ -38,7 +38,8 @@ if __name__ == '__main__':
 
     results_file = h5py.File(args.results_file, 'r')
     
-    num_successes, _, not_inds = estimate_performance(args.results_file)
-    print "not_inds", not_inds    
+    num_successes, knot_inds, not_inds = estimate_performance(args.results_file)
+    print "knot_inds:", ' '.join(str(ind) for ind in knot_inds)
+    print "not_inds:", ' '.join(str(ind) for ind in not_inds)
     print "Successes / Total: %d/%d" % (num_successes, len(results_file))
     print "Success rate:", float(num_successes)/float(len(results_file))
