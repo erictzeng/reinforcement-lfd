@@ -22,13 +22,7 @@ import os.path
 import cProfile
 import util as u
 import sys
-try:
-    from rapprentice import registration, clouds
-    use_rapprentice = True
-except:
-    print "Couldn't import from rapprentice"
-    # set a flag so we can test some stuff without that functionality
-    use_rapprentice = False
+from rapprentice import registration, clouds
 
 DS_SIZE = .025
 GRIPPER_OPEN_CLOSE_THRESH = 0.04
@@ -395,6 +389,7 @@ class ActionSet(object):
     def __init__(self, actionfile, use_cache = True, args=None, landmarks=None):
         self.actionfile = actionfile
         self.actions = sorted(actionfile.keys())
+        self.actions_ds_clouds = {}
         # not including 'done' as an action anymore in max-margin constraints
         #self.actions.append('done')
         self.action_to_ind = dict((v, i) for i, v in enumerate(self.actions))
@@ -433,7 +428,9 @@ class ActionSet(object):
             return [warped_trajs, rc, warped_rope_xyz]
 
     def get_ds_cloud(self, action):
-        return clouds.downsample(self.actionfile[action]['cloud_xyz'], DS_SIZE)
+        if action not in self.actions_ds_clouds:
+            self.actions_ds_clouds[action] = clouds.downsample(self.actionfile[action]['cloud_xyz'], DS_SIZE)
+        return self.actions_ds_clouds[action]
 
     def traj_diff_features(self, state, action):
         if action == 'done':
@@ -730,14 +727,6 @@ def warp_hmats(xyz_src, xyz_targ, hmat_list, src_interest_pts = None):
         trajs[k] = f.transform_hmats(hmats)
     xyz_src_warped = f.transform_points(xyz_src)
     return [trajs, cost, xyz_src_warped]
-
-def get_downsampled_clouds(demofile):
-    if not use_rapprentice:
-        return get_clouds(demofile)
-    return [clouds.downsample(seg["cloud_xyz"], DS_SIZE) for seg in demofile.values()]
-
-def get_clouds(demofile):
-    return [seg["cloud_xyz"] for seg in demofile.values()]
 
 def compute_weights(xyz, interest_pts):
     radius = np.max(ssd.cdist(xyz, xyz, 'euclidean'))/10.0

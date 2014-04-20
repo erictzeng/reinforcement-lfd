@@ -83,8 +83,8 @@ def load_clusters(fname):
 
 def compute_distance_mat():
     demofile = h5py.File('/home/dhm/sampledata/overhand/all.h5', 'r')
-    keys = demofile.keys()
-    ds_clouds = get_downsampled_clouds(demofile)
+    ds_clouds = [clouds.downsample(seg["cloud_xyz"], DS_SIZE) for seg in demofile.values()]
+
     func = lambda a, b: registration_cost(a, b) + registration_cost(b, a)
     kernel_mat = compute_kernel_mat(ds_clouds, func)
     outfile = h5py.File('kernel_mat.h5', 'w')
