@@ -121,7 +121,7 @@ def binarize_gripper(angle):
 def set_gripper_maybesim(sim_env, lr, is_open, prev_is_open):
     mult = 5
     open_angle = .08 * mult
-    closed_angle = .02 * mult
+    closed_angle = .015 * mult
 
     target_val = open_angle if is_open else closed_angle
     
