@@ -169,8 +169,20 @@ def unwrap_in_place(t):
     else:
         raise NotImplementedError
 
-def sim_traj_maybesim(sim_env, bodypart2traj, animate=False, interactive=False):
-    full_traj = getFullTraj(sim_env, bodypart2traj)
+def exclude_gripper_collisions(sim_env):
+    cc = trajoptpy.GetCollisionChecker(sim_env.env)
+    for gripper_link in [link for link in sim_env.robot.GetLinks() if 'gripper' in link.GetName()]:
+        for rope_link in sim_env.sim.rope.GetKinBody().GetLinks():
+            cc.ExcludeCollisionPair(gripper_link, rope_link)
+
+def include_gripper_collisions(sim_env):
+    cc = trajoptpy.GetCollisionChecker(sim_env.env)
+    for gripper_link in [link for link in sim_env.robot.GetLinks() if 'gripper' in link.GetName()]:
+        for rope_link in sim_env.sim.rope.GetKinBody().GetLinks():
+            cc.IncludeCollisionPair(gripper_link, rope_link)
+
+def sim_traj_maybesim(sim_env, lr2traj, animate=False, interactive=False):
+    full_traj = get_full_traj(sim_env, lr2traj)
     return sim_full_traj_maybesim(sim_env, full_traj, animate=animate, interactive=interactive)
 
 def sim_full_traj_maybesim(sim_env, full_traj, animate=False, interactive=False):
@@ -201,21 +213,33 @@ def sim_full_traj_maybesim(sim_env, full_traj, animate=False, interactive=False)
         sim_env.viewer.Step()
     return True
 
-def getFullTraj(sim_env, bodypart2traj):
+def get_full_traj(sim_env, lr2traj):
     """
     A full trajectory is a tuple of a trajectory (np matrix) and dof indices (list)
     """
-    if len(bodypart2traj) > 0:
+    if len(lr2traj) > 0:
         trajs = []
         dof_inds = []
-        for (part_name, traj) in bodypart2traj.items():
-            manip_name = {"larm":"leftarm","rarm":"rightarm"}[part_name]
+        for (lr, traj) in lr2traj.items():
+            manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
             trajs.append(traj)
             dof_inds.extend(sim_env.robot.GetManipulator(manip_name).GetArmIndices())            
         full_traj = (np.concatenate(trajs, axis=1), dof_inds)
     else:
         full_traj = (np.zeros((0,0)), [])
     return full_traj
+
+def get_ee_traj(sim_env, lr, joint_traj):
+    manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
+    ee_link_name = "%s_gripper_tool_frame"%lr
+    ee_link = sim_env.robot.GetLink(ee_link_name)
+    dof_inds = sim_env.robot.GetManipulator(manip_name).GetArmIndices()
+    ee_traj = []
+    with openravepy.RobotStateSaver(sim_env.robot):
+        for i_step in range(joint_traj.shape[0]):
+            sim_env.robot.SetDOFValues(joint_traj[i_step], dof_inds)
+            ee_traj.append(ee_link.GetTransform())
+    return np.array(ee_traj)
 
 def load_random_start_segment(demofile):
     start_keys = [k for k in demofile.keys() if k.startswith('demo') and k.endswith('00')]

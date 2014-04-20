@@ -83,7 +83,7 @@ def compute_trans_traj(sim_env, new_xyz, seg_info, ignore_infeasibility=True, an
         ####
 
         ### Generate fullbody traj
-        bodypart2traj = {}
+        lr2newtraj = {}
 
         for (lr,old_joint_traj) in lr2oldtraj.items():
             
@@ -98,11 +98,10 @@ def compute_trans_traj(sim_env, new_xyz, seg_info, ignore_infeasibility=True, an
             new_joint_traj, pose_errs = planning.plan_follow_traj(sim_env.robot, manip_name,
                                                        sim_env.robot.GetLink(ee_link_name), new_ee_traj_rs,old_joint_traj_rs)
 
-            part_name = {"l":"larm", "r":"rarm"}[lr]
-            bodypart2traj[part_name] = new_joint_traj
+            lr2newtraj[lr] = new_joint_traj
             ################################    
-            redprint("Executing joint trajectory for part %i using arms '%s'"%(i_miniseg, bodypart2traj.keys()))
-        full_traj = sim_util.getFullTraj(sim_env, bodypart2traj)
+        redprint("Executing joint trajectory for part %i using arms '%s'"%(i_miniseg, lr2newtraj.keys()))
+        full_traj = sim_util.get_full_traj(sim_env, lr2newtraj)
         full_trajs.append(full_traj)
 
         for lr in 'lr':
