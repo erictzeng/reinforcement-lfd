@@ -111,9 +111,9 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
         action = group['action'][()]
         action = action if not group['knot'][()] else 'done'
         # add examples
-        lhs_phi = feature_fn(state, action)
-        xi_name = str('xi_') + str(key)
         if action != 'done':
+            lhs_phi = feature_fn(state, action)
+            xi_name = str('xi_') + str(key)
             for (i, other_a) in enumerate(actions):
                 if other_a == action:
                     continue
@@ -1006,7 +1006,30 @@ def build_model(args):
         demofile.close()
     else:
         ignore_keys = None
-    mm_model.load_constraints_from_file(args.constraintfile, ignore_keys)
+    mm_model.load_constraints_from_file(args.constraintfile, ignore_goal=ignore_keys)
+    mm_model.save_model(args.modelfile)
+
+def build_model_and_merge(args):
+    feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
+    print 'Found unmerged model: {}'.format(args.unmerged_modelfile)
+    print 'Building merged model into {}.'.format(args.modelfile)
+    if args.model == 'multi':
+        mm_model = MultiSlackMaxMarginModel.read(args.unmerged_modelfile, actions, num_features, feature_fn, margin_fn)
+    elif args.model == 'bellman':
+        mm_model = BellmanMaxMarginModel.read(args.unmerged_modelfile, actions, num_features, feature_fn, margin_fn)
+        mm_model.D = args.D
+        mm_model.F = args.F
+    else:
+        mm_model = MaxMarginModel.read(args.unmerged_modelfile, actions, num_features, feature_fn, margin_fn)
+    mm_model.C = args.C
+    if not args.goal_constraints and args.model == 'bellman':
+        demofile = h5py.File(args.demofile, 'r')
+        ignore_keys = [k for k in demofile if demofile[k]['knot'][()]]
+        demofile.close()
+    else:
+        ignore_keys = None
+    constraintfile_base_noext = os.path.splitext(os.path.split(args.constraintfile)[-1])[0]
+    mm_model.load_constraints_from_file(args.constraintfile, slack_name_postfix="_"+constraintfile_base_noext, ignore_goal=ignore_keys)
     mm_model.save_model(args.modelfile)
 
 def optimize_model(args):
@@ -1084,6 +1107,15 @@ if __name__ == '__main__':
     parser_build_model.add_argument('modelfile')
     parser_build_model.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser_build_model.set_defaults(func=build_model)
+
+    # build-model-merge subparser
+    parser_build_model = subparsers.add_parser('build-model-merge')
+    parser_build_model.add_argument('constraintfile')
+    parser_build_model.add_argument('demofile')
+    parser_build_model.add_argument('unmerged_modelfile')
+    parser_build_model.add_argument('modelfile')
+    parser_build_model.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
+    parser_build_model.set_defaults(func=build_model_and_merge)
 
     # optimize-model subparser
     parser_optimize = subparsers.add_parser('optimize-model')

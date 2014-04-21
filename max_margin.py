@@ -555,7 +555,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         if update:
             self.model.update()
 
-    def load_constraints_from_file(self, fname, ignore_goal = None):
+    def load_constraints_from_file(self, fname, slack_name_postfix = '', ignore_goal = None):
         """
         loads the contraints from the file indicated and adds them to the optimization problem
         
@@ -588,7 +588,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
                 next_action_phi = constr['rhs_phi'][:]
                 final_transition = next_state_i in ignore_goal
                 if slack_name not in yi_names:
-                    yi_var = self.add_yi(slack_name)
+                    yi_var = self.add_yi(slack_name+slack_name_postfix)
                     yi_names[slack_name] = yi_var
                 self.add_bellman_constraint(curr_action_phi, next_action_phi, yi_names[slack_name], 
                                             update=False, final_transition=final_transition)
@@ -608,7 +608,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
                 rhs_phi = constr['rhs_phi'][:]
                 margin = float(constr['margin'][()])
                 if slack_name not in xi_names:
-                    xi_var = self.add_xi(slack_name)
+                    xi_var = self.add_xi(slack_name+slack_name_postfix)
                     xi_names[slack_name] = xi_var
                 self.add_constraint(exp_phi, rhs_phi, margin, xi_names[slack_name], update=False)
         infile.close()
