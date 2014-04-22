@@ -973,11 +973,11 @@ def build_constraints(args):
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Building constraints into {}.'.format(args.constraintfile)
     if args.model == 'multi':
-        mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
+        mm_model = MultiSlackMaxMarginModel(actions, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, args.F, .9, num_features, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel(actions, .9, num_features, feature_fn, margin_fn)
     else:
-        mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
+        mm_model = MaxMarginModel(actions, num_features, feature_fn, margin_fn)
     if args.model == 'bellman':
         add_bellman_constraints_from_demo(mm_model,
                                           args.demofile,
@@ -995,11 +995,11 @@ def build_model(args):
     feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
     print 'Building model into {}.'.format(args.modelfile)
     if args.model == 'multi':
-        mm_model = MultiSlackMaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
+        mm_model = MultiSlackMaxMarginModel(actions, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel(actions, args.C, args.D, args.F, 1, num_features, feature_fn, margin_fn) # changed
+        mm_model = BellmanMaxMarginModel(actions, 1, num_features, feature_fn, margin_fn) # changed
     else:
-        mm_model = MaxMarginModel(actions, args.C, num_features, feature_fn, margin_fn)
+        mm_model = MaxMarginModel(actions, num_features, feature_fn, margin_fn)
     if not args.goal_constraints and args.model == 'bellman':
         demofile = h5py.File(args.demofile, 'r')
         ignore_keys = [k for k in demofile if demofile[k]['knot'][()]]
@@ -1017,11 +1017,8 @@ def build_model_and_merge(args):
         mm_model = MultiSlackMaxMarginModel.read(args.unmerged_modelfile, actions, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
         mm_model = BellmanMaxMarginModel.read(args.unmerged_modelfile, actions, num_features, feature_fn, margin_fn)
-        mm_model.D = args.D
-        mm_model.F = args.F
     else:
         mm_model = MaxMarginModel.read(args.unmerged_modelfile, actions, num_features, feature_fn, margin_fn)
-    mm_model.C = args.C
     if not args.goal_constraints and args.model == 'bellman':
         demofile = h5py.File(args.demofile, 'r')
         ignore_keys = [k for k in demofile if demofile[k]['knot'][()]]
@@ -1037,18 +1034,18 @@ def optimize_model(args):
     print 'Found model: {}'.format(args.modelfile)
     if args.model == 'multi':
         mm_model = MultiSlackMaxMarginModel.read(args.modelfile, actions, num_features, feature_fn, margin_fn)
+        mm_model.scale_objective(args.C)
     elif args.model == 'bellman':
         mm_model = BellmanMaxMarginModel.read(args.modelfile, actions, num_features, feature_fn, margin_fn)
-        mm_model.D = args.D
-        mm_model.F = args.F
+        mm_model.scale_objective(args.C, args.D, args.F)
     else:
         mm_model = MaxMarginModel.read(args.modelfile, actions, num_features, feature_fn, margin_fn)
+        mm_model.scale_objective(args.C)
     if args.save_memory:
         mm_model.model.setParam('threads', 1)  # Use single thread instead of maximum
         # barrier method (#2) is default for QP, but uses more memory and could lead to error
         #mm_model.model.setParam('method', 1)  # Use dual simplex method to solve model
         mm_model.model.setParam('method', 0)  # Use primal simplex method to solve model
-    mm_model.C = args.C
     mm_model.optimize_model()
     mm_model.save_weights_to_file(args.weightfile)
 
@@ -1065,12 +1062,9 @@ if __name__ == '__main__':
     parser.add_argument("--sc_features", action="store_true")
     parser.add_argument("--rope_dist_features", action="store_true")
     parser.add_argument("--traj_features", action="store_true")
-    parser.add_argument('--C', '-c', type=float, default=1)
-    parser.add_argument('--D', '-d', type=float, default=1)
-    parser.add_argument('--F', '-f', type=float, default=1)
     parser.add_argument("--save_memory", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
-    parser.add_argument("--goal_constraints", action="store_true")
+    parser.add_argument("--goal_constraints", default=True)
     parser.add_argument('--parallel', action='store_true')
     
 
@@ -1119,6 +1113,9 @@ if __name__ == '__main__':
 
     # optimize-model subparser
     parser_optimize = subparsers.add_parser('optimize-model')
+    parser_optimize.add_argument('--C', '-c', type=float, default=1)
+    parser_optimize.add_argument('--D', '-d', type=float, default=1)
+    parser_optimize.add_argument('--F', '-f', type=float, default=1)
     parser_optimize.add_argument('modelfile')
     parser_optimize.add_argument('weightfile')
     parser_optimize.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')

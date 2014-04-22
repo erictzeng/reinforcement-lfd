@@ -23,10 +23,9 @@ functions  and classes for setting up and running max margin, uses gurobi as the
 
 class MaxMarginModel(object):
     
-    def __init__(self, actions, C, N, feature_fn, margin_fn):
+    def __init__(self, actions, N, feature_fn, margin_fn):
         """
         @param actions: list of the actions that we're going to be deciding between
-        @param C: value of the hyper-parameter for the optiimization
         @param N: number of features for each state/action pair, controls the number of 
                   variables in the optimization
         @param feature_fn: function that maps (action, state) pairs to features
@@ -35,7 +34,6 @@ class MaxMarginModel(object):
         self.model = grb.Model()
         self.actions = actions[:]
         self.N = N
-        self._C = C
         self.w = np.asarray([self.model.addVar(lb = -1*GRB.INFINITY, name = str(i)) 
                              for i in range(N)])
         self.w0 = self.model.addVar(lb = -1*GRB.INFINITY, name='w0')
@@ -44,7 +42,7 @@ class MaxMarginModel(object):
         self.xi_val = None
         self.model.update()
         # w'*w + C*xi
-        self.model.setObjective(np.dot(self.w, self.w) + C*self.xi)
+        self.model.setObjective(np.dot(self.w, self.w) + self.xi) # C parameter is set at optimization time
         self.model.update()
         self.feature_fn = feature_fn
         self.margin_fn = margin_fn
@@ -87,15 +85,6 @@ class MaxMarginModel(object):
         assert len(xis) == 1, "There should only be a single xi in single slack MaxMarginModel"
         self.xi = xis[0]
         self.xi_val = None
-
-    @property
-    def C(self):
-        return self._C
-    @C.setter
-    def C(self, value):
-        self._C = value
-        self.xi.Obj = value
-        self.model.update()
 
     def feature(self, s, a):
         return self.feature_fn(s, a)
@@ -203,6 +192,11 @@ class MaxMarginModel(object):
         outfile['xi'] = self.xi_val
         outfile.close()
 
+    def scale_objective(self, C):
+        self.model.update()
+        self.xi.Obj *= C
+        self.model.update()
+
     def optimize_model(self):
         self.model.update()
         self.model.optimize()
@@ -223,16 +217,15 @@ class MaxMarginModel(object):
 
 class MultiSlackMaxMarginModel(MaxMarginModel):
     
-    def __init__(self, actions, C, N, feature_fn, margin_fn):
+    def __init__(self, actions, N, feature_fn, margin_fn):
         """
         @param actions: list of the actions that we're going to be deciding between
-        @param C: value of the hyper-parameter for the optiimization
         @param N: number of features for each state/action pair, controls the number of 
                   variables in the optimization
         @param feature_fn: function that maps (action, state) pairs to features
         @param margin_fn: function that maps (action, action, state) to margin b/t actions
         """
-        MaxMarginModel.__init__(self, actions, C, N, feature_fn, margin_fn)
+        MaxMarginModel.__init__(self, actions, N, feature_fn, margin_fn)
         self.model.setObjective(np.dot(self.w, self.w)) # we'll be adding in slacks per constraint
         self.model.remove(self.xi)
         self.xi = []            #  list to keep track of slack variables
@@ -248,17 +241,6 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
     def populate_slacks(self):
         self.xi = [var for var in self.model.getVars() if var.VarName.startswith('xi')]
         self.xi_val = []
-
-    @property
-    def C(self):
-        return self._C
-
-    @C.setter
-    def C(self, value):
-        self._C = value
-        for xi_var in self.xi:
-            xi_var.Obj = value
-        self.model.update()
 
     def add_constraint(self, expert_action_phi, rhs_action_phi, margin_value, xi_var, update=True):
         """
@@ -282,7 +264,7 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
     def add_xi(self, xi_name = None):
         if not xi_name:
             xi_name = 'xi_{}'.format(len(self.xi))
-        new_xi = self.model.addVar(lb = 0, name = xi_name, obj = self.C)
+        new_xi = self.model.addVar(lb = 0, name = xi_name, obj = 1)
         self.xi.append(new_xi)
         self.model.update()
         return new_xi
@@ -375,9 +357,15 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
         if 'xi' in infile:
             self.xi_val = infile['xi'][:]
         infile.close()
+    
+    def scale_objective(self, C):    
+        self.model.update()
+        for xi_var in self.xi:
+            xi_var.Obj *= C
+        self.model.update()
 
     def optimize_model(self):
-        self.model.update()     # this might not be necessary, but w/e
+        self.model.update()
         self.model.optimize()
         try:
             self.weights = [x.X for x in self.w]
@@ -390,39 +378,27 @@ class MultiSlackMaxMarginModel(MaxMarginModel):
 
 class BellmanMaxMarginModel(MultiSlackMaxMarginModel):    
     
-    def __init__(self, actions, C, D, F, gamma, N, feature_fn, margin_fn, E=100):
-        MultiSlackMaxMarginModel.__init__(self, actions, C, N, feature_fn, margin_fn)
+    def __init__(self, actions, gamma, N, feature_fn, margin_fn):
+        MultiSlackMaxMarginModel.__init__(self, actions, N, feature_fn, margin_fn)
         self.action_reward = -1
         self.goal_reward = 10
-        self._D = D
         self.yi = []
         self.yi_val = []
         self.gamma = gamma
-        self._E = E
         self.zi = []
         self.zi_val = []
-        self._F = F # weight on the sum of value fns
-        self.F_no_norm = F # keeps track of what we want the coefficient on the whole sum to be
-        self.w0.Obj = -1*F #flip
-        self.f_sum_size = 0
         self.model.update()
 
     @staticmethod
     def read(fname, actions, num_features, feature_fn, margin_fn):
         mm_model = BellmanMaxMarginModel.__new__(BellmanMaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, num_features, feature_fn, margin_fn)
-        assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi)+ len(mm_model.w) + 1 + 2*len(mm_model.zi), "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars" # constant 1 is for w0
+        assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi)+ len(mm_model.w) + 1 + len(mm_model.zi), "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars" # constant 1 is for w0
         param_fname = mm_model.get_param_fname(fname)
         param_f = h5py.File(param_fname, 'r')
         mm_model.action_reward = param_f['action_reward'][()]
         mm_model.goal_reward = 10
         mm_model.gamma = param_f['gamma'][()]
-        mm_model.f_sum_size = param_f['f_sum_size'][()]
-        mm_model.F_no_norm = param_f['F_no_norm'][()]
-        if mm_model.f_sum_size:            
-            mm_model._F = mm_model.F_no_norm/float(mm_model.f_sum_size)
-        else:
-            mm_model._F = mm_model.F_no_norm
         return mm_model
 
     def populate_slacks(self):
@@ -432,48 +408,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self.yi_val = []
         self.zi = [var for var in self.model.getVars() if var.VarName.startswith('zi')]
         self.zi_val = []
-        
-    @property
-    def D(self):
-        return self._D
-
-    @D.setter
-    def D(self, value):
-        self._D = value
-        for yi_var in self.yi:
-            yi_var.Obj = value
-        self.model.update()
-
-
-    @property
-    def F(self):
-        return self._F
-
-    @F.setter
-    def F(self, value):
-        if not self.f_sum_size:
-            self.w0.Obj = 0
-            print 'not setting F, because no bellman constraints'
-            return
-        self.w0.Obj = -1*value #flip
-        for w in self.w:
-            w.Obj = w.Obj/float(self._F)
-        self.model.update()
-        self._F = value/float(self.f_sum_size)
-        for w in self.w:
-            w.Obj *= -1*float(self._F) #flip
-        self.model.update()
-
-    @property
-    def E(self):
-        return self._E
-
-    @E.setter
-    def E(self, value):
-        self._E = value
-        for zi_var in self.zi:
-            zi_var.Obj = value
-        self.model.update()
     
     def add_bellman_constraint(self, curr_action_phi, next_action_phi, yi_var, update=True, final_transition=False):
         lhs_coeffs = [(p, w) for w, p in zip(self.w, curr_action_phi) if abs(p) >= eps]
@@ -495,7 +429,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             self.model.update()
 
     def add_yi(self, yi_name):
-        new_yi = self.model.addVar(lb = 0, name = yi_name, obj = self.D)
+        new_yi = self.model.addVar(lb = 0, name = yi_name, obj = 1)
         # make sure new_yi is not already in self.yi
         assert len([yi for yi in self.yi if yi is new_yi]) == 0
         self.yi.append(new_yi)
@@ -519,14 +453,19 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
                 sys.stdout.flush()
         goal_state, goal_action = states_actions[-1]
         goal_action_phi = self.feature(goal_state, goal_action)
-        self.add_goal_constraint(goal_action_phi, update=False)
-        for feat in features:
-            for (i, w) in enumerate(self.w):
-                if abs(feat[i]) >= eps:
-                    w.Obj -= self.F*feat[i] #flip
-            self.f_sum_size += 1
+        zi_var = self.add_zi()
+        self.add_goal_constraint(goal_action_phi, zi_var, update=False)
+        sum_phis_w = np.zeros(len(self.w))
+        sum_phis_w0 = 0
+        for step_phi in features:
+            sum_phis_w += step_phi
+            sum_phis_w0 += 1
+        self.model.update() # update to make sure the substraction w.r.t. to obj vaules is using the current obj value
+        for (i, w) in enumerate(self.w):
+            if abs(sum_phis_w[i]) >= eps:
+                w.Obj -= sum_phis_w[i] #flip
+        self.w0.Obj -= sum_phis_w0
         self.model.update()
-        self.F = self.F_no_norm        # this will update the coeffiencts to take into account num_values
 
     def add_zi(self):
         zi_name = "zi%i"%len(self.zi)
@@ -534,18 +473,18 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         # make sure new_zi is not already in self.zi
         assert len([zi for zi in self.zi if zi is new_zi]) == 0
         self.zi.append(new_zi)
-        abs_zi = self.model.addVar(name='abs_'+zi_name, obj = self.E)
+        abs_zi = self.model.addVar(name=zi_name+'_abs', obj = 1)
+        self.zi.append(abs_zi)
         self.model.update()
         self.model.addConstr(abs_zi >= new_zi)
         self.model.addConstr(abs_zi >= -1*new_zi)
         self.model.update()
         return new_zi
 
-    def add_goal_constraint(self, goal_action_phi, update=True):
+    def add_goal_constraint(self, goal_action_phi, zi_var, update=True):
         """
         Adds constraints specifying w'*phi + w0 = zi
         """
-        zi_var = self.add_zi()
         lhs_coeffs = [(p, w) for w, p in zip(self.w, goal_action_phi) if abs(p) >= eps]
         lhs_coeffs.append((1, self.w0))
         lhs = grb.LinExpr(lhs_coeffs)
@@ -600,7 +539,8 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             elif slack_name.startswith('zi'):
                 if not ignore_goal:
                     goal_action_phi = constr['exp_features'][:]
-                    self.add_goal_constraint(goal_action_phi, update=False)
+                    zi_var = self.add_zi()
+                    self.add_goal_constraint(goal_action_phi, zi_var, update=False)
                 else:
                     continue
             else:
@@ -613,14 +553,18 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
                 self.add_constraint(exp_phi, rhs_phi, margin, xi_names[slack_name], update=False)
         infile.close()
         # add to the objective the values that are in the bellman constraint
-        for features in action_phis.values():
-            assert len(features) > 2, "Some trajectories has less than 3 steps. Did you fix the the constraints file?"
-            for feat in features.values():
-                for (i, w) in enumerate(self.w):
-                    if abs(feat[i]) >= eps:
-                        w.Obj -= self.F*feat[i] #flip
-                self.f_sum_size += 1
-        self.F = self.F_no_norm        # this will update the coeffiencts to take into account num_values
+        sum_phis_w = np.zeros(len(self.w))
+        sum_phis_w0 = 0
+        for traj_phis in action_phis.values():
+            assert len(traj_phis) > 2, "Some trajectories has less than 3 steps. Did you fix the the constraints file?"
+            for step_phi in traj_phis.values():
+                sum_phis_w += step_phi
+                sum_phis_w0 += 1
+        self.model.update() # update to make sure the substraction w.r.t. to obj vaules is using the current obj value
+        for (i, w) in enumerate(self.w):
+            if abs(sum_phis_w[i]) >= eps:
+                w.Obj -= sum_phis_w[i] #flip
+        self.w0.Obj -= sum_phis_w0
         self.model.update()
         
     def load_weights_from_file(self, fname):
@@ -658,9 +602,24 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         param_f = h5py.File(param_fname, 'w')
         param_f['gamma'] = self.gamma
         param_f['action_reward'] = self.action_reward
-        param_f['F_no_norm'] = self.F_no_norm
-        param_f['f_sum_size'] = self.f_sum_size
-        
+    
+    def scale_objective(self, C, D, F, E=100):
+        self.model.update()
+        for xi_var in self.xi:
+            xi_var.Obj *= C
+        for yi_var in self.yi:
+            yi_var.Obj *= D
+        N = -self.w0.Obj # because w0 should have been substracted N times
+        assert N > 0
+        F_normalized = float(F)/float(N)
+        for w_var in self.w:
+            w_var.Obj *= F_normalized
+        self.w0.Obj *= F_normalized
+        for zi_var in self.zi:
+            if 'abs' in zi_var.VarName:
+                zi_var.Obj *= E
+        self.model.update()
+    
     def optimize_model(self):
         self.model.update()
         self.model.optimize()
