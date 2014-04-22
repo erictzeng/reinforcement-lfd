@@ -437,7 +437,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         return new_yi
     
     # this function doesn't add examples
-    def add_trajectory(self, states_actions, yi_name, verbose=False):
+    def add_trajectory(self, states_actions, yi_name, zi_name, verbose=False):
         cur_slack = self.add_yi(yi_name)
         features = range(len(states_actions))
         for i in range(len(states_actions)-1):
@@ -453,7 +453,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
                 sys.stdout.flush()
         goal_state, goal_action = states_actions[-1]
         goal_action_phi = self.feature(goal_state, goal_action)
-        zi_var = self.add_zi()
+        zi_var = self.add_zi(zi_name)
         self.add_goal_constraint(goal_action_phi, zi_var, update=False)
         sum_phis_w = np.zeros(len(self.w))
         sum_phis_w0 = 0
@@ -467,8 +467,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self.w0.Obj -= sum_phis_w0
         self.model.update()
 
-    def add_zi(self):
-        zi_name = "zi%i"%len(self.zi)
+    def add_zi(self, zi_name):
         new_zi = self.model.addVar(lb = -1*GRB.INFINITY, name = zi_name, obj = 0)
         # make sure new_zi is not already in self.zi
         assert len([zi for zi in self.zi if zi is new_zi]) == 0
@@ -539,7 +538,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             elif slack_name.startswith('zi'):
                 if not ignore_goal:
                     goal_action_phi = constr['exp_features'][:]
-                    zi_var = self.add_zi()
+                    zi_var = self.add_zi(slack_name+slack_name_postfix)
                     self.add_goal_constraint(goal_action_phi, zi_var, update=False)
                 else:
                     continue
@@ -772,7 +771,7 @@ def test_bellman():
         traj = gen_trajectory()
         for state, action in traj:
             model.add_example(state, action)
-        model.add_trajectory(traj, 'yi%i'%i)
+        model.add_trajectory(traj, 'yi%i'%i, 'zi%i'%i)
     weights = model.optimize_model()
     print weights 
     return True
