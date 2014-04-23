@@ -286,7 +286,7 @@ def eval_on_holdout(args, sim_env):
         if args.animation:
             sim_env.viewer.Step()
 
-        eval_util.save_task_results_init(args.resultfile, sim_env, i_task, rope_nodes, args.exec_rope_params)
+        eval_util.save_task_results_init(args.resultfile, sim_env, i_task, rope_nodes, args, args.exec_rope_params)
 
         for i_step in range(args.num_steps):
             print "task %s step %i" % (i_task, i_step)
@@ -374,7 +374,7 @@ def replay_on_holdout(args, sim_env):
         print "task %s" % i_task
         sim_util.reset_arms_to_side(sim_env)
         redprint("Replace rope")
-        rope_nodes, rope_params, _, _ = eval_util.load_task_results_init(args.loadresultfile, i_task)
+        rope_nodes, rope_params, loaded_args, _, _ = eval_util.load_task_results_init(args.loadresultfile, i_task)
         # uncomment if the results file don't have the right rope nodes
         #rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
         if args.replay_rope_params:
@@ -385,7 +385,7 @@ def replay_on_holdout(args, sim_env):
         if args.animation:
             sim_env.viewer.Step()
 
-        eval_util.save_task_results_init(args.resultfile, sim_env, i_task, rope_nodes, rope_params)
+        eval_util.save_task_results_init(args.resultfile, sim_env, i_task, rope_nodes, args, rope_params)
 
         for i_step in range(len(loadresultfile[i_task]) - (1 if 'init' in loadresultfile[i_task] else 0)):
             print "task %s step %i" % (i_task, i_step)
