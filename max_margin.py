@@ -12,6 +12,7 @@ import h5py, random, math, util
 from numbers import Number
 from pdb import pm, set_trace
 import sys, os
+import re
 eps = 10**-8
 MAX_ITER=1000
 
@@ -385,15 +386,13 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self.yi = []
         self.yi_val = []
         self.gamma = gamma
-        self.zi = []
-        self.zi_val = []
         self.model.update()
 
     @staticmethod
     def read(fname, actions, num_features, feature_fn, margin_fn):
         mm_model = BellmanMaxMarginModel.__new__(BellmanMaxMarginModel)
         MaxMarginModel.read_helper(mm_model, fname, actions, num_features, feature_fn, margin_fn)
-        assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi)+ len(mm_model.w) + 1 + len(mm_model.zi), "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars" # constant 1 is for w0
+        assert len(mm_model.model.getVars()) == len(mm_model.xi) + len(mm_model.yi)+ len(mm_model.w) + 1, "Number of Gurobi vars mismatches the BellmanMaxMarginModel vars" # constant 1 is for w0
         param_fname = mm_model.get_param_fname(fname)
         param_f = h5py.File(param_fname, 'r')
         mm_model.action_reward = param_f['action_reward'][()]
@@ -406,8 +405,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self.xi_val = []
         self.yi = [var for var in self.model.getVars() if var.VarName.startswith('yi')]
         self.yi_val = []
-        self.zi = [var for var in self.model.getVars() if var.VarName.startswith('zi')]
-        self.zi_val = []
     
     def add_bellman_constraint(self, curr_action_phi, next_action_phi, yi_var, update=True, final_transition=False):
         lhs_coeffs = [(p, w) for w, p in zip(self.w, curr_action_phi) if abs(p) >= eps]
@@ -453,8 +450,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
                 sys.stdout.flush()
         goal_state, goal_action = states_actions[-1]
         goal_action_phi = self.feature(goal_state, goal_action)
-        zi_var = self.add_zi()
-        self.add_goal_constraint(goal_action_phi, zi_var, update=False)
         sum_phis_w = np.zeros(len(self.w))
         sum_phis_w0 = 0
         for step_phi in features:
@@ -467,42 +462,10 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         self.w0.Obj -= sum_phis_w0
         self.model.update()
 
-    def add_zi(self):
-        zi_name = "zi%i"%len(self.zi)
-        new_zi = self.model.addVar(lb = -1*GRB.INFINITY, name = zi_name, obj = 0)
-        # make sure new_zi is not already in self.zi
-        assert len([zi for zi in self.zi if zi is new_zi]) == 0
-        self.zi.append(new_zi)
-        abs_zi = self.model.addVar(name=zi_name+'_abs', obj = 1)
-        self.zi.append(abs_zi)
-        self.model.update()
-        self.model.addConstr(abs_zi >= new_zi)
-        self.model.addConstr(abs_zi >= -1*new_zi)
-        self.model.update()
-        return new_zi
-
-    def add_goal_constraint(self, goal_action_phi, zi_var, update=True):
-        """
-        Adds constraints specifying w'*phi + w0 = zi
-        """
-        lhs_coeffs = [(p, w) for w, p in zip(self.w, goal_action_phi) if abs(p) >= eps]
-        lhs_coeffs.append((1, self.w0))
-        lhs = grb.LinExpr(lhs_coeffs)
-        rhs_coeffs = [(1, zi_var)]
-        rhs = grb.LinExpr(rhs_coeffs)
-        self.model.addConstr(lhs == rhs)
-        if update:
-            self.model.update()
-
-    def load_constraints_from_file(self, fname, slack_name_postfix = '', ignore_goal = None):
+    def load_constraints_from_file(self, fname, slack_name_postfix = ''):
         """
         loads the contraints from the file indicated and adds them to the optimization problem
-        
-        to ignore goal constraints, set ignore_goal with a list of keys associated with 
-        goal examples
         """
-        if not ignore_goal:
-            ignore_goal = []
         MultiSlackMaxMarginModel.update_constraints_file(fname)
         infile = h5py.File(fname, 'r')
         n_other_keys = 0
@@ -510,7 +473,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         assert 'w0' not in infile, infile + " should not have w0 as a key"
         assert 'xi' not in infile, infile + " should not have xi as a key"
         assert 'yi' not in infile, infile + " should not have yi as a key"
-        assert 'zi' not in infile, infile + " should not have zi as a key"
 
         xi_names = {}
         yi_names = {}
@@ -519,13 +481,13 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             constr = infile[str(key_i)]
             slack_name = constr['xi'][()]
             if slack_name.startswith('yi'):
-                #set_trace()
-                example = constr['example'][()]
-                traj_i = slack_name[3:]
-                curr_state_i, next_state_i, _ = example.split('-')
+                traj_i = re.match(r"yi_(\w+)", slack_name).group(1)
+                curr_action = constr['curr_action'][()]
+                next_action = constr['next_action'][()]
+                curr_state_i, next_state_i, step_i = re.match(r"(\w+)_(\w+)_step(\w+)", constr['example'][()]).groups()
                 curr_action_phi = constr['exp_features'][:]
                 next_action_phi = constr['rhs_phi'][:]
-                final_transition = next_state_i in ignore_goal
+                final_transition = next_action == 'done'
                 if slack_name not in yi_names:
                     yi_var = self.add_yi(slack_name+slack_name_postfix)
                     yi_names[slack_name] = yi_var
@@ -536,13 +498,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
                 action_phis[traj_i][curr_state_i] = curr_action_phi
                 if not final_transition: # only add this state if it isn't an end state
                     action_phis[traj_i][next_state_i] = next_action_phi
-            elif slack_name.startswith('zi'):
-                if not ignore_goal:
-                    goal_action_phi = constr['exp_features'][:]
-                    zi_var = self.add_zi()
-                    self.add_goal_constraint(goal_action_phi, zi_var, update=False)
-                else:
-                    continue
             else:
                 exp_phi = constr['exp_features'][:]
                 rhs_phi = constr['rhs_phi'][:]
@@ -576,8 +531,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
             self.xi_val = infile['xi'][()]
         if 'yi' in infile:
             self.yi_val = infile['yi'][()]
-        if 'zi' in infile:
-            self.zi_val = infile['zi'][()]
         infile.close()
         
     def save_weights_to_file(self, fname):
@@ -588,8 +541,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         outfile['xi'] = self.xi_val
         if self.yi_val:
             outfile['yi'] = self.yi_val
-        if self.zi_val:
-            outfile['zi'] = self.zi_val
         outfile.close()
 
     def get_param_fname(self, fname):
@@ -603,7 +554,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         param_f['gamma'] = self.gamma
         param_f['action_reward'] = self.action_reward
     
-    def scale_objective(self, C, D, F, E=100):
+    def scale_objective(self, C, D, F):
         self.model.update()
         for xi_var in self.xi:
             xi_var.Obj *= C
@@ -615,9 +566,6 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         for w_var in self.w:
             w_var.Obj *= F_normalized
         self.w0.Obj *= F_normalized
-        for zi_var in self.zi:
-            if 'abs' in zi_var.VarName:
-                zi_var.Obj *= E
         self.model.update()
     
     def optimize_model(self):

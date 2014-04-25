@@ -125,6 +125,7 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
                 g = outfile.create_group(str(constraint_ctr))
                 constraint_ctr += 1
                 g['example'] = key
+                g['action'] = action
                 g['exp_features'] = lhs_phi
                 g['rhs_phi'] = rhs_phi
                 g['margin'] = margin
@@ -151,7 +152,9 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
             rhs_action_phi = feature_fn(next_state, next_action)
             g = outfile.create_group(str(constraint_ctr))
             constraint_ctr += 1
-            g['example'] = '{}-{}-step{}'.format(curr_state[0], next_state[0], i)
+            g['example'] = '{}_{}_step{}'.format(curr_state[0], next_state[0], i)
+            g['curr_action'] = curr_action
+            g['next_action'] = next_action
             g['exp_features'] = lhs_action_phi
             g['rhs_phi'] = rhs_action_phi
             g['margin'] = 0
@@ -159,12 +162,6 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
             if verbose:
                 sys.stdout.write("added bellman constraint {}/{}\r ".format(i, len(traj)-1) + str(yi_name))
                 sys.stdout.flush()
-        g = outfile.create_group(str(constraint_ctr))
-        constraint_ctr += 1
-        goal_state, goal_action = traj[-1]
-        g['example'] = '{}-knot'.format(goal_state[0])
-        g['exp_features'] = feature_fn(goal_state, goal_action)
-        g['xi'] = 'zi_{}'.format(goal_state[0])
         sys.stdout.write('\n')
         outfile.flush()
     outfile.close()
@@ -254,20 +251,6 @@ def add_bellman_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1
         mm_model.add_trajectory(traj, yi_name, verbose)
         if outfile:
             mm_model.save_constraints_to_file(outfile)
-
-def add_goal_constraints(mm_model, fname):
-    """
-    Adds constraints specifying w'*phi = zi
-    fname must specify a file of labelled examples.
-    NOTE: We assume the examples in fname have integer ids in consecutive order, starting from 0
-    """
-    demofile = h5py.File(fname, 'r')
-    for k in range(len(f.keys())):
-        if f[str(k)]['knot'][()] == 1:
-            prev_state = f[str(k-1)]['cloud_xyz']
-            prev_action = "done"
-            mm_model.add_goal_constraint(prev_state, prev_action, update=False)
-    mm_model.model.update()
 
 def concatenate_fns(fns, actionfile):
     if type(actionfile) is str:
@@ -1000,13 +983,7 @@ def build_model(args):
         mm_model = BellmanMaxMarginModel(actions, 1, num_features, feature_fn, margin_fn) # changed
     else:
         mm_model = MaxMarginModel(actions, num_features, feature_fn, margin_fn)
-    if not args.goal_constraints and args.model == 'bellman':
-        demofile = h5py.File(args.demofile, 'r')
-        ignore_keys = [k for k in demofile if demofile[k]['knot'][()]]
-        demofile.close()
-    else:
-        ignore_keys = None
-    mm_model.load_constraints_from_file(args.constraintfile, ignore_goal=ignore_keys)
+    mm_model.load_constraints_from_file(args.constraintfile)
     mm_model.save_model(args.modelfile)
 
 def build_model_and_merge(args):
@@ -1019,14 +996,8 @@ def build_model_and_merge(args):
         mm_model = BellmanMaxMarginModel.read(args.unmerged_modelfile, actions, num_features, feature_fn, margin_fn)
     else:
         mm_model = MaxMarginModel.read(args.unmerged_modelfile, actions, num_features, feature_fn, margin_fn)
-    if not args.goal_constraints and args.model == 'bellman':
-        demofile = h5py.File(args.demofile, 'r')
-        ignore_keys = [k for k in demofile if demofile[k]['knot'][()]]
-        demofile.close()
-    else:
-        ignore_keys = None
     constraintfile_base_noext = os.path.splitext(os.path.split(args.constraintfile)[-1])[0]
-    mm_model.load_constraints_from_file(args.constraintfile, slack_name_postfix="_"+constraintfile_base_noext, ignore_goal=ignore_keys)
+    mm_model.load_constraints_from_file(args.constraintfile, slack_name_postfix="_"+constraintfile_base_noext)
     mm_model.save_model(args.modelfile)
 
 def optimize_model(args):
@@ -1064,7 +1035,6 @@ if __name__ == '__main__':
     parser.add_argument("--traj_features", action="store_true")
     parser.add_argument("--save_memory", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
-    parser.add_argument("--goal_constraints", default=True)
     parser.add_argument('--parallel', action='store_true')
     
 
@@ -1097,7 +1067,6 @@ if __name__ == '__main__':
     # build-model subparser
     parser_build_model = subparsers.add_parser('build-model')
     parser_build_model.add_argument('constraintfile')
-    parser_build_model.add_argument('demofile')
     parser_build_model.add_argument('modelfile')
     parser_build_model.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser_build_model.set_defaults(func=build_model)
@@ -1105,7 +1074,6 @@ if __name__ == '__main__':
     # build-model-merge subparser
     parser_build_model = subparsers.add_parser('build-model-merge')
     parser_build_model.add_argument('constraintfile')
-    parser_build_model.add_argument('demofile')
     parser_build_model.add_argument('unmerged_modelfile')
     parser_build_model.add_argument('modelfile')
     parser_build_model.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
