@@ -1,24 +1,30 @@
 #!/bin/bash
 
-M=20 # Number of iterations of DAgger to run
-N=50 # Number of start states to sample at each step
+# Inputs:
+#     1. Input basename
+#     2. Output basename
+#     3. Number of states to sample at each step
+#
+# Note: There should exist a model file called {input_basename}_model.mps
+#       There should also exist a weights file called {input_basename}_weights.h5
 
-for I in {1..${M}}
-do
-    echo ${I}
+IN_PREFIX = ${1}
+OUT_PREFIX = ${2}
+N = ${3}
 
-    # Sample N complete trajectories, for five time steps or until knot
-    ./generate_holdout.py --no_animation --perturb_points 5 --min_rad 0 --max_rad 0.15 --dataset_size ${N} data/misc/actions.h5 data/dagger/startstates_iter${I}.h5
-    ./do_task_eval.py --resultfile data/dagger/sampled_states_iter${I}.h5 data/misc/actions.h5 data/dagger/startstates_iter${I}.h5 eval --quad_landmark_features --landmark_features data/misc/landmarks/landmarks_70.h5 --rbf data/dagger/weights_iter${I}.h5
+# Sample N complete trajectories, for five time steps or until knot
+./generate_holdout.py --no_animation --perturb_points 5 --min_rad 0 --max_rad 0.15 --dataset_size ${N} data/misc/actions.h5 ${OUT_PREFIX}_startstates_${N}.h5
+./do_task_eval.py --resultfile ${OUT_PREFIX}_sampled_states.h5 data/misc/actions.h5 ${OUT_PREFIX}_startstates_${N}.h5 eval --quad_landmark_features --landmark_features data/misc/landmarks/landmarks_70.h5 --rbf ${IN_PREFIX}_weights.h5
 
-    # Label the sampled states; then remove trajectories that end in deadends
-    ./do_task_label.py --dagger_states_file data/dagger/sampled_states_iter{$I}.h5 data/misc/actions.h5 data/dagger/labeled_states_iter{$I}.h5
-    ./filter_labeled_examples.py --remove_deadend_traj data/dagger/labeled_states_iter{$I}.h5 data/dagger/labeled_states_nodeadend_iter{$I}.h5
+# Label the sampled states; then remove trajectories that end in deadends
+./do_task_label.py --dagger_states_file ${OUT_PREFIX}_sampled_states.h5 data/misc/actions.h5 ${OUT_PREFIX}_labeled_states.h5
+./filter_labeled_examples.py --remove_deadend_traj ${OUT_PREFIX}_labeled_states.h5 ${OUT_PREFIX}_labeled_states_nodeadend.h5
 
-    # Generate constraints for these new labels, and save to file
-    ./rope_qlearn.py --quad_landmark_features --landmark_features data/misc/landmarks/landmarks_70.h5 --rbf build-constraints-no-model data/dagger/labeled_states_nodeadend_iter{$I}.h5 data/dagger/constraints_iter{$I}.h5 data/misc/actions.h5 bellman
+# Generate constraints for these new labels, and save to file
+./rope_qlearn.py --quad_landmark_features --landmark_features data/misc/landmarks/landmarks_70.h5 --rbf build-constraints-no-model ${OUT_PREFIX}_labeled_states_nodeadend.h5 ${OUT_PREFIX}_constraints.h5 data/misc/actions.h5 bellman
 
-    # TODO: Load saved model and add new constraints
+# Load saved model and add new constraints
+./rope_qlearn.py --quad_landmark_features --landmark_features data/misc/landmarks/landmarks_70.h5 --rbf build-model-merge ${OUT_PREFIX}_constraints.h5 ${IN_PREFIX}_model.mps ${OUT_PREFIX}_model.mps data/misc/actions.h5 bellman
 
-    # TODO: Optimize the new model and generate new weights
-done
+# Optimize the new model and generate new weights
+./rope_qlearn.py --quad_landmark_features --landmark_features data/misc/landmarks/landmarks_70.h5 --rbf optimize-model ${IN_PREFIX}_model.mps --C 2 --D 1 --F 1 ${OUT_PREFIX}_weights.h5 data/misc/actions.h5 bellman
