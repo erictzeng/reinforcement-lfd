@@ -167,7 +167,8 @@ def load_dagger_state(sampled_state):
     replace_rope(sampled_state['rope_nodes'])
     Globals.sim.settle()
     Globals.viewer.Step()
-    raw_input("Press enter to continue")
+    user_input = raw_input("Press i if this loaded state is a knot or deadend, to skip to the next state. Otherwise press enter to continue")
+    return user_input not in ['i', 'I']
 
 def replace_rope(new_rope):
     import bulletsimpy
@@ -673,15 +674,22 @@ if __name__ == "__main__":
             (pred, resample) = manual_select_demo(xyz, actionfile, outfile, pred)
 
             if resample and use_dagger:
-                curr_step_index += 1
-                if curr_step_index == len(STEPS) or STEPS[curr_step_index] not in dagger_states[task_indices[curr_task_index]]:
-                    curr_task_index += 1
-                    curr_step_index = 0
-                    if curr_task_index == len(task_indices):
-                        dagger_states.close()
-                        break
-                print "LOADING NEW DAGGER-SAMPLED STATE"
-                load_dagger_state(dagger_states[task_indices[curr_task_index]][STEPS[curr_step_index]])
+                end_of_file = False
+                use_state = False
+                while not use_state:
+                    curr_step_index += 1
+                    if curr_step_index == len(STEPS) or STEPS[curr_step_index] not in dagger_states[task_indices[curr_task_index]]:
+                        curr_task_index += 1
+                        curr_step_index = 0
+                        if curr_task_index == len(task_indices):
+                            dagger_states.close()
+                            end_of_file = True
+                            break
+                    print "LOADING NEW DAGGER-SAMPLED STATE"
+                    use_state = load_dagger_state(dagger_states[task_indices[curr_task_index]][STEPS[curr_step_index]])
+                if end_of_file:
+                    break
+
             elif resample and not use_dagger:
                 sample_rope_state(actionfile)
     except KeyboardInterrupt:
