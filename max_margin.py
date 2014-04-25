@@ -511,7 +511,7 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         sum_phis_w = np.zeros(len(self.w))
         sum_phis_w0 = 0
         for traj_phis in action_phis.values():
-            assert len(traj_phis) > 2, "Some trajectories has less than 3 steps. Did you fix the the constraints file?"
+#             assert len(traj_phis) > 2, "Some trajectories has less than 3 steps. Did you fix the the constraints file?"
             for step_phi in traj_phis.values():
                 sum_phis_w += step_phi
                 sum_phis_w0 += 1

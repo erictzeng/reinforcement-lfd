@@ -8,9 +8,11 @@
 # Note: There should exist a model file called {input_basename}_model.mps
 #       There should also exist a weights file called {input_basename}_weights.h5
 
-IN_PREFIX = ${1}
-OUT_PREFIX = ${2}
-N = ${3}
+[ $# -eq 4 ] && { echo "Usage: $0 IN_PREFIX OUT_PREFIX N"; exit 1; }
+
+IN_PREFIX=${1}
+OUT_PREFIX=${2}
+N=${3}
 
 # Sample N complete trajectories, for five time steps or until knot
 ./generate_holdout.py --no_animation --perturb_points 5 --min_rad 0 --max_rad 0.15 --dataset_size ${N} data/misc/actions.h5 ${OUT_PREFIX}_startstates_${N}.h5
