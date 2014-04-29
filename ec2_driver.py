@@ -19,7 +19,8 @@ if __name__ == '__main__':
     parser.add_argument("--save_memory", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
     args = parser.parse_args()
-    feature_fn, margin_fn, num_features, actions = qlearn.select_feature_fn(args)
-    qlearn.compute_constraints_no_model(feature_fn, margin_fn, actions, args.demofile,
+    act_set = qlearn.ActionSet(args.actionfile, gripper_weighting=args.gripper_weighting)
+    feature_fn, margin_fn, num_features = qlearn.select_feature_fn(args, act_set)
+    qlearn.compute_constraints_no_model(feature_fn, margin_fn, act_set.actions, args.demofile,
                                         args.constraintfile, start=args.start, end=args.end,
                                         verbose=True)

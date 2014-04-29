@@ -260,7 +260,9 @@ def get_unique_id():
     return GlobalVars.unique_id - 1
 
 def eval_on_holdout(args, sim_env):
-    feature_fn, _, num_features, actions = select_feature_fn(args)
+    act_set = ActionSet(args.actionfile, landmarks=args.landmark_features, gripper_weighting=args.gripper_weighting)
+    actions = act_set.actions
+    feature_fn, _, num_features = select_feature_fn(args, act_set)
     
     weightfile = h5py.File(args.weightfile, 'r')
     weights = weightfile['weights'][:]

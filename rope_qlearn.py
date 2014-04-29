@@ -38,7 +38,7 @@ DONE_MARGIN_VALUE = 175
 
 # rip rope_max_margin_model, you will not be missed --eric 1/14/2014
 
-def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile, outfile, start=0, end=-1, verbose=False):
+def compute_constraints_no_model(feature_fn, margin_fn, act_set, expert_demofile, outfile, start=0, end=-1, verbose=False):
     """
     computes all the constraints associated with expert_demofile, output is consistent with files saved
     from max_margin.MultiSlackMaxMarginModel
@@ -69,11 +69,11 @@ def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile
             print 'adding constraints for:\t', action        
         lhs_phi = feature_fn(state, action)
         xi_name = str('xi_') + str(key)
-        for (i, other_a) in enumerate(actions):
+        for (i, other_a) in enumerate(act_set.actions):
             if other_a == action or other_a == orig_action:
                 continue
             if verbose:
-                print "added {}/{}".format(i, len(actions))
+                print "added {}/{}".format(i, len(act_set.actions))
             rhs_phi = feature_fn(state, other_a)
             margin = margin_fn(state, action, other_a)
             g = outfile.create_group(str(constraint_ctr))
@@ -86,7 +86,7 @@ def compute_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile
         outfile.flush()
     outfile.close()
 
-def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_demofile, outfile, start=0, end=-1, verbose=False):
+def compute_bellman_constraints_no_model(feature_fn, margin_fn, act_set, expert_demofile, outfile, start=0, end=-1, verbose=False):
     if type(expert_demofile) is str:
         expert_demofile = h5py.File(expert_demofile, 'r')
     if type(outfile) is str:
@@ -114,11 +114,11 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, actions, expert_
         if action != 'done':
             lhs_phi = feature_fn(state, action)
             xi_name = str('xi_') + str(key)
-            for (i, other_a) in enumerate(actions):
+            for (i, other_a) in enumerate(act_set.actions):
                 if other_a == action:
                     continue
                 if verbose:
-                    sys.stdout.write("added {}/{} for max_margin constraint {}\r".format(i, len(actions), xi_name))
+                    sys.stdout.write("added {}/{} for max_margin constraint {}\r".format(i, len(act_set.actions), xi_name))
                     sys.stdout.flush()
                 rhs_phi = feature_fn(state, other_a)
                 margin = margin_fn(state, action, other_a)
@@ -252,19 +252,16 @@ def add_bellman_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1
         if outfile:
             mm_model.save_constraints_to_file(outfile)
 
-def concatenate_fns(fns, actionfile):
-    if type(actionfile) is str:
-        actionfile = h5py.File(actionfile, 'r')
-    
-    fn_params = [f(actionfile) for f in fns]
+def concatenate_fns(fns, act_set):
+    fn_params = [f(act_set) for f in fns]
     def result_fn(state, action):
         results = np.array([])
-        for (f, _, _) in fn_params:
+        for (f, _) in fn_params:
             results = np.r_[results, f(state, action)]
         return results
 
     N = sum(v[1] for v in fn_params)
-    return (result_fn, N, actionfile)
+    return (result_fn, N)
 
 def apply_rbf(ft_fn):
     def new_ft_fn(state, action):
@@ -274,85 +271,48 @@ def apply_rbf(ft_fn):
         return new_ft
     return new_ft_fn
 
-def get_traj_diff_feature_fn(actionfile):
-    if type(actionfile) is str:
-        actionfile = h5py.File(actionfile, 'r')
-    act_set = ActionSet(actionfile)
-    return (act_set.traj_diff_features, act_set.num_traj_diff_features, actionfile)    
+def get_traj_diff_feature_fn(act_set):
+    return (act_set.traj_diff_features, act_set.num_traj_diff_features)
 
-def get_is_knot_feature_fn(actionfile):
-    if type(actionfile) is str:
-        actionfile = h5py.File(actionfile, 'r')
-    act_set = ActionSet(actionfile)
-    return (act_set.is_knot_features, act_set.num_is_knot_features, actionfile)
+def get_is_knot_feature_fn(act_set):
+    return (act_set.is_knot_features, act_set.num_is_knot_features)
 
-def get_done_feature_fn(actionfile, landmarksfile):
-    if type(actionfile) is str:
-        actionfile = h5py.File(actionfile, 'r')
-    if type(landmarksfile) is str:
-        landmarksfile = h5py.File(landmarksfile, 'r')
-    act_set = ActionSet(actionfile, landmarks=landmarksfile)
-    return (act_set.done_features, act_set.num_done_features, actionfile)
+def get_done_feature_fn(act_set):
+    return (act_set.done_features, act_set.num_done_features)
 
-def get_landmark_feature_fn(actionfile, landmarksfile, rbf=False):
-    if type(actionfile) is str:
-        actionfile = h5py.File(actionfile, 'r')
-    if type(landmarksfile) is str:
-        landmarksfile = h5py.File(landmarksfile, 'r')
-    act_set = ActionSet(actionfile, landmarks=landmarksfile)
+def get_landmark_feature_fn(act_set, rbf=False):
     ft_fn = act_set.landmark_features
     if rbf:
         print 'Applying RBF to landmark features.'
         ft_fn = apply_rbf(ft_fn)
-    return (ft_fn, act_set.num_landmark_features, actionfile)    
+    return (ft_fn, act_set.num_landmark_features)
 
-def get_sc_feature_fn(actionfile):
-    if type(actionfile) is str:
-        actionfile = h5py.File(actionfile, 'r')
-    act_set = ActionSet(actionfile)
-    return (act_set.sc_features, act_set.num_sc_features, actionfile)    
+def get_sc_feature_fn(act_set):
+    return (act_set.sc_features, act_set.num_sc_features)
 
-def get_rope_dist_feat_fn(actionfile):
-    if type(actionfile) is str:
-        actionfile = h5py.File(actionfile, 'r')
-    act_set = ActionSet(actionfile)
-    return (act_set.rope_dist_features, act_set.num_rope_dist_feat, actionfile)
+def get_rope_dist_feat_fn(act_set):
+    return (act_set.rope_dist_features, act_set.num_rope_dist_feat)
 
-def get_bias_feature_fn(actionfile):
-    if type(actionfile) is str:
-        actionfile = h5py.File(actionfile, 'r')
-    act_set = ActionSet(actionfile)
+def get_bias_feature_fn(act_set):
     def feature_fn(state, action):
         return act_set.bias_features(state, action)
-    return (feature_fn, act_set.num_actions + 1, actionfile)
+    return (feature_fn, act_set.num_actions + 1)
 
-def get_quad_feature_fn(actionfile):
-    if type(actionfile) is str:
-        actionfile = h5py.File(actionfile, 'r')
-    act_set = ActionSet(actionfile)
+def get_quad_feature_fn(act_set):
     def feature_fn(state, action):
         return act_set.quad_features(state, action)
-    return (feature_fn, 2 + 2*act_set.num_actions, actionfile)
+    return (feature_fn, 2 + 2*act_set.num_actions)
 
-def get_quad_feature_noregcostsq_fn(actionfile):
-    if type(actionfile) is str:
-        actionfile = h5py.File(actionfile, 'r')
-    act_set = ActionSet(actionfile)
+def get_quad_feature_noregcostsq_fn(act_set):
     def feature_fn(state, action):
         return act_set.quad_features_noregcostsq(state, action)
-    return (feature_fn, 1 + 2*act_set.num_actions, actionfile)
+    return (feature_fn, 1 + 2*act_set.num_actions)
 
-def get_action_only_margin_fn(actionfile):
-    if type(actionfile) is str:
-        actionfile = h5py.File(actionfile, 'r')
-    act_set = ActionSet(actionfile)
-    return (act_set.action_only_margin, actionfile)
+def get_action_only_margin_fn(act_set):
+    return act_set.action_only_margin
 
-def get_action_state_margin_fn(actionfile):
-    if type(actionfile) is str:
-        actionfile = h5py.File(actionfile, 'r')
-    act_set = ActionSet(actionfile)
-    return (act_set.action_state_margin, actionfile)
+def get_action_state_margin_fn(act_set):
+    return act_set.action_state_margin
 
 class ActionSet(object):
     """
@@ -361,18 +321,18 @@ class ActionSet(object):
 
     state is assumed to be a list [<state_id>, <point_cloud>]
     """
-    caches = {}                 # will break if same processes use dif actionsets that have
-    caches['landmarks'] = {}
-    # the same actions
-    args = None
-
     # set up openrave env for traj cost
     env, robot = traj_utils.initialize_lite_sim()
     
-    def __init__(self, actionfile, use_cache = True, args=None, landmarks=None):
-        self.actionfile = actionfile
-        self.actions = sorted(actionfile.keys())
+    def __init__(self, actionfile, landmarks=[], gripper_weighting = False, use_cache = True):
+        if type(actionfile) is str:
+            self.actionfile = h5py.File(actionfile, 'r')
+        else:
+            self.actionfile = actionfile
+        self.actions = sorted(self.actionfile.keys())
         self.actions_ds_clouds = {}
+        for action in self.actions:
+            self.actions_ds_clouds[action] = clouds.downsample(self.actionfile[action]['cloud_xyz'], DS_SIZE)
         # not including 'done' as an action anymore in max-margin constraints
         #self.actions.append('done')
         self.action_to_ind = dict((v, i) for i, v in enumerate(self.actions))
@@ -382,46 +342,52 @@ class ActionSet(object):
         self.num_sc_features = R_BINS*T_BINS*P_BINS*2
         self.num_rope_dist_feat = 3
         self.num_traj_diff_features = 1
-        act_key = u.tuplify(self.actions)
-        if act_key not in ActionSet.caches:
-            ActionSet.caches[act_key] = {}
-        self.cache = ActionSet.caches[act_key]
+        self.gripper_weighting = gripper_weighting
         self.use_cache = use_cache
+        if use_cache:
+            self.caches = {}
+            self.caches['warp_hmats'] = {}
+            self.caches['landmarks'] = {}
+            self.caches['cheap_reg_costs'] = {}
         self.link_names = ["%s_gripper_tool_frame"%lr for lr in ('lr')]
-        self.landmarks = landmarks if landmarks is not None else []
+        if type(landmarks) is str:
+            self.landmarks = h5py.File(landmarks, 'r')
+        else:
+            self.landmarks = landmarks
         self.landmark_knot_indices = [int(i) for i in self.landmarks if self.landmarks[i]['knot'][()]]
         self.num_landmark_features = len(self.landmarks)
-        if args:
-            ActionSet.args = args
 
-    def _warp_hmats(self, state, action):        
-        hit, value = self.check_cache(state, action)
-        if hit:
-            return value
+    def _warp_hmats(self, state, action):
+        key = (state[0], action)
+        if self.use_cache and key in self.caches['warp_hmats']:
+            return self.caches['warp_hmats'][key]
+        if self.gripper_weighting:
+            interest_pts = get_closing_pts(self.actionfile[action])
         else:
-            if ActionSet.args and ActionSet.args.gripper_weighting:
-                interest_pts = get_closing_pts(self.actionfile[action])
-            else:
-                interest_pts = None
-            [warped_trajs, rc, warped_rope_xyz] = warp_hmats(self.get_ds_cloud(action),
-                                                  state[1],
-                                                  [(lr, self.actionfile[action][ln]['hmat']) for lr, ln in zip('lr', self.link_names)],
-                                                             interest_pts)
-            self.store_cache(state, action, [warped_trajs, rc, warped_rope_xyz])
-            return [warped_trajs, rc, warped_rope_xyz]
+            interest_pts = None
+        [warped_trajs, rc, warped_rope_xyz] = warp_hmats(self.actions_ds_clouds[action],
+                                              state[1],
+                                              [(lr, self.actionfile[action][ln]['hmat']) for lr, ln in zip('lr', self.link_names)],
+                                                         interest_pts)
+        if self.use_cache:
+            self.caches['warp_hmats'][key] = [warped_trajs, rc, warped_rope_xyz]
+        return [warped_trajs, rc, warped_rope_xyz]
 
-    def get_ds_cloud(self, action):
-        if action not in self.actions_ds_clouds:
-            self.actions_ds_clouds[action] = clouds.downsample(self.actionfile[action]['cloud_xyz'], DS_SIZE)
-        return self.actions_ds_clouds[action]
+    def _registration_cost_cheap(self, state, action):
+        key = (state[0], action)
+        if self.use_cache and key in self.caches['cheap_reg_costs']:
+            return self.caches['cheap_reg_costs'][key]
+        reg_cost = registration_cost_cheap(state[1], self.actions_ds_clouds[action])
+        if self.use_cache:
+            self.caches['cheap_reg_costs'][key] = reg_cost
+        return reg_cost
 
     def traj_diff_features(self, state, action):
         if action == 'done':
             return np.array([0])
         target_trajs = self._warp_hmats(state, action)[0]
         orig_joint_trajs = traj_utils.joint_trajs(action, self.actionfile)
-        err = traj_utils.follow_trajectory_cost(target_trajs, orig_joint_trajs,
-                                                ActionSet.robot)
+        err = traj_utils.follow_trajectory_cost(target_trajs, orig_joint_trajs, self.robot)
         return np.array([err])
 
     def is_knot_features(self, state, action):
@@ -434,20 +400,16 @@ class ActionSet(object):
             lm = self.landmark_features(state, action)
             regcost = min(lm[self.landmark_knot_indices])
             return np.array([1, regcost])
-
+    
     def landmark_features(self, state, action):
-        if state[0] in ActionSet.caches['landmarks']:
-            return ActionSet.caches['landmarks'][state[0]]
+        if self.use_cache and state[0] in self.caches['landmarks']:
+            return self.caches['landmarks'][state[0]]
         feat = np.empty(len(self.landmarks))
-        if ActionSet.args and 'parallel' in ActionSet.args and ActionSet.args.parallel:
-            landmarks = [self.landmarks[str(i)]['cloud_xyz'][()] for i in range(len(self.landmarks))]
-            costs = Parallel(n_jobs=-1,verbose=0)(delayed(registration_cost_cheap)(state[1], l) for l in landmarks)
-            feat = np.asarray(costs)
-        else:
-            for i in range(len(self.landmarks)):
-                landmark = self.landmarks[str(i)]
-                feat[i] = registration_cost_cheap(state[1], landmark['cloud_xyz'][()])
-        ActionSet.caches['landmarks'][state[0]] = feat
+        for i in range(len(self.landmarks)):
+            landmark = self.landmarks[str(i)]
+            feat[i] = registration_cost_cheap(state[1], landmark['cloud_xyz'][()])
+        if self.use_cache:
+            self.caches['landmarks'][state[0]] = feat
         return feat
 
     def sc_features(self, state, action):
@@ -496,7 +458,7 @@ class ActionSet(object):
         feat = np.zeros(self.num_actions + 1)
         if action == 'done':
             return feat
-        feat[0] = registration_cost_cheap(state[1], self.get_ds_cloud(action))
+        feat[0] = self._registration_cost_cheap(state, action)
         feat[self.action_to_ind[action]+1] = 1
         return feat
     
@@ -504,7 +466,7 @@ class ActionSet(object):
         feat = np.zeros(2 + 2*self.num_actions)
         if action == 'done':
             return feat
-        s = registration_cost_cheap(state[1], self.get_ds_cloud(action))
+        s = self._registration_cost_cheap(state, action)
         feat[0] = s**2
         feat[1] = s
         feat[2+self.action_to_ind[action]] = s
@@ -515,7 +477,7 @@ class ActionSet(object):
         feat = np.zeros(1 + 2*self.num_actions)
         if action == 'done':
             return feat
-        s = registration_cost_cheap(state[1], self.get_ds_cloud(action))
+        s = self._registration_cost_cheap(state, action)
         feat[0] = s
         feat[1+self.action_to_ind[action]] = s
         feat[1+self.num_actions+self.action_to_ind[action]] = 1
@@ -808,7 +770,8 @@ def compute_action_margin(model, a1, a2):
 def bellman_test_features(args):
     if args.model != 'bellman':
         raise Exception, 'wrong model for this'
-    (feature_fn, margin_fn, num_features, actions) = select_feature_fn(args)
+    act_set = ActionSet(args.actionfile, landmarks=args.landmark_features, gripper_weighting=args.gripper_weighting)
+    feature_fn, margin_fn, num_features = select_feature_fn(args, act_set)
     demofile = h5py.File(args.demofile, 'r')
     # get a random set of trajectories
     trajectories = []
@@ -867,74 +830,55 @@ def test_saving_model(mm_model):
     if saved_correctly:
         print "PASSED: Model saved and reloaded correctly"
 
-def select_feature_fn(args):
-    ActionSet.args = args
+def select_feature_fn(args, act_set):
     if args.ensemble:
         print 'Using bias, quad, sc, ropedist, landmark ({}), done, is_knot features, traj_diff.'.format(args.landmark_features)
-        curried_done_fn = lambda actionfile: get_done_feature_fn(actionfile, args.landmark_features)
-        curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features, rbf=args.rbf)
+        curried_done_fn = lambda act_set: get_done_feature_fn(act_set)
+        curried_landmark_fn = lambda act_set: get_landmark_feature_fn(act_set, rbf=args.rbf)
         fns = [get_quad_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn,
                curried_landmark_fn]
         if args.traj_features:
             fns.append(get_traj_diff_feature_fn)
-        feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
+        feature_fn, num_features = concatenate_fns(fns, act_set)
     elif args.quad_landmark_features and args.landmark_features:
         print 'Using bias, quad, landmark ({}) features.'.format(args.landmark_features)
-        curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features, rbf=args.rbf)
+        curried_landmark_fn = lambda act_set: get_landmark_feature_fn(act_set, rbf=args.rbf)
         fns = [get_quad_feature_noregcostsq_fn, curried_landmark_fn]
-        feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
+        feature_fn, num_features = concatenate_fns(fns, act_set)
     elif args.landmark_features and not args.only_landmark:
         print 'Using bias, quad, sc, ropedist, landmark ({}) features.'.format(args.landmark_features)
-        curried_landmark_fn = lambda actionfile: get_landmark_feature_fn(actionfile, args.landmark_features, rbf=args.rbf)
+        curried_landmark_fn = lambda act_set: get_landmark_feature_fn(act_set, rbf=args.rbf)
         fns = [get_quad_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn,
                curried_landmark_fn]
-        feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
+        feature_fn, num_features = concatenate_fns(fns, act_set)
     elif args.landmark_features:
         print 'Using landmark {} features'.format(args.landmark_features)
-        feature_fn, num_features, act_file = get_landmark_feature_fn(args.actionfile, args.landmark_features, rbf=args.rbf)
+        feature_fn, num_features = get_landmark_feature_fn(act_set, rbf=args.rbf)
     elif args.quad_features:
         print 'Using quadratic features.'
-        feature_fn, num_features, act_file = get_quad_feature_fn(args.actionfile)
+        feature_fn, num_features = get_quad_feature_fn(act_set)
     elif args.rope_dist_features:
         print 'Using sc, bias, and rope dist features.'
         fns = [get_bias_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn]
-        feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
+        feature_fn, num_features = concatenate_fns(fns, act_set)
     elif args.sc_features:
         print 'Using sc and bias features.'
         fns = [get_bias_feature_fn, get_sc_feature_fn]
-        feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
+        feature_fn, num_features = concatenate_fns(fns, act_set)
     else:
         print 'Using bias features.'
-        feature_fn, num_features, act_file = get_bias_feature_fn(args.actionfile)
-    margin_fn, act_file = get_action_state_margin_fn(act_file)
-    actions = act_file.keys()
-    # not including 'done' as an action anymore in max-margin constraints
-    #actions.append('done')
-    return feature_fn, margin_fn, num_features, actions
-
-def test_features(args, feature_type):
-    """
-    Accepted values for feature_type: "sc" and "rope_dist"
-    """
-    if feature_type == "sc":
-        feature_fn, num_features, act_file = get_sc_feature_fn(args.actionfile)
-    elif feature_type == "rope_dist":
-        fns = [get_bias_feature_fn, get_sc_feature_fn, get_rope_dist_feat_fn]
-        feature_fn, num_features, act_file = concatenate_fns(fns, args.actionfile)
-    else:
-        print "Argument to test_features is not one of the accepted types: sc, rope_dist"
-        return
-
-    for name, seg_info in act_file.iteritems():
-        print feature_fn([name, clouds.downsample(seg_info['cloud_xyz'], DS_SIZE)], name), "\n"
+        feature_fn, num_features = get_bias_feature_fn(act_set)
+    margin_fn = get_action_state_margin_fn(act_set)
+    return feature_fn, margin_fn, num_features
 
 def build_constraints_no_model(args):
-    feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
+    act_set = ActionSet(args.actionfile, landmarks=args.landmark_features, gripper_weighting=args.gripper_weighting)
+    feature_fn, margin_fn, num_features = select_feature_fn(args, act_set)
     print 'Building constraints using no model into {}.'.format(args.constraintfile)
     if args.model == 'bellman':
         compute_bellman_constraints_no_model(feature_fn,
                                              margin_fn,
-                                             actions,
+                                             act_set,
                                              args.demofile,
                                              outfile=args.constraintfile,
                                              start=args.start,
@@ -943,7 +887,7 @@ def build_constraints_no_model(args):
     else:
         compute_constraints_no_model(feature_fn,
                                      margin_fn,
-                                     actions,
+                                     act_set,
                                      args.demofile,
                                      outfile=args.constraintfile,
                                      start=args.start,
@@ -951,16 +895,15 @@ def build_constraints_no_model(args):
                                      verbose=True)
 
 def build_constraints(args):
-    #test_features(args, "sc")
-    test_features(args, "rope_dist")
-    feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
+    act_set = ActionSet(args.actionfile, landmarks=args.landmark_features, gripper_weighting=args.gripper_weighting)
+    feature_fn, margin_fn, num_features = select_feature_fn(args, act_set)
     print 'Building constraints into {}.'.format(args.constraintfile)
     if args.model == 'multi':
-        mm_model = MultiSlackMaxMarginModel(actions, num_features, feature_fn, margin_fn)
+        mm_model = MultiSlackMaxMarginModel(act_set.actions, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel(actions, .9, num_features, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel(act_set.actions, .9, num_features, feature_fn, margin_fn)
     else:
-        mm_model = MaxMarginModel(actions, num_features, feature_fn, margin_fn)
+        mm_model = MaxMarginModel(act_set.actions, num_features, feature_fn, margin_fn)
     if args.model == 'bellman':
         add_bellman_constraints_from_demo(mm_model,
                                           args.demofile,
@@ -975,42 +918,45 @@ def build_constraints(args):
                                   verbose=True)
 
 def build_model(args):
-    feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
+    act_set = ActionSet(args.actionfile, landmarks=args.landmark_features, gripper_weighting=args.gripper_weighting)
+    feature_fn, margin_fn, num_features = select_feature_fn(args, act_set)
     print 'Building model into {}.'.format(args.modelfile)
     if args.model == 'multi':
-        mm_model = MultiSlackMaxMarginModel(actions, num_features, feature_fn, margin_fn)
+        mm_model = MultiSlackMaxMarginModel(act_set.actions, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel(actions, 1, num_features, feature_fn, margin_fn) # changed
+        mm_model = BellmanMaxMarginModel(act_set.actions, 1, num_features, feature_fn, margin_fn) # changed
     else:
-        mm_model = MaxMarginModel(actions, num_features, feature_fn, margin_fn)
+        mm_model = MaxMarginModel(act_set.actions, num_features, feature_fn, margin_fn)
     mm_model.load_constraints_from_file(args.constraintfile)
     mm_model.save_model(args.modelfile)
 
 def build_model_and_merge(args):
-    feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
+    act_set = ActionSet(args.actionfile, landmarks=args.landmark_features, gripper_weighting=args.gripper_weighting)
+    feature_fn, margin_fn, num_features = select_feature_fn(args, act_set)
     print 'Found unmerged model: {}'.format(args.unmerged_modelfile)
     print 'Building merged model into {}.'.format(args.modelfile)
     if args.model == 'multi':
-        mm_model = MultiSlackMaxMarginModel.read(args.unmerged_modelfile, actions, num_features, feature_fn, margin_fn)
+        mm_model = MultiSlackMaxMarginModel.read(args.unmerged_modelfile, act_set.actions, num_features, feature_fn, margin_fn)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel.read(args.unmerged_modelfile, actions, num_features, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel.read(args.unmerged_modelfile, act_set.actions, num_features, feature_fn, margin_fn)
     else:
-        mm_model = MaxMarginModel.read(args.unmerged_modelfile, actions, num_features, feature_fn, margin_fn)
+        mm_model = MaxMarginModel.read(args.unmerged_modelfile, act_set.actions, num_features, feature_fn, margin_fn)
     constraintfile_base_noext = os.path.splitext(os.path.split(args.constraintfile)[-1])[0]
     mm_model.load_constraints_from_file(args.constraintfile, slack_name_postfix="_"+constraintfile_base_noext)
     mm_model.save_model(args.modelfile)
 
 def optimize_model(args):
-    feature_fn, margin_fn, num_features, actions = select_feature_fn(args)
+    act_set = ActionSet(args.actionfile, landmarks=args.landmark_features, gripper_weighting=args.gripper_weighting)
+    feature_fn, margin_fn, num_features = select_feature_fn(args, act_set)
     print 'Found model: {}'.format(args.modelfile)
     if args.model == 'multi':
-        mm_model = MultiSlackMaxMarginModel.read(args.modelfile, actions, num_features, feature_fn, margin_fn)
+        mm_model = MultiSlackMaxMarginModel.read(args.modelfile, act_set.actions, num_features, feature_fn, margin_fn)
         mm_model.scale_objective(args.C)
     elif args.model == 'bellman':
-        mm_model = BellmanMaxMarginModel.read(args.modelfile, actions, num_features, feature_fn, margin_fn)
+        mm_model = BellmanMaxMarginModel.read(args.modelfile, act_set.actions, num_features, feature_fn, margin_fn)
         mm_model.scale_objective(args.C, args.D, args.F)
     else:
-        mm_model = MaxMarginModel.read(args.modelfile, actions, num_features, feature_fn, margin_fn)
+        mm_model = MaxMarginModel.read(args.modelfile, act_set.actions, num_features, feature_fn, margin_fn)
         mm_model.scale_objective(args.C)
     if args.save_memory:
         mm_model.model.setParam('threads', 1)  # Use single thread instead of maximum
