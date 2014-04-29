@@ -22,7 +22,8 @@ import os.path
 import cProfile
 import util as u
 import sys
-from rapprentice import registration, clouds
+from rapprentice import registration, clouds, tps_registration_parallel
+from rapprentice.registration import ThinPlateSpline # needs to be defined in order to be defined properly in the cluster
 
 DS_SIZE = .025
 GRIPPER_OPEN_CLOSE_THRESH = 0.04
@@ -86,7 +87,7 @@ def compute_constraints_no_model(feature_fn, margin_fn, act_set, expert_demofile
         outfile.flush()
     outfile.close()
 
-def compute_bellman_constraints_no_model(feature_fn, margin_fn, act_set, expert_demofile, outfile, start=0, end=-1, verbose=False):
+def compute_bellman_constraints_no_model(feature_fn, margin_fn, act_set, expert_demofile, outfile, start=0, end=-1, verbose=False, parallel=False, ppservers=()):
     if type(expert_demofile) is str:
         expert_demofile = h5py.File(expert_demofile, 'r')
     if type(outfile) is str:
@@ -100,6 +101,23 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, act_set, expert_
         start += 1
     while end < len(expert_demofile) and int(expert_demofile[str(end)]['pred'][()]) != end:
         end += 1
+    
+    if parallel:
+        states = []
+        done_states = []
+        for demo_i in range(start, end):
+            key = str(demo_i)
+            group = expert_demofile[key]
+            state = [key,group['cloud_xyz'][:]] # these are already downsampled
+            action = group['action'][()]
+            action = action if not group['knot'][()] else 'done'
+            if action != 'done':
+                states.append(state)
+            else:
+                done_states.append(state) # need feature of these for bellman constraints
+        registration_cost_cheap_parallel_precompute(act_set, states, act_set.actions, ppservers=ppservers)
+        warp_hmats_parallel_precompute(act_set, states, act_set.actions, ppservers=ppservers)
+        landmark_features_parallel_precompute(act_set, states+done_states, ppservers=ppservers)
     
     trajectories = []
     traj = []
@@ -362,13 +380,10 @@ class ActionSet(object):
         if self.use_cache and key in self.caches['warp_hmats']:
             return self.caches['warp_hmats'][key]
         if self.gripper_weighting:
-            interest_pts = get_closing_pts(self.actionfile[action])
-        else:
-            interest_pts = None
+            raise NotImplementedError, "Cache for warp_hmats don't keep track of this alternative version"
         [warped_trajs, rc, warped_rope_xyz] = warp_hmats(self.actions_ds_clouds[action],
                                               state[1],
-                                              [(lr, self.actionfile[action][ln]['hmat']) for lr, ln in zip('lr', self.link_names)],
-                                                         interest_pts)
+                                              [(lr, self.actionfile[action][ln]['hmat']) for lr, ln in zip('lr', self.link_names)])
         if self.use_cache:
             self.caches['warp_hmats'][key] = [warped_trajs, rc, warped_rope_xyz]
         return [warped_trajs, rc, warped_rope_xyz]
@@ -377,7 +392,7 @@ class ActionSet(object):
         key = (state[0], action)
         if self.use_cache and key in self.caches['cheap_reg_costs']:
             return self.caches['cheap_reg_costs'][key]
-        reg_cost = registration_cost_cheap(state[1], self.actions_ds_clouds[action])
+        reg_cost = registration_cost_cheap(self.actions_ds_clouds[action], state[1])
         if self.use_cache:
             self.caches['cheap_reg_costs'][key] = reg_cost
         return reg_cost
@@ -407,7 +422,7 @@ class ActionSet(object):
         feat = np.empty(len(self.landmarks))
         for i in range(len(self.landmarks)):
             landmark = self.landmarks[str(i)]
-            feat[i] = registration_cost_cheap(state[1], landmark['cloud_xyz'][()])
+            feat[i] = registration_cost_cheap(landmark['cloud_xyz'][()], state[1])
         if self.use_cache:
             self.caches['landmarks'][state[0]] = feat
         return feat
@@ -667,7 +682,6 @@ def warp_hmats(xyz_src, xyz_targ, hmat_list, src_interest_pts = None):
     f, src_params, g, targ_params, cost = registration_cost(xyz_src, xyz_targ, src_interest_pts)
     f = registration.unscale_tps(f, src_params, targ_params)
     trajs = {}
-    xyz_src_warped = np.zeros(xyz_src.shape)
     for k, hmats in hmat_list:
         trajs[k] = f.transform_hmats(hmats)
     xyz_src_warped = f.transform_points(xyz_src)
@@ -698,6 +712,84 @@ def registration_cost_cheap(xyz0, xyz1):
     f,g = registration.tps_rpm_bij(scaled_xyz0, scaled_xyz1, rot_reg=1e-3, n_iter=10)
     cost = registration.tps_reg_cost(f) + registration.tps_reg_cost(g)
     return cost
+
+def warp_hmats_parallel_precompute(act_set, states, actions, ppservers=()):
+    scaled_xyz_srcs = []
+    srcs_params = []
+    for action in actions:
+        scaled_xyz_src, src_params = registration.unit_boxify(act_set.actions_ds_clouds[action])
+        scaled_xyz_srcs.append(scaled_xyz_src)
+        srcs_params.append(src_params)
+    scaled_xyz_srcs = np.array(scaled_xyz_srcs)
+    scaled_xyz_targs = []
+    targs_params = []
+    for state in states:
+        scaled_xyz_targ, targ_params = registration.unit_boxify(state[1])
+        scaled_xyz_targs.append(scaled_xyz_targ)
+        targs_params.append(targ_params)
+    scaled_xyz_targs = np.array(scaled_xyz_targs)
+    
+    tps_tups = tps_registration_parallel.tps_rpm_bij_grid(scaled_xyz_srcs, scaled_xyz_targs, plot_cb=None,
+                                                        plotting=0, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
+                                                        n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2,
+                                                        parallel=True, ppservers=ppservers, partition_step=10)
+    for (i,action) in enumerate(actions):
+        hmat_list = [(lr, act_set.actionfile[action][ln]['hmat']) for lr, ln in zip('lr', act_set.link_names)]
+        for (j,state) in enumerate(states):
+            key = (state[0], action)
+            f,g = tps_tups[i,j]
+            cost = registration.tps_reg_cost(f) + registration.tps_reg_cost(g)
+            f = registration.unscale_tps(f, srcs_params[i], targs_params[j])
+            trajs = {}
+            for k, hmats in hmat_list:
+                trajs[k] = f.transform_hmats(hmats)
+            xyz_src_warped = f.transform_points(act_set.actions_ds_clouds[action])
+            if key in act_set.caches['warp_hmats']:
+                print "Warning: warp_hmats_parallel_precompute is overriding values"
+            act_set.caches['warp_hmats'][key] = [trajs, cost, xyz_src_warped]
+
+def registration_cost_cheap_parallel_precompute(act_set, states, actions, ppservers=()):
+    scaled_xyz_srcs = []
+    for action in actions:
+        scaled_xyz_src, src_params = registration.unit_boxify(act_set.actions_ds_clouds[action])
+        scaled_xyz_srcs.append(scaled_xyz_src)
+    scaled_xyz_srcs = np.array(scaled_xyz_srcs)
+    scaled_xyz_targs = []
+    for state in states:
+        scaled_xyz_targ, targ_params = registration.unit_boxify(state[1])
+        scaled_xyz_targs.append(scaled_xyz_targ)
+    scaled_xyz_targs = np.array(scaled_xyz_targs)
+
+    tps_tups = tps_registration_parallel.tps_rpm_bij_grid(scaled_xyz_srcs, scaled_xyz_targs, rot_reg=1e-3, n_iter=10, parallel=True, ppservers=ppservers, partition_step=10)
+    for (i,action) in enumerate(actions):
+        for (j,state) in enumerate(states):
+            key = (state[0], action)
+            if key in act_set.caches['cheap_reg_costs']:
+                print "Warning: registration_cost_cheap_parallel_precompute is overriding values"
+            act_set.caches['cheap_reg_costs'][key] = registration.tps_reg_cost(tps_tups[i,j][0]) + registration.tps_reg_cost(tps_tups[i,j][1])
+
+def landmark_features_parallel_precompute(act_set, states, ppservers=()):
+    scaled_xyz_srcs = []
+    for i in range(len(act_set.landmarks)):
+        landmark = act_set.landmarks[str(i)]
+        scaled_xyz_src, src_params = registration.unit_boxify(landmark['cloud_xyz'][()])
+        scaled_xyz_srcs.append(scaled_xyz_src)
+    scaled_xyz_srcs = np.array(scaled_xyz_srcs)
+    scaled_xyz_targs = []
+    for state in states:
+        scaled_xyz_targ, targ_params = registration.unit_boxify(state[1])
+        scaled_xyz_targs.append(scaled_xyz_targ)
+    scaled_xyz_targs = np.array(scaled_xyz_targs)
+
+    tps_tups = tps_registration_parallel.tps_rpm_bij_grid(scaled_xyz_srcs, scaled_xyz_targs, rot_reg=1e-3, n_iter=10, parallel=True, ppservers=ppservers, partition_step=10)
+    for (j,state) in enumerate(states):
+        feat = np.empty(len(act_set.landmarks))
+        for i in range(len(act_set.landmarks)):
+            feat[i] = registration.tps_reg_cost(tps_tups[i,j][0]) + registration.tps_reg_cost(tps_tups[i,j][1])
+        key = state[0]
+        if key in act_set.caches['landmarks']:
+            print "Warning: landmark_features_parallel_precompute is overriding values"
+        act_set.caches['landmarks'][key] = feat
 
 def combine_expert_demo_files(infile1, infile2, outfile):
     """
@@ -883,7 +975,9 @@ def build_constraints_no_model(args):
                                              outfile=args.constraintfile,
                                              start=args.start,
                                              end=args.end,
-                                             verbose=True)
+                                             verbose=True,
+                                             parallel=args.parallel,
+                                             ppservers=tuple(args.ppservers))
     else:
         compute_constraints_no_model(feature_fn,
                                      margin_fn,
@@ -982,7 +1076,7 @@ if __name__ == '__main__':
     parser.add_argument("--save_memory", action="store_true")
     parser.add_argument("--gripper_weighting", action="store_true")
     parser.add_argument('--parallel', action='store_true')
-    
+    parser.add_argument('--ppservers', type=str, nargs='*', default=[])
 
     # bellman test subparser
     parser_test_bellman = subparsers.add_parser('test-bellman')

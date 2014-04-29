@@ -1,7 +1,7 @@
 import numpy as np
 import tps, registration
 from registration import tps_rpm_bij
-from registration import Transformation, ThinPlateSpline # classes need to be imported this way for them to be defined properly in the cluster
+from registration import Transformation, ThinPlateSpline # classes need to be imported this way in order to be defined properly in the cluster
 import pp
 import IPython as ipy
 
