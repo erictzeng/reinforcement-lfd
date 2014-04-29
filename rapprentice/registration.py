@@ -18,6 +18,7 @@ import numpy as np
 import scipy.spatial.distance as ssd
 import scipy.spatial as sp_spat
 from rapprentice import tps, svds, math_utils
+from tps import tps_eval, tps_grad, tps_fit3, tps_fit_regrot, tps_cost, tps_kernel_matrix # ParallelPython can't handle functions from other modules
 from collections import defaultdict
 import IPython as ipy
 from pdb import pm
@@ -31,7 +32,7 @@ rot_matrices = [np.matrix([[np.cos(theta), -1*np.sin(theta), 0],
 
 
 
-class Transformation(object):
+class Transformation(): # ParallelPython can only handle old-style classes (i.e. don't inherit Transformation from object)
     """
     Object oriented interface for transformations R^d -> R^d
     """
@@ -99,11 +100,11 @@ class ThinPlateSpline(Transformation):
         self.w_ng = np.zeros((0,d))
 
     def transform_points(self, x_ma):
-        y_ng = tps.tps_eval(x_ma, self.lin_ag, self.trans_g, self.w_ng, self.x_na)
+        y_ng = tps_eval(x_ma, self.lin_ag, self.trans_g, self.w_ng, self.x_na)
         return y_ng
 
     def compute_jacobian(self, x_ma):
-        grad_mga = tps.tps_grad(x_ma, self.lin_ag, self.trans_g, self.w_ng, self.x_na)
+        grad_mga = tps_grad(x_ma, self.lin_ag, self.trans_g, self.w_ng, self.x_na)
         return grad_mga
         
 class Affine(Transformation):
@@ -142,7 +143,7 @@ def fit_ThinPlateSpline(x_na, y_ng, bend_coef=.1, rot_coef = 1e-5, wt_n=None):
     wt_n: weight the points        
     """
     f = ThinPlateSpline()
-    f.lin_ag, f.trans_g, f.w_ng = tps.tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n)
+    f.lin_ag, f.trans_g, f.w_ng = tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n)
     f.x_na = x_na
     return f        
 
@@ -151,7 +152,7 @@ def fit_ThinPlateSpline_RotReg(x_na, y_ng, bend_coef = .1, rot_coefs = (0.01,0.0
     f = ThinPlateSpline()
     rfunc = fastrapp.rot_reg
     fastrapp.set_coeffs(rot_coefs, scale_coef)
-    f.lin_ag, f.trans_g, f.w_ng = tps.tps_fit_regrot(x_na, y_ng, bend_coef, rfunc)
+    f.lin_ag, f.trans_g, f.w_ng = tps_fit_regrot(x_na, y_ng, bend_coef, rfunc)
     f.x_na = x_na
     return f        
     
@@ -330,12 +331,12 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
         g = fit_ThinPlateSpline(y_md, ytarg_md, bend_coef = regs[i], wt_n=wt_m, rot_coef = rot_reg)
     if x_weights != None or y_weights != None:
         raise NonImplementedError
-    f._cost = tps.tps_cost(f.lin_ag, f.trans_g, f.w_ng, f.x_na, xtarg_nd, regs[i], wt_n=wt_n)/wt_n.mean()
-    g._cost = tps.tps_cost(g.lin_ag, g.trans_g, g.w_ng, g.x_na, ytarg_md, regs[i], wt_n=wt_m)/wt_m.mean()
+    f._cost = tps_cost(f.lin_ag, f.trans_g, f.w_ng, f.x_na, xtarg_nd, regs[i], wt_n=wt_n)/wt_n.mean()
+    g._cost = tps_cost(g.lin_ag, g.trans_g, g.w_ng, g.x_na, ytarg_md, regs[i], wt_n=wt_m)/wt_m.mean()
     return f,g
 
 def tps_reg_cost(f):
-    K_nn = tps.tps_kernel_matrix(f.x_na)
+    K_nn = tps_kernel_matrix(f.x_na)
     cost = 0
     for w in f.w_ng.T:
         cost += w.dot(K_nn.dot(w))
