@@ -30,7 +30,7 @@ def tps_rpm_bij_grid(x_knd, y_lmd, n_iter = 20, reg_init = .1, reg_final = .001,
                                             plotting=plotting, plot_cb=plot_cb, x_weights=x_weights, y_weights=y_weights, 
                                             outlierprior=outlierprior, outlierfrac=outlierfrac)
     else:
-        job_server = pp.Server(ncpus=0, ppservers=ppservers)
+        job_server = pp.Server(ppservers=ppservers)
         #TODO check if servers on nodes are running
         print "Starting pp with", job_server.get_ncpus(), "local workers"
  
