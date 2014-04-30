@@ -561,11 +561,16 @@ class BellmanMaxMarginModel(MultiSlackMaxMarginModel):
         for yi_var in self.yi:
             yi_var.Obj *= D
         N = -self.w0.Obj # because w0 should have been substracted N times
-        assert N > 0
-        F_normalized = float(F)/float(N)
-        for w_var in self.w:
-            w_var.Obj *= F_normalized
-        self.w0.Obj *= F_normalized
+        assert N >= 0
+        if N != 0:
+            F_normalized = float(F)/float(N)
+            for w_var in self.w:
+                w_var.Obj *= F_normalized
+            self.w0.Obj *= F_normalized
+        else:
+            for w_var in self.w:
+                assert w_var.Obj == 0
+            assert self.w0.Obj == 0
         self.model.update()
     
     def optimize_model(self):
