@@ -9,7 +9,7 @@ from rapprentice import colorize, task_execution, planning, resampling, clouds, 
 import pdb, time
 
 import trajoptpy, openravepy
-from rope_qlearn import select_feature_fn, warp_hmats
+from rope_qlearn import select_feature_fn, warp_hmats, ActionSet
 from knot_classifier import isKnot as is_knot
 import os, os.path, numpy as np, h5py
 from numpy import asarray
