@@ -87,7 +87,7 @@ def compute_constraints_no_model(feature_fn, margin_fn, act_set, expert_demofile
         outfile.flush()
     outfile.close()
 
-def compute_bellman_constraints_no_model(feature_fn, margin_fn, act_set, expert_demofile, outfile, start=0, end=-1, verbose=False, parallel=False, ppservers=()):
+def compute_bellman_constraints_no_model(feature_fn, margin_fn, act_set, expert_demofile, outfile, start=0, end=-1, verbose=False, parallel=False, ppservers=(), ignore_bellman_constraints=False):
     if type(expert_demofile) is str:
         expert_demofile = h5py.File(expert_demofile, 'r')
     if type(outfile) is str:
@@ -117,8 +117,11 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, act_set, expert_
                 done_states.append(state) # need feature of these for bellman constraints
         registration_cost_cheap_parallel_precompute(act_set, states, act_set.actions, ppservers=ppservers)
         warp_hmats_parallel_precompute(act_set, states, act_set.actions, ppservers=ppservers)
-        landmark_features_parallel_precompute(act_set, states+done_states, ppservers=ppservers)
-    
+        if ignore_bellman_constraints:
+            landmark_features_parallel_precompute(act_set, states, ppservers=ppservers)
+        else:
+            landmark_features_parallel_precompute(act_set, states+done_states, ppservers=ppservers)
+
     trajectories = []
     traj = []
     constraint_ctr = 0
@@ -157,31 +160,32 @@ def compute_bellman_constraints_no_model(feature_fn, margin_fn, act_set, expert_
         outfile.flush()
     sys.stdout.write('\n')
     sys.stdout.flush()
-    if traj:
-        trajectories.append(traj)
-        traj = []
-    for traj in trajectories:
-        # add bellman constraints
-        yi_name = 'yi_%s'%traj[0][0][0] # use the state id of the first trajectory as the trajectory id
-        for i in range(len(traj)-1):
-            curr_state, curr_action = traj[i]
-            next_state, next_action = traj[i+1]
-            lhs_action_phi = feature_fn(curr_state, curr_action)
-            rhs_action_phi = feature_fn(next_state, next_action)
-            g = outfile.create_group(str(constraint_ctr))
-            constraint_ctr += 1
-            g['example'] = '{}_{}_step{}'.format(curr_state[0], next_state[0], i)
-            g['curr_action'] = curr_action
-            g['next_action'] = next_action
-            g['exp_features'] = lhs_action_phi
-            g['rhs_phi'] = rhs_action_phi
-            g['margin'] = 0
-            g['xi'] = yi_name
-            if verbose:
-                sys.stdout.write("added bellman constraint {}/{}\r ".format(i, len(traj)-1) + str(yi_name))
-                sys.stdout.flush()
-        sys.stdout.write('\n')
-        outfile.flush()
+    if not ignore_bellman_constraints:
+        if traj:
+            trajectories.append(traj)
+            traj = []
+        for traj in trajectories:
+            # add bellman constraints
+            yi_name = 'yi_%s'%traj[0][0][0] # use the state id of the first trajectory as the trajectory id
+            for i in range(len(traj)-1):
+                curr_state, curr_action = traj[i]
+                next_state, next_action = traj[i+1]
+                lhs_action_phi = feature_fn(curr_state, curr_action)
+                rhs_action_phi = feature_fn(next_state, next_action)
+                g = outfile.create_group(str(constraint_ctr))
+                constraint_ctr += 1
+                g['example'] = '{}_{}_step{}'.format(curr_state[0], next_state[0], i)
+                g['curr_action'] = curr_action
+                g['next_action'] = next_action
+                g['exp_features'] = lhs_action_phi
+                g['rhs_phi'] = rhs_action_phi
+                g['margin'] = 0
+                g['xi'] = yi_name
+                if verbose:
+                    sys.stdout.write("added bellman constraint {}/{}\r ".format(i, len(traj)-1) + str(yi_name))
+                    sys.stdout.flush()
+            sys.stdout.write('\n')
+            outfile.flush()
     outfile.close()
 
 def add_constraints_from_demo(mm_model, expert_demofile, start=0, end=-1, outfile=None, verbose=False):
@@ -977,8 +981,11 @@ def build_constraints_no_model(args):
                                              end=args.end,
                                              verbose=True,
                                              parallel=args.parallel,
-                                             ppservers=tuple(args.ppservers))
+                                             ppservers=tuple(args.ppservers),
+                                             ignore_bellman_constraints=args.ignore_bellman_constraints)
     else:
+        if args.ignore_bellman_constraints:
+            raise RuntimeError('Option ignore_bellman_constraints is incompatible with non-bellan model')
         compute_constraints_no_model(feature_fn,
                                      margin_fn,
                                      act_set,
@@ -1092,6 +1099,7 @@ if __name__ == '__main__':
     parser_build_constraints.add_argument('constraintfile')
     parser_build_constraints.add_argument('--start', type=int, default=0)
     parser_build_constraints.add_argument('--end', type=int, default=-1)
+    parser_build_constraints.add_argument('--ignore_bellman_constraints', action='store_true')
     parser_build_constraints.add_argument('actionfile', nargs='?', default='data/misc/actions.h5')
     parser_build_constraints.set_defaults(func=build_constraints_no_model)
     
