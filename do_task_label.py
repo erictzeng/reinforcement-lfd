@@ -343,6 +343,7 @@ def get_input(start_state, action_name, next_state, outfile, pred):
                              ['knot', 0],
                              ['deadend', 1],
                              ['pred', str(len(outfile)-1)]])
+
         success = True
     elif response in ('Y', 'y'):
         write_flush(outfile, 
@@ -358,7 +359,7 @@ def multiple_rc(target, clds):
     return [registration_cost_cheap(target, cl) for cl in clds]
 
 
-def manual_select_demo(xyz, demofile, outfile, pred):
+def manual_select_demo(xyz, demofile, outfile, pred, label_single_step):
     start_rope_state = Globals.sim.rope.GetControlPoints()    
     ds_clouds = dict(zip(demofile.keys(), get_downsampled_clouds(demofile)))
     if args.parallel:
@@ -388,6 +389,8 @@ def manual_select_demo(xyz, demofile, outfile, pred):
     if resample:
         # return the key for the next sample we'll see (so it is its own pred)
         return (str(len(outfile)), resample)
+    elif label_single_step:
+        return (str(len(outfile)), True)
     else:
         # return the key for the most recent addition
         return (str(len(outfile)-1), resample)
@@ -608,12 +611,17 @@ if __name__ == "__main__":
     parser.add_argument("--interactive",action="store_true")
     parser.add_argument("--log", type=str, default="", help="")
     parser.add_argument("--parallel", action="store_true")
+    parser.add_argument("--label_single_step", action="store_true")
     
     args = parser.parse_args()
 
     use_dagger = False
     if args.dagger_states_file:
         use_dagger = True
+
+    label_single_step = False
+    if args.label_single_step:
+        label_single_step = True
 
     dagger_states = h5py.File(args.dagger_states_file, 'r')
 
@@ -671,7 +679,7 @@ if __name__ == "__main__":
             Globals.viewer.Step()
         
             xyz = Globals.sim.observe_cloud()
-            (pred, resample) = manual_select_demo(xyz, actionfile, outfile, pred)
+            (pred, resample) = manual_select_demo(xyz, actionfile, outfile, pred, label_single_step)
 
             if resample and use_dagger:
                 end_of_file = False
