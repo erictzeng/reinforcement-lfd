@@ -22,7 +22,7 @@ import os.path
 import cProfile
 import util as u
 import sys
-from rapprentice import registration, clouds, tps_registration_parallel
+from rapprentice import registration, tps_registration_parallel
 from rapprentice.registration import ThinPlateSpline # needs to be defined in order to be defined properly in the cluster
 
 DS_SIZE = .025
@@ -346,15 +346,20 @@ class ActionSet(object):
     # set up openrave env for traj cost
     env, robot = traj_utils.initialize_lite_sim()
     
-    def __init__(self, actionfile, landmarks=[], gripper_weighting = False, use_cache = True):
+    def __init__(self, actionfile, landmarks=[], gripper_weighting = False, use_cache = True, downsample = True):
         if type(actionfile) is str:
             self.actionfile = h5py.File(actionfile, 'r')
         else:
             self.actionfile = actionfile
         self.actions = sorted(self.actionfile.keys())
         self.actions_ds_clouds = {}
-        for action in self.actions:
-            self.actions_ds_clouds[action] = clouds.downsample(self.actionfile[action]['cloud_xyz'], DS_SIZE)
+        if downsample:
+            from rapprentice import clouds
+            for action in self.actions:
+                self.actions_ds_clouds[action] = clouds.downsample(self.actionfile[action]['cloud_xyz'], DS_SIZE)
+        else:
+            for action in self.actions:
+                self.actions_ds_clouds[action] = self.actionfile[action]['cloud_xyz'][()]
         # not including 'done' as an action anymore in max-margin constraints
         #self.actions.append('done')
         self.action_to_ind = dict((v, i) for i, v in enumerate(self.actions))
