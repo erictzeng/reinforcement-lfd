@@ -5,7 +5,7 @@ from __future__ import division
 import argparse
 import eval_util, sim_util
 
-from rapprentice import colorize, task_execution, planning, resampling, clouds, math_utils as mu
+from rapprentice import colorize, task_execution, planning, resampling, math_utils as mu
 import pdb, time
 
 import trajoptpy, openravepy
@@ -23,9 +23,7 @@ class GlobalVars:
     unique_id = 0
     actions = None
     gripper_weighting = False
-
-def get_ds_cloud(sim_env, action):
-    return clouds.downsample(GlobalVars.actions[action]['cloud_xyz'], DS_SIZE)
+    downsample = True
 
 def redprint(msg):
     print colorize.colorize(msg, "red", bold=True)
@@ -39,8 +37,9 @@ def compute_trans_traj(sim_env, new_xyz, seg_info, ignore_infeasibility=True, an
     redprint("Generating end-effector trajectory")    
     
     old_xyz = np.squeeze(seg_info["cloud_xyz"])
-    old_xyz = clouds.downsample(old_xyz, DS_SIZE)
-    new_xyz = clouds.downsample(new_xyz, DS_SIZE)
+    if GlobalVars.downsample:
+        old_xyz = clouds.downsample(old_xyz, DS_SIZE)
+        new_xyz = clouds.downsample(new_xyz, DS_SIZE)
     
     link_names = ["%s_gripper_tool_frame"%lr for lr in ('lr')]
     hmat_list = [(lr, seg_info[ln]['hmat']) for lr, ln in zip('lr', link_names)]
@@ -138,9 +137,10 @@ def simulate_demo_traj(sim_env, new_xyz, seg_info, full_trajs, ignore_infeasibil
     sim_util.reset_arms_to_side(sim_env)
     
     old_xyz = np.squeeze(seg_info["cloud_xyz"])
-    old_xyz = clouds.downsample(old_xyz, DS_SIZE)
-    new_xyz = clouds.downsample(new_xyz, DS_SIZE)
-    
+    if GlobalVars.downsample:
+        old_xyz = clouds.downsample(old_xyz, DS_SIZE)
+        new_xyz = clouds.downsample(new_xyz, DS_SIZE)
+
     handles = []
     if animate:
         handles.append(sim_env.env.plot3(old_xyz,5, (1,0,0)))
@@ -203,6 +203,10 @@ def set_global_vars(args, sim_env):
     GlobalVars.actions = h5py.File(args.actionfile, 'r')
     if args.subparser_name == "eval":
         GlobalVars.gripper_weighting = args.gripper_weighting
+    
+    GlobalVars.downsample = args.downsample
+    if GlobalVars.downsample:
+        from rapprentice import clouds
 
 def parse_input_args():
     parser = argparse.ArgumentParser()
@@ -215,6 +219,8 @@ def parse_input_args():
     parser.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelve', 'boxes'], default=[])
     parser.add_argument("--num_steps", type=int, default=5, help="maximum number of steps to simulate each task")
     parser.add_argument("--resultfile", type=str, help="no results are saved if this is not specified")
+    
+    parser.add_argument("--downsample", type=int, default=1)
 
     # selects tasks to evaluate/replay
     parser.add_argument("--tasks", type=int, nargs='*', metavar="i_task")
@@ -260,7 +266,7 @@ def get_unique_id():
     return GlobalVars.unique_id - 1
 
 def eval_on_holdout(args, sim_env):
-    act_set = ActionSet(args.actionfile, landmarks=args.landmark_features, gripper_weighting=args.gripper_weighting)
+    act_set = ActionSet(args.actionfile, landmarks=args.landmark_features, gripper_weighting=args.gripper_weighting, downsample=args.downsample)
     actions = act_set.actions
     feature_fn, _, num_features = select_feature_fn(args, act_set)
     
