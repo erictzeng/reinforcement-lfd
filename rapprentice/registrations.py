@@ -12,7 +12,7 @@ def rgb2lab(rgb):
 
 def rgb2xyz(rgb):
     """
-    The components of the RGB values are in the range 0 to 1
+    r,g,b ranges from 0 to 1
     http://en.wikipedia.org/wiki/SRGB_color_space
     http://en.wikipedia.org/wiki/CIE_XYZ
     """
@@ -30,6 +30,7 @@ def rgb2xyz(rgb):
 
 def xyz2lab(xyz):
     """
+    l ranges from 0 to 100 and a,b ranges from -128 to 128
     http://en.wikipedia.org/wiki/Lab_color_space
     """
     ref = np.array([0.95047, 1., 1.08883]) # CIE LAB constants for Observer = 2°, Illuminant = D65
