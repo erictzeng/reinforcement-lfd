@@ -33,7 +33,7 @@ def xyz2lab(xyz):
     l ranges from 0 to 100 and a,b ranges from -128 to 128
     http://en.wikipedia.org/wiki/Lab_color_space
     """
-    ref = np.array([0.95047, 1., 1.08883]) # CIE LAB constants for Observer = 2°, Illuminant = D65
+    ref = np.array([0.95047, 1., 1.08883]) # CIE LAB constants for Observer = 2deg, Illuminant = D65
     xyz = xyz / ref # copy xyz so that the original xyz is not modified
 
     cond = xyz > 0.008856
