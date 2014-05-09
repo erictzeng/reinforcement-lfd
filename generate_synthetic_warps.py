@@ -47,11 +47,15 @@ def main():
     args = parser.parse_args()
 
     orig_cloud = get_point_cloud(args.input_image, args.target_size)
+    warp_rot30 = rotate_point_cloud(orig_cloud, math.pi/6)
+    warp_rot60 = rotate_point_cloud(orig_cloud, math.pi/3)
     warp_rot180 = rotate_point_cloud(orig_cloud, math.pi)
     # TODO: Generate random rotations (see how Chui et al. did in TPS-RPM paper)
 
     output = h5py.File(args.output_file, 'w')
     output['orig_cloud'] = orig_cloud
+    output['warp_cloud_rot30'] = warp_rot30
+    output['warp_cloud_rot60'] = warp_rot60
     output['warp_cloud_rot180'] = warp_rot180
     output.close()
 
