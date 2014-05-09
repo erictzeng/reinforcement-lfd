@@ -167,6 +167,31 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost = None, d
     f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg)
     return A, f
 
+def plot_callback(x_nd, y_md, corr_nm, f):
+    import matplotlib.pyplot as plt
+    from plotting_plt import plot_warped_grid_2d
+    import time
+    
+    # set interactive
+    plt.ion()
+    
+    # clear previous plots
+    plt.clf()
+    plt.cla()
+    
+    plt.plot(x_nd[:,0], x_nd[:,1], 'ro')
+    plt.plot(y_md[:,0], y_md[:,1], 'bo')
+    xwarped_nd = f.transform_points(x_nd)
+    plt.plot(xwarped_nd[:,0], xwarped_nd[:,1], 'go')
+    
+    grid_means = .5 * (x_nd.max(axis=0) + x_nd.min(axis=0))
+    grid_mins = grid_means - (x_nd.max(axis=0) - x_nd.min(axis=0))
+    grid_maxs = grid_means + (x_nd.max(axis=0) - x_nd.min(axis=0))
+    plot_warped_grid_2d(f.transform_points, grid_mins, grid_maxs)
+    
+    plt.draw()
+    time.sleep(.2)
+
 def main():
     # Test reg4_em_step
     test_x_nd = np.asarray([[1, 1], [1, 2]])
@@ -183,11 +208,9 @@ def main():
     print "Warp of [1, 1.5]:", test_f.transform_points(np.asarray([[1,1.5]]))
     print "Warp of [1, 2]:", test_f.transform_points(np.asarray([[1,2]]))
     
-    test_f = sim_annealing_registration(test_x_nd, test_y_md, rpm_em_step)
-    print "sim_annealing_registration rpm_em_step warps"
-    print "Warp of [1, 1]:", test_f.transform_points(np.asarray([[1,1]]))
-    print "Warp of [1, 1.5]:", test_f.transform_points(np.asarray([[1,1.5]]))
-    print "Warp of [1, 2]:", test_f.transform_points(np.asarray([[1,2]]))
-    
+    x_nd = np.c_[np.linspace(-2.5, 2.5, 10), np.linspace(-2.5, 2.5, 10)]
+    y_md = np.c_[np.r_[np.linspace(-1.5, 1.5, 7), np.linspace(1.5, 2, 8)], np.linspace(-2.5, 2.5, 15)]
+    f = sim_annealing_registration(x_nd, y_md, rpm_em_step, plotting = True, plot_cb = plot_callback)
+
 if __name__ == "__main__":
     main()
