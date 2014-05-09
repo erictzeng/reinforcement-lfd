@@ -68,8 +68,10 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init
     lambdas = loglinspace(lambda_init, lambda_final, n_iter)
     Ts = loglinspace(T_init, T_final, n_iter)
 
-    f = ThinPlateSpline(d) # TODO boxify in here
-    f.trans_g = np.median(y_md,axis=0) - np.median(x_nd,axis=0) # align the medians
+    f = ThinPlateSpline(d)
+    scale = (np.max(y_md,axis=0) - np.min(y_md,axis=0)) / (np.max(x_nd,axis=0) - np.min(x_nd,axis=0))
+    f.lin_ag = np.diag(scale).T # align the mins and max
+    f.trans_g = np.median(y_md,axis=0) - np.median(x_nd,axis=0) * scale  # align the medians
     
     for i in xrange(n_iter):
         for _ in xrange(em_iter):
