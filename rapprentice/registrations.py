@@ -48,6 +48,12 @@ def xyz2lab(xyz):
     lab = np.array([l,a,b]).T
     return lab
 
+def ab_cost(xyzrgb1, xyzrgb2):
+    lab1 = rgb2lab(xyzrgb1[:,3:])
+    lab2 = rgb2lab(xyzrgb2[:,3:])
+    cost = ssd.cdist(lab1[:,1:], lab2[:,1:], 'euclidean')
+    return cost
+
 def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init = .1, lambda_final = .001, T_init = .1, T_final = .005, 
                                plotting = False, plot_cb = None, rot_reg = 1e-3, beta = 0, vis_cost = None, em_iter = 5):
     """
