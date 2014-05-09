@@ -7,6 +7,46 @@ import scipy.spatial as sp_spat
 from rapprentice.registration import loglinspace, ThinPlateSpline, fit_ThinPlateSpline
 import IPython as ipy
 
+def rgb2lab(rgb):
+    return xyz2lab(rgb2xyz(rgb))
+
+def rgb2xyz(rgb):
+    """
+    The components of the RGB values are in the range 0 to 1
+    http://en.wikipedia.org/wiki/SRGB_color_space
+    http://en.wikipedia.org/wiki/CIE_XYZ
+    """
+    rgb_linear = np.empty_like(rgb) # copy rgb so that the original rgb is not modified
+    
+    cond = rgb > 0.04045
+    rgb_linear[cond] = np.power((rgb[cond] + 0.055) / 1.055, 2.4)
+    rgb_linear[~cond] = rgb[~cond] / 12.92
+    
+    rgb_to_xyz = np.array([[0.412453, 0.357580, 0.180423],
+                           [0.212671, 0.715160, 0.072169],
+                           [0.019334, 0.119193, 0.950227]])
+    xyz = rgb_linear.dot(rgb_to_xyz.T)
+    return xyz
+
+def xyz2lab(xyz):
+    """
+    http://en.wikipedia.org/wiki/Lab_color_space
+    """
+    ref = np.array([0.95047, 1., 1.08883]) # CIE LAB constants for Observer = 2°, Illuminant = D65
+    xyz = xyz / ref # copy xyz so that the original xyz is not modified
+
+    cond = xyz > 0.008856
+    xyz[cond] = np.power(xyz[cond], 1./3.)
+    xyz[~cond] = 7.787 * xyz[~cond] + 16./116.
+    
+    x,y,z = xyz.T
+    l = 116. * y - 16.
+    a = 500. * (x - y)
+    b = 200. * (y - z)
+    
+    lab = np.array([l,a,b]).T
+    return lab
+
 def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init = .1, lambda_final = .001, T_init = .1, T_final = .005, 
                                plotting = False, plot_cb = None, rot_reg = 1e-3, beta = 0, vis_cost = None, em_iter = 5):
     """
