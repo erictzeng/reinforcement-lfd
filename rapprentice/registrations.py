@@ -4,7 +4,7 @@ from __future__ import division
 import numpy as np
 import scipy.spatial.distance as ssd
 import scipy.spatial as sp_spat
-from rapprentice.registration import loglinspace, ThinPlateSpline, fit_ThinPlateSpline
+from rapprentice.registration import loglinspace, ThinPlateSpline, fit_ThinPlateSpline, tps_reg_cost
 import IPython as ipy
 
 def rgb2lab(rgb):
@@ -49,20 +49,22 @@ def xyz2lab(xyz):
     return lab
 
 def ab_cost(xyzrgb1, xyzrgb2):
-    lab1 = rgb2lab(xyzrgb1[:,3:])
-    lab2 = rgb2lab(xyzrgb2[:,3:])
+    _,d = xyzrgb1.shape
+    d -= 3  # subtract out the three RGB coordinates
+    lab1 = rgb2lab(xyzrgb1[:,d:])
+    lab2 = rgb2lab(xyzrgb2[:,d:])
     cost = ssd.cdist(lab1[:,1:], lab2[:,1:], 'euclidean')
     return cost
 
 def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init = .1, lambda_final = .001, T_init = .1, T_final = .005, 
-                               plotting = False, plot_cb = None, rot_reg = 1e-3, beta = 0, vis_cost = None, em_iter = 5):
+                               plotting = False, plot_cb = None, rot_reg = 1e-3, beta = 0, vis_cost_xy = None, em_iter = 5):
     """
     Outer loop of simulated annealing
     when em_step_fcn = rpm_em_step, this is tps-rpm algorithm mostly as described by chui and rangaran
     lambda_init/lambda_final: regularization on curvature
     T_init/T_final: radius for correspondence calculation (meters)
     plotting: 0 means don't plot. integer n means plot every n iterations
-    vis_cost: matrix of pairwise costs between source and target points, based on visual features
+    vis_cost_xy: matrix of pairwise costs between source and target points, based on visual features
     """
     _,d=x_nd.shape
     lambdas = loglinspace(lambda_init, lambda_final, n_iter)
@@ -73,13 +75,14 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init
     
     for i in xrange(n_iter):
         for _ in xrange(em_iter):
-            corr_nm, f = em_step_fcn(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, beta, vis_cost)
+            corr_nm, f = em_step_fcn(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, beta, vis_cost_xy)
         
         if plotting and i%plotting==0:
             plot_cb(x_nd, y_md, corr_nm, f)
+    print "Warp cost:", tps_reg_cost(f)
     return f
 
-def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost = None, T0 = .1, normalize_iter = 20):
+def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None, T0 = .1, normalize_iter = 20):
     """
     Function for TPS-RPM (as described in Chui et al.), with and w/o visual
     features.
@@ -87,8 +90,8 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost = None, T0
     xwarped_nd = prev_f.transform_points(x_nd)
     
     dist_nm = ssd.cdist(xwarped_nd, y_md, 'euclidean')
-    if beta != 0 and vis_cost:
-        prob_nm = np.exp( -dist_nm / (2*T) - beta * vis_cost) / T
+    if beta != 0 and vis_cost_xy:
+        prob_nm = np.exp( -dist_nm / (2*T) - beta * vis_cost_xy) / T
     else:
         prob_nm = np.exp( -dist_nm / (2*T) ) / T
         
@@ -117,7 +120,7 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost = None, T0
     f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = l, wt_n = wt_n, rot_coef = rot_reg)
     return corr_nm, f
 
-def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost = None, delta = 0.1):
+def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None, delta = 0.1):
     """
     Function for Reg4 (as described in Combes and Prima), with and w/o visual
     features. Implemented following the pseudocode in "Algo Reg4" exactly.
@@ -137,8 +140,8 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost = None, d
         for j in S:
             y_j = y_md[j,:]
             vis_cost_j_k = 0
-            if vis_cost:
-                vis_cost_j_k = vis_cost(y_j, x_k)
+            if vis_cost_xy is not None:
+                vis_cost_j_k = vis_cost_xy[k, j]
             sq_dist = np.linalg.norm(y_j - x_k_warped)**2
             if sq_dist / (2*T) + beta*vis_cost_j_k <= delta:
                 A[j,k] = np.exp(-sq_dist / (2*T) - beta*vis_cost_j_k)
@@ -161,6 +164,8 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost = None, d
     wt = np.zeros(n)
     for k in range(n):
         wt[k] = sum(A[:,k]) + sum(B[:,k])
+        if wt[k] == 0:
+            wt[k] = 1e-9  # To avoid division error
         y_md_approx[k,:] = (p*A[:,k] + np.repeat(q[k], m)*B[:,k]).dot(y_md) / float(wt[k])
 
     # M-step
@@ -178,9 +183,12 @@ def plot_callback(x_nd, y_md, corr_nm, f):
     # clear previous plots
     plt.clf()
     plt.cla()
-    
-    plt.plot(x_nd[:,0], x_nd[:,1], 'ro')
-    plt.plot(y_md[:,0], y_md[:,1], 'bo')
+
+    # Plot actual RGB values of points; source points are plotted with 'S',
+    # target points with 'T', and warped source points with 'W'
+    #plt.plot(x_nd[:,0], x_nd[:,1], color='r', marker='v')
+    plt.plot(x_nd[:,0], x_nd[:,1], 'rv')
+    plt.plot(y_md[:,0], y_md[:,1], 'b^')
     xwarped_nd = f.transform_points(x_nd)
     plt.plot(xwarped_nd[:,0], xwarped_nd[:,1], 'go')
     
@@ -196,14 +204,14 @@ def main():
     # Test reg4_em_step
     test_x_nd = np.asarray([[1, 1], [1, 2]])
     test_y_md = np.asarray([[2, 2], [2, 3], [2, 4]])
-    _, test_f = reg4_em_step(test_x_nd, test_y_md, 0.1, 0.1, 1e-3, ThinPlateSpline(2), beta = 0.001, vis_cost = None, delta = 100)
     print "reg4_em_step warps"
+    _, test_f = reg4_em_step(test_x_nd, test_y_md, 0.1, 0.1, 1e-3, ThinPlateSpline(2), beta = 0.001, vis_cost = None, delta = 100)
     print "Warp of [1, 1]:", test_f.transform_points(np.asarray([[1,1]]))
     print "Warp of [1, 1.5]:", test_f.transform_points(np.asarray([[1,1.5]]))
     print "Warp of [1, 2]:", test_f.transform_points(np.asarray([[1,2]]))
 
-    _, test_f = rpm_em_step(test_x_nd, test_y_md, 0.1, 0.1, 1e-3, ThinPlateSpline(2))
     print "rpm_em_step warps"
+    _, test_f = rpm_em_step(test_x_nd, test_y_md, 0.1, 0.1, 1e-3, ThinPlateSpline(2))
     print "Warp of [1, 1]:", test_f.transform_points(np.asarray([[1,1]]))
     print "Warp of [1, 1.5]:", test_f.transform_points(np.asarray([[1,1.5]]))
     print "Warp of [1, 2]:", test_f.transform_points(np.asarray([[1,2]]))
