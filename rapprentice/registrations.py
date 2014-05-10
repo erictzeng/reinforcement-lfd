@@ -63,7 +63,7 @@ def ab_cost(xyzrgb1, xyzrgb2):
     return cost
 
 def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init = .1, lambda_final = .001, T_init = .2, T_final = .0002, 
-                               plotting = False, plot_cb = None, rot_reg = np.r_[1e-4, 1e-4, 1e-1], beta = 0, vis_cost_xy = None, em_iter = 5):
+                               plotting = False, plot_cb = None, rot_reg = np.r_[1e-4, 1e-4, 1e-1], beta = 1., vis_cost_xy = None, em_iter = 5):
     """
     Outer loop of simulated annealing
     when em_step_fcn = rpm_em_step, this is tps-rpm algorithm mostly as described by chui and rangaran
@@ -90,7 +90,7 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init
     print "Warp cost:", tps_reg_cost(f)
     return f
 
-def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None, T0 = .2, normalize_iter = 20):
+def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, T0 = .2, normalize_iter = 20):
     """
     Function for TPS-RPM (as described in Chui et al.), with and w/o visual
     features.
@@ -98,7 +98,7 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None,
     xwarped_nd = prev_f.transform_points(x_nd)
     
     dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean') / (2*T)
-    if beta != 0 and vis_cost_xy:
+    if beta != 0 and vis_cost_xy != None:
         dist_nm += beta * vis_cost_xy
     prob_nm = np.exp( -dist_nm ) / np.sqrt(T)
         
@@ -127,7 +127,7 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None,
     f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = l, wt_n = wt_n, rot_coef = rot_reg)
     return corr_nm, f
 
-def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None, delta = 0.1):
+def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 0.1):
     """
     Function for Reg4 (as described in Combes and Prima), with and w/o visual
     features. Implemented following the pseudocode in "Algo Reg4" exactly.
@@ -179,7 +179,7 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None
     f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg)
     return A, f
 
-def reg4_em_step_fast(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None, delta = 0.1):
+def reg4_em_step_fast(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 0.1):
     """
     Function for Reg4 (as described in Combes and Prima), with and w/o visual
     features. Has a few modifications from the pseudocode in "Algo Reg4" exactly.
@@ -191,7 +191,7 @@ def reg4_em_step_fast(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy =
     xwarped_nd = prev_f.transform_points(x_nd)
     
     dist_mn = ssd.cdist(y_md, xwarped_nd, 'sqeuclidean') / (2*T)
-    if beta != 0 and vis_cost_xy:
+    if beta != 0  and vis_cost_xy != None:
         dist_mn += beta * vis_cost_xy.T
     A = np.zeros((m, n))
     A = A.reshape((-1,))
