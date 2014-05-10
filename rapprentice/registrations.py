@@ -5,6 +5,12 @@ import numpy as np
 import scipy.spatial.distance as ssd
 import scipy.spatial as sp_spat
 from rapprentice.registration import loglinspace, ThinPlateSpline, fit_ThinPlateSpline, tps_reg_cost
+
+import matplotlib
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from plotting_plt import plot_warped_grid_2d, plot_warped_grid_3d
+
 import IPython as ipy
 
 def rgb2lab(rgb):
@@ -56,8 +62,8 @@ def ab_cost(xyzrgb1, xyzrgb2):
     cost = ssd.cdist(lab1[:,1:], lab2[:,1:], 'euclidean')
     return cost
 
-def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init = .1, lambda_final = .001, T_init = .1, T_final = .005, 
-                               plotting = False, plot_cb = None, rot_reg = 1e-3, beta = 0, vis_cost_xy = None, em_iter = 5):
+def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init = 1., lambda_final = .05, T_init = .02, T_final = .0002, 
+                               plotting = False, plot_cb = None, rot_reg = np.r_[1e-4, 1e-4, 1e-1], beta = 1., vis_cost_xy = None, em_iter = 5):
     """
     Outer loop of simulated annealing
     when em_step_fcn = rpm_em_step, this is tps-rpm algorithm mostly as described by chui and rangaran
@@ -65,6 +71,7 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init
     T_init/T_final: radius for correspondence calculation (meters)
     plotting: 0 means don't plot. integer n means plot every n iterations
     vis_cost_xy: matrix of pairwise costs between source and target points, based on visual features
+    Note: Pick a T_init that is about 1/10 of the largest square distance of all point pairs. Use this same value for T0 in rpm_em_step
     """
     _,d=x_nd.shape
     lambdas = loglinspace(lambda_init, lambda_final, n_iter)
@@ -74,7 +81,7 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init
     scale = (np.max(y_md,axis=0) - np.min(y_md,axis=0)) / (np.max(x_nd,axis=0) - np.min(x_nd,axis=0))
     f.lin_ag = np.diag(scale).T # align the mins and max
     f.trans_g = np.median(y_md,axis=0) - np.median(x_nd,axis=0) * scale  # align the medians
-    
+
     for i in xrange(n_iter):
         for _ in xrange(em_iter):
             corr_nm, f = em_step_fcn(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, beta, vis_cost_xy)
@@ -84,23 +91,22 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init
     print "Warp cost:", tps_reg_cost(f)
     return f
 
-def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None, T0 = .1, normalize_iter = 20):
+def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, T0 = .02, normalize_iter = 20):
     """
     Function for TPS-RPM (as described in Chui et al.), with and w/o visual
     features.
     """
     xwarped_nd = prev_f.transform_points(x_nd)
     
-    dist_nm = ssd.cdist(xwarped_nd, y_md, 'euclidean')
-    if beta != 0 and vis_cost_xy is not None:
-        prob_nm = np.exp( -dist_nm / (2*T) - beta * vis_cost_xy) / T
-    else:
-        prob_nm = np.exp( -dist_nm / (2*T) ) / T
+    dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean') / (2*T)
+    if beta != 0 and vis_cost_xy != None:
+        dist_nm += beta * vis_cost_xy
+    prob_nm = np.exp( -dist_nm ) / np.sqrt(T)
         
-    outlier_dist_1m = ssd.cdist(np.mean(xwarped_nd, axis=0)[None,:], y_md, 'euclidean')
-    outlier_dist_n1 = ssd.cdist(xwarped_nd, np.mean(y_md, axis=0)[None,:], 'euclidean')
-    outlier_prob_1m = np.exp( -outlier_dist_1m / (2*T0) ) / T0 # add visual cost to outlier terms?
-    outlier_prob_n1 = np.exp( -outlier_dist_n1 / (2*T0) ) / T0
+    outlier_dist_1m = ssd.cdist(np.mean(xwarped_nd, axis=0)[None,:], y_md, 'sqeuclidean')
+    outlier_dist_n1 = ssd.cdist(xwarped_nd, np.mean(y_md, axis=0)[None,:], 'sqeuclidean')
+    outlier_prob_1m = np.exp( -outlier_dist_1m / (2*T0) ) / np.sqrt(T0) # add visual cost to outlier terms?
+    outlier_prob_n1 = np.exp( -outlier_dist_n1 / (2*T0) ) / np.sqrt(T0)
     
     n,m = prob_nm.shape
     prob_NM = np.empty((n+1, m+1))
@@ -110,10 +116,9 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None,
     prob_NM[n, m] = 0
     
     for _ in xrange(normalize_iter):
-        prob_NM = prob_NM / prob_NM.sum(axis=0)[None,:] # normalize along columns
-        prob_NM = prob_NM / prob_NM.sum(axis=1)[:,None] # normalize along rows
+        prob_NM /= prob_NM.sum(axis=0)[None,:] # normalize along columns
+        prob_NM /= prob_NM.sum(axis=1)[:,None] # normalize along rows
     corr_nm = prob_NM[:n,:m]
-    corr_nm += 1e-9 # add noise
 
     wt_n = corr_nm.sum(axis=1)
 
@@ -122,7 +127,7 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None,
     f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = l, wt_n = wt_n, rot_coef = rot_reg)
     return corr_nm, f
 
-def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None, delta = 0.1):
+def reg4_em_step_slow(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 10.):
     """
     Function for Reg4 (as described in Combes and Prima), with and w/o visual
     features. Implemented following the pseudocode in "Algo Reg4" exactly.
@@ -165,7 +170,7 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None
     y_md_approx = np.zeros((n, d))
     wt = np.zeros(n)
     for k in range(n):
-        wt[k] = sum(A[:,k]) + sum(B[:,k])
+        wt[k] = sum(A[:,k] + B[:,k])
         if wt[k] == 0:
             wt[k] = 1e-9  # To avoid division error
         y_md_approx[k,:] = (p*A[:,k] + np.repeat(q[k], m)*B[:,k]).dot(y_md) / float(wt[k])
@@ -174,12 +179,78 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None
     f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg)
     return A, f
 
+<<<<<<< HEAD
 def plot_callback(x_nd, y_md, corr_nm, f, x_xyzrgb = None, y_xyzrgb = None):
     # x_xyzrgb and y_xyzrgb should have one point per row, with XYZRGB (or XYRGB) info
     import matplotlib.pyplot as plt
     from plotting_plt import plot_warped_grid_2d
     import time
+=======
+def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 10.):
+    """
+    Function for Reg4 (as described in Combes and Prima), with and w/o visual
+    features. Has a few modifications from the pseudocode in "Algo Reg4" exactly.
+    delta - cutoff distance for truncated Gaussian
+    """
+    n, d = x_nd.shape
+    m, _ = y_md.shape
+
+    xwarped_nd = prev_f.transform_points(x_nd)
     
+    dist_mn = ssd.cdist(y_md, xwarped_nd, 'sqeuclidean') / (2*T)
+    if beta != 0  and vis_cost_xy != None:
+        dist_mn += beta * vis_cost_xy.T
+    A = np.zeros((m, n))
+    A = A.reshape((-1,))
+    dist_mn = dist_mn.reshape((-1,))
+    A[dist_mn <= delta] = np.exp( -dist_mn )[dist_mn <= delta]
+    A = A.reshape((m,n))
+    B = A.copy()
+
+    # Normalize rows of A; normalize columns of B. Compute p_j and q_k
+    A_rowsum_m = A.sum(axis=1)
+    B_colsum_n = B.sum(axis=0)
+    p = A_rowsum_m != 0
+    q = B_colsum_n != 0
+
+    A[p,:] /= A_rowsum_m[p][:,None] # normalize along rows for non-zero rows
+    B[:,q] /= B_colsum_n[q][None,:] # normalize along columns for non-zero columns
+    p = p.astype(float)
+    q = q.astype(float)
+    
+    # Compute A(.k) + B(.k) and y_k
+    pA_qB = (p[:,None] * A + q[None,:] * B) # are p and q necessary?
+    wt = pA_qB.sum(axis=0)
+    wt[wt == 0] = 1e-9 # To avoid division error
+    y_md_approx = pA_qB.T.dot(y_md) / wt[:,None]
+        
+    # M-step
+    f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg)
+    return A, f
+
+def plot_callback(x_nd, y_md, corr_nm, f, res = (.1, .1, .04), x_color=None, y_color=None):
+    """
+    Plots warp visualization
+    x_nd: source points plotted with '+' and x_color (or red if not especified)
+    y_md: target points plotted with 'x' and y_color (or blue if not especified)
+    warped points plotted with 'o' and x_color (or green if not especified)
+    """
+    _,d = x_nd.shape
+    
+    if x_color == None:
+        x_color = (1,0,0,1)
+        xwarped_color = (0,1,0,1)
+    else:
+        xwarped_color = x_color
+    if y_color == None:
+        y_color = (0,0,1,1)
+    
+    if d == 3:
+        plot_callback_3d(x_nd, y_md, corr_nm, f, res, x_color, y_color, xwarped_color)
+    else:
+        plot_callback_2d(x_nd, y_md, corr_nm, f, x_color, y_color, xwarped_color)
+
+def plot_callback_2d(x_nd, y_md, corr_nm, f, x_color, y_color, xwarped_color):
     # set interactive
     plt.ion()
     
@@ -187,24 +258,10 @@ def plot_callback(x_nd, y_md, corr_nm, f, x_xyzrgb = None, y_xyzrgb = None):
     plt.clf()
     plt.cla()
 
-    # Plot actual RGB values of points, if x_xyzrgb and y_xyzrgb are provided;
-    # source points are plotted with downward pointing triangles, target points
-    # with upward pointing triangles, and warped source points with circles
-
-    x_color = 'r'
-    y_color = 'b'
-    w_color = 'g'
-    if x_xyzrgb is not None and y_xyzrgb is not None:
-        n, d = x_xyzrgb.shape
-        d = d - 3  # Account for the three dimensions for RGB
-        x_color = x_xyzrgb[:,d:]
-        y_color = y_xyzrgb[:,d:]
-        w_color = x_color
-
-    plt.scatter(x_nd[:,0], x_nd[:,1], c=x_color, marker='v')
-    plt.scatter(y_md[:,0], y_md[:,1], c=y_color, marker='^')
+    plt.scatter(x_nd[:,0], x_nd[:,1], c=x_color, marker='+', s=50)
+    plt.scatter(y_md[:,0], y_md[:,1], c=y_color, marker='x', s=50)
     xwarped_nd = f.transform_points(x_nd)
-    plt.scatter(xwarped_nd[:,0], xwarped_nd[:,1], c=w_color, marker='o')
+    plt.scatter(xwarped_nd[:,0], xwarped_nd[:,1], c=xwarped_color, marker='o', s=50)
     
     grid_means = .5 * (x_nd.max(axis=0) + x_nd.min(axis=0))
     grid_mins = grid_means - (x_nd.max(axis=0) - x_nd.min(axis=0))
@@ -212,14 +269,45 @@ def plot_callback(x_nd, y_md, corr_nm, f, x_xyzrgb = None, y_xyzrgb = None):
     plot_warped_grid_2d(f.transform_points, grid_mins, grid_maxs)
     
     plt.draw()
-    time.sleep(.2)
+
+def plot_callback_3d(x_nd, y_md, corr_nm, f, res, x_color, y_color, xwarped_color):
+    # set interactive
+    plt.ion()
+    
+    # clear previous plots
+    plt.clf()
+    plt.cla()
+    
+    ax = plt.gcf().gca(projection='3d')
+    ax.set_aspect('equal')
+
+    ax.scatter(x_nd[:,0], x_nd[:,1], x_nd[:,2], c=x_color, marker='+', s=50)
+    ax.scatter(y_md[:,0], y_md[:,1], y_md[:,2], c=y_color, marker='x', s=50)
+    xwarped_nd = f.transform_points(x_nd)
+    ax.scatter(xwarped_nd[:,0], xwarped_nd[:,1], xwarped_nd[:,2], c=xwarped_color, marker='o', s=50)
+
+    # manually set axes limits at a cube's bounding box since matplotlib doesn't correctly set equal axis in 3D
+    max_pts = np.r_[x_nd, y_md, xwarped_nd].max(axis=0)
+    min_pts = np.r_[x_nd, y_md, xwarped_nd].min(axis=0)
+    max_range = (max_pts - min_pts).max()
+    center = 0.5*(max_pts + min_pts)
+    ax.set_xlim(center[0] - 0.5*max_range, center[0] + 0.5*max_range)
+    ax.set_ylim(center[1] - 0.5*max_range, center[1] + 0.5*max_range)
+    ax.set_zlim(center[2] - 0.5*max_range, center[2] + 0.5*max_range)
+
+    grid_means = .5 * (x_nd.max(axis=0) + x_nd.min(axis=0))
+    grid_mins = grid_means - (x_nd.max(axis=0) - x_nd.min(axis=0))
+    grid_maxs = grid_means + (x_nd.max(axis=0) - x_nd.min(axis=0))
+    plot_warped_grid_3d(f.transform_points, grid_mins, grid_maxs, xres=res[0], yres=res[1], zres=res[2])
+    
+    plt.draw()
 
 def main():
     # Test reg4_em_step
     test_x_nd = np.asarray([[1, 1], [1, 2]])
     test_y_md = np.asarray([[2, 2], [2, 3], [2, 4]])
     print "reg4_em_step warps"
-    _, test_f = reg4_em_step(test_x_nd, test_y_md, 0.1, 0.1, 1e-3, ThinPlateSpline(2), beta = 0.001, vis_cost = None, delta = 100)
+    _, test_f = reg4_em_step(test_x_nd, test_y_md, 0.1, 0.1, 1e-3, ThinPlateSpline(2), beta = 0.001, vis_cost_xy = None, delta = 100)
     print "Warp of [1, 1]:", test_f.transform_points(np.asarray([[1,1]]))
     print "Warp of [1, 1.5]:", test_f.transform_points(np.asarray([[1,1.5]]))
     print "Warp of [1, 2]:", test_f.transform_points(np.asarray([[1,2]]))
