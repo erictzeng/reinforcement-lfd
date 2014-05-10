@@ -62,7 +62,7 @@ def ab_cost(xyzrgb1, xyzrgb2):
     cost = ssd.cdist(lab1[:,1:], lab2[:,1:], 'euclidean')
     return cost
 
-def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init = .1, lambda_final = .001, T_init = .2, T_final = .0002, 
+def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init = 1., lambda_final = .05, T_init = .02, T_final = .0002, 
                                plotting = False, plot_cb = None, rot_reg = np.r_[1e-4, 1e-4, 1e-1], beta = 1., vis_cost_xy = None, em_iter = 5):
     """
     Outer loop of simulated annealing
@@ -71,6 +71,7 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init
     T_init/T_final: radius for correspondence calculation (meters)
     plotting: 0 means don't plot. integer n means plot every n iterations
     vis_cost_xy: matrix of pairwise costs between source and target points, based on visual features
+    Note: Pick a T_init that is about 1/10 of the largest square distance of all point pairs. Use this same value for T0 in rpm_em_step
     """
     _,d=x_nd.shape
     lambdas = loglinspace(lambda_init, lambda_final, n_iter)
@@ -90,7 +91,7 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init
     print "Warp cost:", tps_reg_cost(f)
     return f
 
-def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, T0 = .2, normalize_iter = 20):
+def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, T0 = .02, normalize_iter = 20):
     """
     Function for TPS-RPM (as described in Chui et al.), with and w/o visual
     features.
@@ -118,7 +119,6 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None
         prob_NM /= prob_NM.sum(axis=0)[None,:] # normalize along columns
         prob_NM /= prob_NM.sum(axis=1)[:,None] # normalize along rows
     corr_nm = prob_NM[:n,:m]
-    corr_nm += 1e-9 # add noise
 
     wt_n = corr_nm.sum(axis=1)
 
