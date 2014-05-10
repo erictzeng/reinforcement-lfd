@@ -27,26 +27,29 @@ def run_experiments(input_file):
         y_md = clouds[k][()][:,:d]
         vis_costs_xy = registrations.ab_cost(x_xyzrgb, y_xyzrgb)
 
+        plot_cb = lambda a, b, c, d: registrations.plot_callback(a, b, c, d, x_xyzrgb = x_xyzrgb, y_xyzrgb = y_xyzrgb)
 
         print "Reg4 EM, w/ visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.reg4_em_step, vis_cost_xy = vis_costs_xy,
-                plotting=1, plot_cb = registrations.plot_callback)
+                beta = 1000,
+                plotting = 1, plot_cb = plot_cb)
 
         print "Reg4 EM, w/o visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.reg4_em_step,
-                plotting=1, plot_cb = registrations.plot_callback)
+                plotting=1, plot_cb = plot_cb)
 
         print "RPM EM, w/ visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.rpm_em_step, vis_cost_xy = vis_costs_xy,
-                plotting=1, plot_cb = registrations.plot_callback)
+                beta = 1000,
+                plotting=1, plot_cb = plot_cb)
 
         print "RPM EM, w/o visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.rpm_em_step,
-                plotting=1, plot_cb = registrations.plot_callback)
+                plotting=1, plot_cb = plot_cb)
 
 def main():
     parser = argparse.ArgumentParser()

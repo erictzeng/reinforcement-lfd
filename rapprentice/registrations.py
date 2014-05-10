@@ -92,7 +92,7 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None,
     xwarped_nd = prev_f.transform_points(x_nd)
     
     dist_nm = ssd.cdist(xwarped_nd, y_md, 'euclidean')
-    if beta != 0 and vis_cost_xy:
+    if beta != 0 and vis_cost_xy is not None:
         prob_nm = np.exp( -dist_nm / (2*T) - beta * vis_cost_xy) / T
     else:
         prob_nm = np.exp( -dist_nm / (2*T) ) / T
@@ -174,7 +174,8 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None
     f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg)
     return A, f
 
-def plot_callback(x_nd, y_md, corr_nm, f):
+def plot_callback(x_nd, y_md, corr_nm, f, x_xyzrgb = None, y_xyzrgb = None):
+    # x_xyzrgb and y_xyzrgb should have one point per row, with XYZRGB (or XYRGB) info
     import matplotlib.pyplot as plt
     from plotting_plt import plot_warped_grid_2d
     import time
@@ -186,13 +187,24 @@ def plot_callback(x_nd, y_md, corr_nm, f):
     plt.clf()
     plt.cla()
 
-    # Plot actual RGB values of points; source points are plotted with 'S',
-    # target points with 'T', and warped source points with 'W'
-    #plt.plot(x_nd[:,0], x_nd[:,1], color='r', marker='v')
-    plt.plot(x_nd[:,0], x_nd[:,1], 'rv')
-    plt.plot(y_md[:,0], y_md[:,1], 'b^')
+    # Plot actual RGB values of points, if x_xyzrgb and y_xyzrgb are provided;
+    # source points are plotted with downward pointing triangles, target points
+    # with upward pointing triangles, and warped source points with circles
+
+    x_color = 'r'
+    y_color = 'b'
+    w_color = 'g'
+    if x_xyzrgb is not None and y_xyzrgb is not None:
+        n, d = x_xyzrgb.shape
+        d = d - 3  # Account for the three dimensions for RGB
+        x_color = x_xyzrgb[:,d:]
+        y_color = y_xyzrgb[:,d:]
+        w_color = x_color
+
+    plt.scatter(x_nd[:,0], x_nd[:,1], c=x_color, marker='v')
+    plt.scatter(y_md[:,0], y_md[:,1], c=y_color, marker='^')
     xwarped_nd = f.transform_points(x_nd)
-    plt.plot(xwarped_nd[:,0], xwarped_nd[:,1], 'go')
+    plt.scatter(xwarped_nd[:,0], xwarped_nd[:,1], c=w_color, marker='o')
     
     grid_means = .5 * (x_nd.max(axis=0) + x_nd.min(axis=0))
     grid_mins = grid_means - (x_nd.max(axis=0) - x_nd.min(axis=0))
