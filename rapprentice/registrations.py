@@ -170,11 +170,53 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None
     y_md_approx = np.zeros((n, d))
     wt = np.zeros(n)
     for k in range(n):
-        wt[k] = sum(A[:,k]) + sum(B[:,k])
+        wt[k] = sum(A[:,k] + B[:,k])
         if wt[k] == 0:
             wt[k] = 1e-9  # To avoid division error
         y_md_approx[k,:] = (p*A[:,k] + np.repeat(q[k], m)*B[:,k]).dot(y_md) / float(wt[k])
 
+    # M-step
+    f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg)
+    return A, f
+
+def reg4_em_step_fast(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None, delta = 0.1):
+    """
+    Function for Reg4 (as described in Combes and Prima), with and w/o visual
+    features. Has a few modifications from the pseudocode in "Algo Reg4" exactly.
+    delta - cutoff distance for truncated Gaussian
+    """
+    n, d = x_nd.shape
+    m, _ = y_md.shape
+
+    xwarped_nd = prev_f.transform_points(x_nd)
+    
+    dist_mn = ssd.cdist(y_md, xwarped_nd, 'sqeuclidean') / (2*T)
+    if beta != 0 and vis_cost_xy:
+        dist_mn += beta * vis_cost_xy.T
+    A = np.zeros((m, n))
+    A = A.reshape((-1,))
+    dist_mn = dist_mn.reshape((-1,))
+    A[dist_mn <= delta] = np.exp( -dist_mn )[dist_mn <= delta]
+    A = A.reshape((m,n))
+    B = A.copy()
+
+    # Normalize rows of A; normalize columns of B. Compute p_j and q_k
+    A_rowsum_m = A.sum(axis=1)
+    B_colsum_n = B.sum(axis=0)
+    p = A_rowsum_m != 0
+    q = B_colsum_n != 0
+
+    A[p,:] /= A_rowsum_m[p][:,None] # normalize along rows for non-zero rows
+    B[:,q] /= B_colsum_n[q][None,:] # normalize along columns for non-zero columns
+    p = p.astype(float)
+    q = q.astype(float)
+    
+    # Compute A(.k) + B(.k) and y_k
+    pA_qB = (p[:,None] * A + q[None,:] * B) # are p and q necessary?
+    wt = pA_qB.sum(axis=0)
+    wt[wt == 0] = 1e-9 # To avoid division error
+    y_md_approx = pA_qB.T.dot(y_md) / wt[:,None]
+        
     # M-step
     f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg)
     return A, f
