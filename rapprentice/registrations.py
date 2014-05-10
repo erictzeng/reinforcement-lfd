@@ -62,8 +62,8 @@ def ab_cost(xyzrgb1, xyzrgb2):
     cost = ssd.cdist(lab1[:,1:], lab2[:,1:], 'euclidean')
     return cost
 
-def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init = .1, lambda_final = .001, T_init = .1, T_final = .005, 
-                               plotting = False, plot_cb = None, rot_reg = 1e-3, beta = 0, vis_cost_xy = None, em_iter = 5):
+def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init = .1, lambda_final = .001, T_init = .2, T_final = .0002, 
+                               plotting = False, plot_cb = None, rot_reg = np.r_[1e-4, 1e-4, 1e-1], beta = 0, vis_cost_xy = None, em_iter = 5):
     """
     Outer loop of simulated annealing
     when em_step_fcn = rpm_em_step, this is tps-rpm algorithm mostly as described by chui and rangaran
@@ -90,7 +90,7 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init
     print "Warp cost:", tps_reg_cost(f)
     return f
 
-def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None, T0 = .1, normalize_iter = 20):
+def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None, T0 = .2, normalize_iter = 20):
     """
     Function for TPS-RPM (as described in Chui et al.), with and w/o visual
     features.
