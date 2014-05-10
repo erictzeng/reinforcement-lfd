@@ -221,7 +221,7 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = Non
     f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg)
     return A, f
 
-def plot_callback(x_nd, y_md, corr_nm, f, x_color=None, y_color=None):
+def plot_callback(x_nd, y_md, corr_nm, f, res = (.1, .1, .04), x_color=None, y_color=None):
     """
     Plots warp visualization
     x_nd: source points plotted with '+' and x_color (or red if not especified)
@@ -239,7 +239,7 @@ def plot_callback(x_nd, y_md, corr_nm, f, x_color=None, y_color=None):
         y_color = (0,0,1,1)
     
     if d == 3:
-        plot_callback_3d(x_nd, y_md, corr_nm, f, x_color, y_color, xwarped_color)
+        plot_callback_3d(x_nd, y_md, corr_nm, f, res, x_color, y_color, xwarped_color)
     else:
         plot_callback_2d(x_nd, y_md, corr_nm, f, x_color, y_color, xwarped_color)
 
@@ -263,7 +263,7 @@ def plot_callback_2d(x_nd, y_md, corr_nm, f, x_color, y_color, xwarped_color):
     
     plt.draw()
 
-def plot_callback_3d(x_nd, y_md, corr_nm, f, x_color, y_color, xwarped_color):
+def plot_callback_3d(x_nd, y_md, corr_nm, f, res, x_color, y_color, xwarped_color):
     # set interactive
     plt.ion()
     
@@ -291,7 +291,7 @@ def plot_callback_3d(x_nd, y_md, corr_nm, f, x_color, y_color, xwarped_color):
     grid_means = .5 * (x_nd.max(axis=0) + x_nd.min(axis=0))
     grid_mins = grid_means - (x_nd.max(axis=0) - x_nd.min(axis=0))
     grid_maxs = grid_means + (x_nd.max(axis=0) - x_nd.min(axis=0))
-    plot_warped_grid_3d(f.transform_points, grid_mins, grid_maxs)
+    plot_warped_grid_3d(f.transform_points, grid_mins, grid_maxs, xres=res[0], yres=res[1], zres=res[2])
     
     plt.draw()
 

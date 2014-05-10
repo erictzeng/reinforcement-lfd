@@ -52,6 +52,17 @@ def run_experiments(input_file, plot_color):
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.rpm_em_step,
                 plotting=1, plot_cb = plot_cb)
+        
+        def plot_cb_bij(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f):
+            if plot_color:
+                registrations.plot_callback(x_nd, y_md, corr_nm, f, res = (.3, .3, .12), x_color = x_xyzrgb[:,d:], y_color = y_xyzrgb[:,d:])
+            else:
+                registrations.plot_callback(x_nd, y_md, corr_nm, f, res = (.3, .3, .12))
+        scaled_x_nd, _ = registration.unit_boxify(x_nd)
+        scaled_y_md, _ = registration.unit_boxify(y_md)
+        f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, plot_cb=plot_cb_bij,
+                                       plotting=1, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
+                                       n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2)
 
 def main():
     parser = argparse.ArgumentParser()
