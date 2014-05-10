@@ -14,7 +14,7 @@ import argparse, h5py, Image, math, numpy as np
 
 WHITE = (255, 255, 255)
 Z_MULT = 30.0  # range of z = min(x_axis_pixels, y_axis_pixels) / Z_MULT
-SCALE = 1000.0
+SCALE = 500.0
 RGB_SCALE = 255.0
 
 def get_point_cloud(imagefile, target_size, add_z):
@@ -56,13 +56,16 @@ def main():
     args = parser.parse_args()
 
     orig_cloud = get_point_cloud(args.input_image, args.target_size, args.add_z)
-    warp_rot30 = rotate_point_cloud(orig_cloud, math.pi/6)
-    warp_rot60 = rotate_point_cloud(orig_cloud, math.pi/3)
-    warp_rot180 = rotate_point_cloud(orig_cloud, math.pi)
+    dem_cloud = get_point_cloud(args.input_image, args.target_size*2, args.add_z)
+
+    warp_rot30 = rotate_point_cloud(dem_cloud, math.pi/6)
+    warp_rot60 = rotate_point_cloud(dem_cloud, math.pi/3)
+    warp_rot180 = rotate_point_cloud(dem_cloud, math.pi)
     # TODO: Generate random rotations (see how Chui et al. did in TPS-RPM paper)
 
     output = h5py.File(args.output_file, 'w')
     output['orig_cloud'] = orig_cloud
+    output['dem_cloud'] = dem_cloud
     output['warp_cloud_rot30'] = warp_rot30
     output['warp_cloud_rot60'] = warp_rot60
     output['warp_cloud_rot180'] = warp_rot180

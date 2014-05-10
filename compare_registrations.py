@@ -20,9 +20,9 @@ def run_experiments(input_file, plot_color):
     y_md = clouds['orig_cloud'][()][:,:d]
 
     for k in clouds:
-        if k == 'orig_cloud':
+        if not k.startswith('warp'):
             continue
-        print "TESTING FOR WARP", k
+        print "TESTING:", k
         x_xyzrgb = clouds[k][()]
         x_nd = clouds[k][()][:,:d]
         vis_costs_xy = registrations.ab_cost(x_xyzrgb, y_xyzrgb)

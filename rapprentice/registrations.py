@@ -84,7 +84,7 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init
 
     for i in xrange(n_iter):
         for _ in xrange(em_iter):
-            corr_nm, f = em_step_fcn(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, beta, vis_cost_xy)
+            corr_nm, f = em_step_fcn(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, beta, vis_cost_xy = vis_cost_xy, T0 = T_init)
         
         if plotting and i%plotting==0:
             plot_cb(x_nd, y_md, corr_nm, f)
@@ -128,7 +128,7 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None
     f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = l, wt_n = wt_n, rot_coef = rot_reg[:d])
     return corr_nm, f
 
-def reg4_em_step_slow(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 10.):
+def reg4_em_step_slow(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 10., T0 = .02):
     """
     Function for Reg4 (as described in Combes and Prima), with and w/o visual
     features. Implemented following the pseudocode in "Algo Reg4" exactly.
@@ -180,7 +180,7 @@ def reg4_em_step_slow(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy 
     f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg[:d])
     return A, f
 
-def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 10.):
+def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 10., T0 = .02):
     """
     Function for Reg4 (as described in Combes and Prima), with and w/o visual
     features. Has a few modifications from the pseudocode in "Algo Reg4" exactly.
