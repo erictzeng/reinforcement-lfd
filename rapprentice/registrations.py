@@ -96,6 +96,7 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None
     Function for TPS-RPM (as described in Chui et al.), with and w/o visual
     features.
     """
+    _,d = x_nd.shape
     xwarped_nd = prev_f.transform_points(x_nd)
     
     dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean') / (2*T)
@@ -124,7 +125,7 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None
 
     xtarg_nd = (corr_nm/wt_n[:,None]).dot(y_md)
 
-    f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = l, wt_n = wt_n, rot_coef = rot_reg)
+    f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = l, wt_n = wt_n, rot_coef = rot_reg[:d])
     return corr_nm, f
 
 def reg4_em_step_slow(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 10.):
@@ -176,16 +177,9 @@ def reg4_em_step_slow(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy 
         y_md_approx[k,:] = (p*A[:,k] + np.repeat(q[k], m)*B[:,k]).dot(y_md) / float(wt[k])
 
     # M-step
-    f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg)
+    f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg[:d])
     return A, f
 
-<<<<<<< HEAD
-def plot_callback(x_nd, y_md, corr_nm, f, x_xyzrgb = None, y_xyzrgb = None):
-    # x_xyzrgb and y_xyzrgb should have one point per row, with XYZRGB (or XYRGB) info
-    import matplotlib.pyplot as plt
-    from plotting_plt import plot_warped_grid_2d
-    import time
-=======
 def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 10.):
     """
     Function for Reg4 (as described in Combes and Prima), with and w/o visual
@@ -225,7 +219,7 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = Non
     y_md_approx = pA_qB.T.dot(y_md) / wt[:,None]
         
     # M-step
-    f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg)
+    f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg[:d])
     return A, f
 
 def plot_callback(x_nd, y_md, corr_nm, f, res = (.1, .1, .04), x_color=None, y_color=None):

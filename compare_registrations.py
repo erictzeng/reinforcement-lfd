@@ -61,7 +61,7 @@ def run_experiments(input_file, plot_color):
         scaled_x_nd, _ = registration.unit_boxify(x_nd)
         scaled_y_md, _ = registration.unit_boxify(y_md)
         f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, plot_cb=plot_cb_bij,
-                                       plotting=1, rot_reg=np.r_[1e-4, 1e-4, 1e-1], 
+                                       plotting=1, rot_reg=np.r_[1e-4, 1e-4, 1e-1][:d], 
                                        n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2)
 
 def main():
