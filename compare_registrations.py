@@ -12,7 +12,7 @@
 import argparse, h5py, numpy as np
 from rapprentice import registration, registrations
 
-def run_experiments(input_file):
+def run_experiments(input_file, plot_color):
     clouds = h5py.File(input_file)
     _,d = clouds['orig_cloud'][()].shape
     d = d - 3  # ignore the RGB values
@@ -27,33 +27,39 @@ def run_experiments(input_file):
         y_md = clouds[k][()][:,:d]
         vis_costs_xy = registrations.ab_cost(x_xyzrgb, y_xyzrgb)
 
+        def plot_cb(x_nd, y_md, corr_nm, f):
+            if plot_color:
+                registrations.plot_callback(x_nd, y_md, corr_nm, f, x_color = x_xyzrgb[:,d:], y_color = y_xyzrgb[:,d:])
+            else:
+                registrations.plot_callback(x_nd, y_md, corr_nm, f)
 
         print "Reg4 EM, w/ visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.reg4_em_step, vis_cost_xy = vis_costs_xy,
-                plotting=1, plot_cb = registrations.plot_callback)
+                plotting=1, plot_cb = plot_cb)
 
         print "Reg4 EM, w/o visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.reg4_em_step,
-                plotting=1, plot_cb = registrations.plot_callback)
+                plotting=1, plot_cb = plot_cb)
 
         print "RPM EM, w/ visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.rpm_em_step, vis_cost_xy = vis_costs_xy,
-                plotting=1, plot_cb = registrations.plot_callback)
+                plotting=1, plot_cb = plot_cb)
 
         print "RPM EM, w/o visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.rpm_em_step,
-                plotting=1, plot_cb = registrations.plot_callback)
+                plotting=1, plot_cb = plot_cb)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("input_file", type=str)
+    parser.add_argument("--plot_color", type=int, default=1)
 
     args = parser.parse_args()
-    run_experiments(args.input_file)
+    run_experiments(args.input_file, args.plot_color)
 
 if __name__ == "__main__":
     main()

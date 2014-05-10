@@ -5,6 +5,12 @@ import numpy as np
 import scipy.spatial.distance as ssd
 import scipy.spatial as sp_spat
 from rapprentice.registration import loglinspace, ThinPlateSpline, fit_ThinPlateSpline, tps_reg_cost
+
+import matplotlib
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from plotting_plt import plot_warped_grid_2d, plot_warped_grid_3d
+
 import IPython as ipy
 
 def rgb2lab(rgb):
@@ -74,7 +80,7 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init
     scale = (np.max(y_md,axis=0) - np.min(y_md,axis=0)) / (np.max(x_nd,axis=0) - np.min(x_nd,axis=0))
     f.lin_ag = np.diag(scale).T # align the mins and max
     f.trans_g = np.median(y_md,axis=0) - np.median(x_nd,axis=0) * scale  # align the medians
-    
+
     for i in xrange(n_iter):
         for _ in xrange(em_iter):
             corr_nm, f = em_step_fcn(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, beta, vis_cost_xy)
@@ -174,11 +180,29 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None
     f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg)
     return A, f
 
-def plot_callback(x_nd, y_md, corr_nm, f):
-    import matplotlib.pyplot as plt
-    from plotting_plt import plot_warped_grid_2d
-    import time
+def plot_callback(x_nd, y_md, corr_nm, f, x_color=None, y_color=None):
+    """
+    Plots warp visualization
+    x_nd: source points plotted with '+' and x_color (or red if not especified)
+    y_md: target points plotted with 'x' and y_color (or blue if not especified)
+    warped points plotted with 'o' and x_color (or green if not especified)
+    """
+    _,d = x_nd.shape
     
+    if x_color == None:
+        x_color = (1,0,0,1)
+        xwarped_color = (0,1,0,1)
+    else:
+        xwarped_color = x_color
+    if y_color == None:
+        y_color = (0,0,1,1)
+    
+    if d == 3:
+        plot_callback_3d(x_nd, y_md, corr_nm, f, x_color, y_color, xwarped_color)
+    else:
+        plot_callback_2d(x_nd, y_md, corr_nm, f, x_color, y_color, xwarped_color)
+
+def plot_callback_2d(x_nd, y_md, corr_nm, f, x_color, y_color, xwarped_color):
     # set interactive
     plt.ion()
     
@@ -186,13 +210,10 @@ def plot_callback(x_nd, y_md, corr_nm, f):
     plt.clf()
     plt.cla()
 
-    # Plot actual RGB values of points; source points are plotted with 'S',
-    # target points with 'T', and warped source points with 'W'
-    #plt.plot(x_nd[:,0], x_nd[:,1], color='r', marker='v')
-    plt.plot(x_nd[:,0], x_nd[:,1], 'rv')
-    plt.plot(y_md[:,0], y_md[:,1], 'b^')
+    plt.scatter(x_nd[:,0], x_nd[:,1], c=x_color, marker='+', s=50)
+    plt.scatter(y_md[:,0], y_md[:,1], c=y_color, marker='x', s=50)
     xwarped_nd = f.transform_points(x_nd)
-    plt.plot(xwarped_nd[:,0], xwarped_nd[:,1], 'go')
+    plt.scatter(xwarped_nd[:,0], xwarped_nd[:,1], c=xwarped_color, marker='o', s=50)
     
     grid_means = .5 * (x_nd.max(axis=0) + x_nd.min(axis=0))
     grid_mins = grid_means - (x_nd.max(axis=0) - x_nd.min(axis=0))
@@ -200,14 +221,45 @@ def plot_callback(x_nd, y_md, corr_nm, f):
     plot_warped_grid_2d(f.transform_points, grid_mins, grid_maxs)
     
     plt.draw()
-    time.sleep(.2)
+
+def plot_callback_3d(x_nd, y_md, corr_nm, f, x_color, y_color, xwarped_color):
+    # set interactive
+    plt.ion()
+    
+    # clear previous plots
+    plt.clf()
+    plt.cla()
+    
+    ax = plt.gcf().gca(projection='3d')
+    ax.set_aspect('equal')
+
+    ax.scatter(x_nd[:,0], x_nd[:,1], x_nd[:,2], c=x_color, marker='+', s=50)
+    ax.scatter(y_md[:,0], y_md[:,1], y_md[:,2], c=y_color, marker='x', s=50)
+    xwarped_nd = f.transform_points(x_nd)
+    ax.scatter(xwarped_nd[:,0], xwarped_nd[:,1], xwarped_nd[:,2], c=xwarped_color, marker='o', s=50)
+
+    # manually set axes limits at a cube's bounding box since matplotlib doesn't correctly set equal axis in 3D
+    max_pts = np.r_[x_nd, y_md, xwarped_nd].max(axis=0)
+    min_pts = np.r_[x_nd, y_md, xwarped_nd].min(axis=0)
+    max_range = (max_pts - min_pts).max()
+    center = 0.5*(max_pts + min_pts)
+    ax.set_xlim(center[0] - 0.5*max_range, center[0] + 0.5*max_range)
+    ax.set_ylim(center[1] - 0.5*max_range, center[1] + 0.5*max_range)
+    ax.set_zlim(center[2] - 0.5*max_range, center[2] + 0.5*max_range)
+
+    grid_means = .5 * (x_nd.max(axis=0) + x_nd.min(axis=0))
+    grid_mins = grid_means - (x_nd.max(axis=0) - x_nd.min(axis=0))
+    grid_maxs = grid_means + (x_nd.max(axis=0) - x_nd.min(axis=0))
+    plot_warped_grid_3d(f.transform_points, grid_mins, grid_maxs)
+    
+    plt.draw()
 
 def main():
     # Test reg4_em_step
     test_x_nd = np.asarray([[1, 1], [1, 2]])
     test_y_md = np.asarray([[2, 2], [2, 3], [2, 4]])
     print "reg4_em_step warps"
-    _, test_f = reg4_em_step(test_x_nd, test_y_md, 0.1, 0.1, 1e-3, ThinPlateSpline(2), beta = 0.001, vis_cost = None, delta = 100)
+    _, test_f = reg4_em_step(test_x_nd, test_y_md, 0.1, 0.1, 1e-3, ThinPlateSpline(2), beta = 0.001, vis_cost_xy = None, delta = 100)
     print "Warp of [1, 1]:", test_f.transform_points(np.asarray([[1,1]]))
     print "Warp of [1, 1.5]:", test_f.transform_points(np.asarray([[1,1.5]]))
     print "Warp of [1, 2]:", test_f.transform_points(np.asarray([[1,2]]))
