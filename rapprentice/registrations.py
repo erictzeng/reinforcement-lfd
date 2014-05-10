@@ -127,7 +127,7 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None
     f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = l, wt_n = wt_n, rot_coef = rot_reg)
     return corr_nm, f
 
-def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 0.1):
+def reg4_em_step_slow(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 10.):
     """
     Function for Reg4 (as described in Combes and Prima), with and w/o visual
     features. Implemented following the pseudocode in "Algo Reg4" exactly.
@@ -179,7 +179,7 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = Non
     f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg)
     return A, f
 
-def reg4_em_step_fast(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 0.1):
+def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 10.):
     """
     Function for Reg4 (as described in Combes and Prima), with and w/o visual
     features. Has a few modifications from the pseudocode in "Algo Reg4" exactly.
