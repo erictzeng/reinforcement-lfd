@@ -97,16 +97,15 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None,
     """
     xwarped_nd = prev_f.transform_points(x_nd)
     
-    dist_nm = ssd.cdist(xwarped_nd, y_md, 'euclidean')
+    dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean') / (2*T)
     if beta != 0 and vis_cost_xy:
-        prob_nm = np.exp( -dist_nm / (2*T) - beta * vis_cost_xy) / T
-    else:
-        prob_nm = np.exp( -dist_nm / (2*T) ) / T
+        dist_nm += beta * vis_cost_xy
+    prob_nm = np.exp( -dist_nm ) / np.sqrt(T)
         
-    outlier_dist_1m = ssd.cdist(np.mean(xwarped_nd, axis=0)[None,:], y_md, 'euclidean')
-    outlier_dist_n1 = ssd.cdist(xwarped_nd, np.mean(y_md, axis=0)[None,:], 'euclidean')
-    outlier_prob_1m = np.exp( -outlier_dist_1m / (2*T0) ) / T0 # add visual cost to outlier terms?
-    outlier_prob_n1 = np.exp( -outlier_dist_n1 / (2*T0) ) / T0
+    outlier_dist_1m = ssd.cdist(np.mean(xwarped_nd, axis=0)[None,:], y_md, 'sqeuclidean')
+    outlier_dist_n1 = ssd.cdist(xwarped_nd, np.mean(y_md, axis=0)[None,:], 'sqeuclidean')
+    outlier_prob_1m = np.exp( -outlier_dist_1m / (2*T0) ) / np.sqrt(T0) # add visual cost to outlier terms?
+    outlier_prob_n1 = np.exp( -outlier_dist_n1 / (2*T0) ) / np.sqrt(T0)
     
     n,m = prob_nm.shape
     prob_NM = np.empty((n+1, m+1))
@@ -116,8 +115,8 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 0, vis_cost_xy = None,
     prob_NM[n, m] = 0
     
     for _ in xrange(normalize_iter):
-        prob_NM = prob_NM / prob_NM.sum(axis=0)[None,:] # normalize along columns
-        prob_NM = prob_NM / prob_NM.sum(axis=1)[:,None] # normalize along rows
+        prob_NM /= prob_NM.sum(axis=0)[None,:] # normalize along columns
+        prob_NM /= prob_NM.sum(axis=1)[:,None] # normalize along rows
     corr_nm = prob_NM[:n,:m]
     corr_nm += 1e-9 # add noise
 
