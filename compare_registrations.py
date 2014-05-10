@@ -16,15 +16,15 @@ def run_experiments(input_file, plot_color):
     clouds = h5py.File(input_file)
     _,d = clouds['orig_cloud'][()].shape
     d = d - 3  # ignore the RGB values
-    x_xyzrgb = clouds['orig_cloud'][()]
-    x_nd = clouds['orig_cloud'][()][:,:d]
+    y_xyzrgb = clouds['orig_cloud'][()]
+    y_md = clouds['orig_cloud'][()][:,:d]
 
     for k in clouds:
         if k == 'orig_cloud':
             continue
         print "TESTING FOR WARP", k
-        y_xyzrgb = clouds[k][()]
-        y_md = clouds[k][()][:,:d]
+        x_xyzrgb = clouds[k][()]
+        x_nd = clouds[k][()][:,:d]
         vis_costs_xy = registrations.ab_cost(x_xyzrgb, y_xyzrgb)
 
         def plot_cb(x_nd, y_md, corr_nm, f):
