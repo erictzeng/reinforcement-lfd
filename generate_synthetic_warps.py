@@ -17,6 +17,7 @@ WHITE = (255, 255, 255)
 Z_MULT = 30.0  # range of z = min(x_axis_pixels, y_axis_pixels) / Z_MULT
 SCALE = 500.0
 RGB_SCALE = 255.0
+S_VALS = [0.1, 0.05, 0.01]
 
 def get_point_cloud(imagefile, target_size, add_z):
     # Returns numpy array of the point cloud (x, y, r, g, b, a) created by
@@ -48,7 +49,7 @@ def randomly_warp_point_cloud(cloud, s):
 
     weights_x = np.random.normal(0,s,n)
     weights_y = np.random.normal(0,s,n)
-    pdists = ssd.squareform(ssd.pdist(cloud_xy, 'euclidean'))
+    pdists = np.exp(-1*ssd.squareform(ssd.pdist(cloud_xy, 'euclidean')))
     warped_cloud_xy = cloud.copy()
     #import IPython as ipy
     #ipy.embed()
@@ -90,9 +91,10 @@ def main():
     output['warp_cloud_rot30'] = warp_rot30
     output['warp_cloud_rot60'] = warp_rot60
     output['warp_cloud_rot180'] = warp_rot180
-    output['warp_s0_001'] = warp_s0_001
-    output['warp_s0_01'] = warp_s0_01
-    output['warp_s0_1'] = warp_s0_1
+
+    for s in S_VALS:
+        key = 'warp_s' + str(s).replace('.','_')
+        output[key] = randomly_warp_point_cloud(dem_cloud, s)
     output.close()
 
 if __name__ == "__main__":
