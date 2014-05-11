@@ -11,6 +11,7 @@
 #     "warp_cloud_<ID>" -> numpy array with same format as above
 
 import argparse, h5py, Image, math, numpy as np
+import scipy.spatial.distance as ssd
 
 WHITE = (255, 255, 255)
 Z_MULT = 30.0  # range of z = min(x_axis_pixels, y_axis_pixels) / Z_MULT
@@ -37,6 +38,23 @@ def get_point_cloud(imagefile, target_size, add_z):
 
     return np.asarray(list(point_set))
 
+def randomly_warp_point_cloud(cloud, s):
+    # The weights of the Gaussian RBF are randomly drawn from N(0, s^2)
+    # cloud: Numpy array with XYZRGB info per row (or XYZRGB)
+    # resulting warp: f(x) = x + \sum_{i=1}^N \lambda_i \phi(||x-x_i||_2)
+    n,d = cloud.shape
+    d -= 3  # To account for the three RGB coordinates
+    cloud_xy = cloud[:,:2]
+
+    weights_x = np.random.normal(0,s,n)
+    weights_y = np.random.normal(0,s,n)
+    pdists = ssd.squareform(ssd.pdist(cloud_xy, 'euclidean'))
+    warped_cloud_xy = cloud.copy()
+    #import IPython as ipy
+    #ipy.embed()
+    warped_cloud_xy[:,:2] = cloud_xy + np.transpose(np.vstack((weights_x.dot(pdists), weights_y.dot(pdists))))
+    return warped_cloud_xy
+
 def rotate_point_cloud(cloud, theta):
     # theta must be in radians
     rot_matrix = np.asarray([[math.cos(theta), -1*math.sin(theta)], \
@@ -61,7 +79,10 @@ def main():
     warp_rot30 = rotate_point_cloud(dem_cloud, math.pi/6)
     warp_rot60 = rotate_point_cloud(dem_cloud, math.pi/3)
     warp_rot180 = rotate_point_cloud(dem_cloud, math.pi)
-    # TODO: Generate random rotations (see how Chui et al. did in TPS-RPM paper)
+
+    warp_s0_001 = randomly_warp_point_cloud(dem_cloud, 0.001)
+    warp_s0_01 = randomly_warp_point_cloud(dem_cloud, 0.01)
+    warp_s0_1 = randomly_warp_point_cloud(dem_cloud, 0.1)
 
     output = h5py.File(args.output_file, 'w')
     output['orig_cloud'] = orig_cloud
@@ -69,6 +90,9 @@ def main():
     output['warp_cloud_rot30'] = warp_rot30
     output['warp_cloud_rot60'] = warp_rot60
     output['warp_cloud_rot180'] = warp_rot180
+    output['warp_s0_001'] = warp_s0_001
+    output['warp_s0_01'] = warp_s0_01
+    output['warp_s0_1'] = warp_s0_1
     output.close()
 
 if __name__ == "__main__":

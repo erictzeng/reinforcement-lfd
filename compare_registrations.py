@@ -10,21 +10,38 @@
 #                 same format
 
 import argparse, h5py, numpy as np
-from rapprentice import registration, registrations
+import scipy.spatial.distance as ssd
+from rapprentice import clouds, registration, registrations
+
+DS_SIZE = 0.025
+
+def downsample_cloud(cloud):
+    # cloud should have XYZRGB info per row
+    d = 3
+    cloud_xyz = cloud[:,:d]
+    cloud_xyz_downsamp = clouds.downsample(cloud_xyz, DS_SIZE)
+    new_n,_ = cloud_xyz_downsamp.shape
+    dists = ssd.cdist(cloud_xyz_downsamp, cloud_xyz)
+    min_indices = dists.argmin(axis=1)
+    cloud_xyzrgb_downsamp = np.zeros((new_n,d+3))
+    cloud_xyzrgb_downsamp[:,:d] = cloud_xyz_downsamp
+    cloud_xyzrgb_downsamp[:,d:] = cloud[min_indices,d:]
+    print cloud_xyzrgb_downsamp.shape
+    return cloud_xyzrgb_downsamp
 
 def run_experiments(input_file, plot_color):
     clouds = h5py.File(input_file)
     _,d = clouds['orig_cloud'][()].shape
     d = d - 3  # ignore the RGB values
-    y_xyzrgb = clouds['orig_cloud'][()]
-    y_md = clouds['orig_cloud'][()][:,:d]
+    y_xyzrgb = downsample_cloud(clouds['orig_cloud'][()])
+    y_md = y_xyzrgb[:,:d]
 
     for k in clouds:
-        if not k.startswith('warp'):
+        if not k.startswith('warp_s'):
             continue
         print "TESTING:", k
-        x_xyzrgb = clouds[k][()]
-        x_nd = clouds[k][()][:,:d]
+        x_xyzrgb = downsample_cloud(clouds[k][()])
+        x_nd = x_xyzrgb[:,:d]
         vis_costs_xy = registrations.ab_cost(x_xyzrgb, y_xyzrgb)
 
         def plot_cb(x_nd, y_md, corr_nm, f):
