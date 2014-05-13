@@ -4,12 +4,12 @@
 # features.
 #
 # Arguments:
-#     input_file: h5 file with the key "orig_cloud" corresponding to a numpy
+#     input_file: h5 file with the key "dem_cloud" corresponding to a numpy
 #                 array containing [x,y,r,b,g] info for the original points, and
 #                 all other keys corresponding to warped point clouds in the
 #                 same format
 
-import argparse, h5py, numpy as np
+import argparse, h5py, numpy as np, os
 import scipy.spatial.distance as ssd
 from rapprentice import clouds, registration, registrations
 
@@ -29,65 +29,71 @@ def downsample_cloud(cloud):
     print cloud_xyzrgb_downsamp.shape
     return cloud_xyzrgb_downsamp
 
-def run_experiments(input_file, plot_color):
+def run_experiments(input_file, output_folder, plot_color):
     clouds = h5py.File(input_file)
-    _,d = clouds['orig_cloud'][()].shape
+    _,d = clouds['dem_cloud'][()].shape
     d = d - 3  # ignore the RGB values
-    y_xyzrgb = downsample_cloud(clouds['orig_cloud'][()])
-    y_md = y_xyzrgb[:,:d]
+    x_xyzrgb = downsample_cloud(clouds['dem_cloud'][()])
+    x_nd = x_xyzrgb[:,:d]
+    output_prefix = os.path.join(output_folder, "")
 
     for k in clouds:
-        if not k.startswith('warp_s'):
+        if not k.startswith('warp'):
             continue
         print "TESTING:", k
-        x_xyzrgb = downsample_cloud(clouds[k][()])
-        x_nd = x_xyzrgb[:,:d]
+        y_xyzrgb = downsample_cloud(clouds[k][()])
+        y_md = y_xyzrgb[:,:d]
         vis_costs_xy = registrations.ab_cost(x_xyzrgb, y_xyzrgb)
 
-        def plot_cb(x_nd, y_md, corr_nm, f):
+        def plot_cb(x_nd, y_md, corr_nm, f, output_prefix, iteration):
             if plot_color:
-                registrations.plot_callback(x_nd, y_md, corr_nm, f, x_color = x_xyzrgb[:,d:], y_color = y_xyzrgb[:,d:])
+                registrations.plot_callback(x_nd, y_md, corr_nm, f, output_prefix, iteration, x_color = x_xyzrgb[:,d:], y_color = y_xyzrgb[:,d:])
             else:
-                registrations.plot_callback(x_nd, y_md, corr_nm, f)
+                registrations.plot_callback(x_nd, y_md, corr_nm, f, output_prefix, iteration)
 
         print "Reg4 EM, w/ visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.reg4_em_step, vis_cost_xy = vis_costs_xy,
-                plotting=1, plot_cb = plot_cb)
+                plotting=1, plot_cb = plot_cb,
+                output_prefix = output_prefix + k + "_reg4vis")
 
         print "Reg4 EM, w/o visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.reg4_em_step,
-                plotting=1, plot_cb = plot_cb)
+                plotting=1, plot_cb = plot_cb,
+                output_prefix = output_prefix + k + "_reg4")
 
         print "RPM EM, w/ visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.rpm_em_step, vis_cost_xy = vis_costs_xy,
-                plotting=1, plot_cb = plot_cb)
+                plotting=1, plot_cb = plot_cb,
+                output_prefix = output_prefix + k + "_rpmvis")
 
         print "RPM EM, w/o visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.rpm_em_step,
-                plotting=1, plot_cb = plot_cb)
+                plotting=1, plot_cb = plot_cb,
+                output_prefix = output_prefix + k + "_rpm")
         
         def plot_cb_bij(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f):
             if plot_color:
-                registrations.plot_callback(x_nd, y_md, corr_nm, f, res = (.3, .3, .12), x_color = x_xyzrgb[:,d:], y_color = y_xyzrgb[:,d:])
+                registrations.plot_callback(x_nd, y_md, corr_nm, f, output_prefix + k + "_rpmbij", iteration, res = (.3, .3, .12), x_color = x_xyzrgb[:,d:], y_color = y_xyzrgb[:,d:])
             else:
-                registrations.plot_callback(x_nd, y_md, corr_nm, f, res = (.3, .3, .12))
-        scaled_x_nd, _ = registration.unit_boxify(x_nd)
-        scaled_y_md, _ = registration.unit_boxify(y_md)
-        f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, plot_cb=plot_cb_bij,
-                                       plotting=1, rot_reg=np.r_[1e-4, 1e-4, 1e-1][:d], 
-                                       n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2)
+                registrations.plot_callback(x_nd, y_md, corr_nm, f, output_prefix + k + "_rpmbij", iteration, res = (.4, .3, .12))
+        #scaled_x_nd, _ = registration.unit_boxify(x_nd)
+        #scaled_y_md, _ = registration.unit_boxify(y_md)
+        #f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, plot_cb=plot_cb_bij,
+        #                               plotting=1, rot_reg=np.r_[1e-4, 1e-4, 1e-1][:d], 
+        #                               n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("input_file", type=str)
+    parser.add_argument("output_folder", type=str)
     parser.add_argument("--plot_color", type=int, default=1)
 
     args = parser.parse_args()
-    run_experiments(args.input_file, args.plot_color)
+    run_experiments(args.input_file, args.output_folder, args.plot_color)
 
 if __name__ == "__main__":
     main()
