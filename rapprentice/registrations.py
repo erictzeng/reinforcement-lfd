@@ -11,7 +11,7 @@ import pylab
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-from plotting_plt import plot_warped_grid_2d, plot_warped_grid_3d
+from plotting_plt import plot_warped_grid_2d, plot_warped_grid_3d, plot_warped_grid_proj_2d
 
 import IPython as ipy
 
@@ -242,11 +242,11 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = Non
     bend_cost = bend_cost / float(l)
     return A, f, res_cost, bend_cost, total_cost
 
-def plot_callback(x_nd, y_md, corr_nm, f, iteration, output_prefix = None, res = (.1, .1, .04), x_color=None, y_color=None):
+def plot_callback(x_nd, y_md, corr_nm, f, iteration, output_prefix = None, res = (.1, .1, .04), x_color=None, y_color=None, proj_2d=False):
     """
     Plots warp visualization
-    x_nd: source points plotted with '+' and x_color (or red if not especified)
-    y_md: target points plotted with 'x' and y_color (or blue if not especified)
+    x_nd: source points plotted with ',' and x_color (or red if not especified)
+    y_md: target points plotted with '+' and y_color (or blue if not especified)
     warped points plotted with 'o' and x_color (or green if not especified)
     """
     _,d = x_nd.shape
@@ -260,7 +260,10 @@ def plot_callback(x_nd, y_md, corr_nm, f, iteration, output_prefix = None, res =
         y_color = (0,0,1,1)
     
     if d == 3:
-        plot_callback_3d(x_nd, y_md, corr_nm, f, iteration, output_prefix, res, x_color, y_color, xwarped_color)
+        if proj_2d:
+            plot_callback_proj_2d(x_nd, y_md, corr_nm, f, iteration, output_prefix, res, x_color, y_color, xwarped_color)
+        else:
+            plot_callback_3d(x_nd, y_md, corr_nm, f, iteration, output_prefix, res, x_color, y_color, xwarped_color)
     else:
         plot_callback_2d(x_nd, y_md, corr_nm, f, iteration, output_prefix, x_color, y_color, xwarped_color)
 
@@ -272,10 +275,10 @@ def plot_callback_2d(x_nd, y_md, corr_nm, f, iteration, output_prefix, x_color, 
     plt.clf()
     plt.cla()
 
-    plt.scatter(x_nd[:,0], x_nd[:,1], c=x_color, marker='+', s=50)
-    plt.scatter(y_md[:,0], y_md[:,1], c=y_color, marker='x', s=50)
+    plt.scatter(x_nd[:,0], x_nd[:,1], c=x_color, edgecolors=x_color, marker=',', s=5)
+    plt.scatter(y_md[:,0], y_md[:,1], c=y_color, marker='+', s=50)
     xwarped_nd = f.transform_points(x_nd)
-    plt.scatter(xwarped_nd[:,0], xwarped_nd[:,1], c=xwarped_color, marker='o', s=50)
+    plt.scatter(xwarped_nd[:,0], xwarped_nd[:,1], edgecolors=xwarped_color, facecolors='none', marker='o', s=50)
     
     grid_means = .5 * (x_nd.max(axis=0) + x_nd.min(axis=0))
     grid_mins = grid_means - (x_nd.max(axis=0) - x_nd.min(axis=0))
@@ -295,10 +298,10 @@ def plot_callback_3d(x_nd, y_md, corr_nm, f, iteration, output_prefix, res, x_co
     ax = plt.gcf().gca(projection='3d')
     ax.set_aspect('equal')
 
-    ax.scatter(x_nd[:,0], x_nd[:,1], x_nd[:,2], c=x_color, marker='+', s=50)
-    ax.scatter(y_md[:,0], y_md[:,1], y_md[:,2], c=y_color, marker='x', s=50)
+    ax.scatter(x_nd[:,0], x_nd[:,1], x_nd[:,2], c=x_color, edgecolors=x_color, marker=',', s=5)
+    ax.scatter(y_md[:,0], y_md[:,1], y_md[:,2], c=y_color, marker='+', s=50)
     xwarped_nd = f.transform_points(x_nd)
-    ax.scatter(xwarped_nd[:,0], xwarped_nd[:,1], xwarped_nd[:,2], c=xwarped_color, marker='o', s=50)
+    ax.scatter(xwarped_nd[:,0], xwarped_nd[:,1], xwarped_nd[:,2], edgecolors=xwarped_color, facecolors='none', marker='o', s=50)
 
     # manually set axes limits at a cube's bounding box since matplotlib doesn't correctly set equal axis in 3D
     max_pts = np.r_[x_nd, y_md, xwarped_nd].max(axis=0)
@@ -319,6 +322,26 @@ def plot_callback_3d(x_nd, y_md, corr_nm, f, iteration, output_prefix, res, x_co
     # save plot to file
     if output_prefix is not None:
         pylab.savefig(output_prefix + "_iter" + str(iteration) + '.png')
+
+def plot_callback_proj_2d(x_nd, y_md, corr_nm, f, iteration, output_prefix, res, x_color, y_color, xwarped_color):
+    # set interactive
+    plt.ion()
+    
+    # clear previous plots
+    plt.clf()
+    plt.cla()
+    
+    plt.scatter(x_nd[:,0], x_nd[:,1], c=x_color, edgecolors=x_color, marker=',', s=5)
+    plt.scatter(y_md[:,0], y_md[:,1], c=y_color, marker='+', s=50)
+    xwarped_nd = f.transform_points(x_nd)
+    plt.scatter(xwarped_nd[:,0], xwarped_nd[:,1], edgecolors=xwarped_color, facecolors='none', marker='o', s=50)
+
+    grid_means = .5 * (x_nd.max(axis=0) + x_nd.min(axis=0))
+    grid_mins = grid_means - (x_nd.max(axis=0) - x_nd.min(axis=0))
+    grid_maxs = grid_means + (x_nd.max(axis=0) - x_nd.min(axis=0))
+    plot_warped_grid_proj_2d(f.transform_points, grid_mins[:2], grid_maxs[:2], xres=res[0], yres=res[1])
+    
+    plt.draw()
 
 def main():
     # Test reg4_em_step

@@ -29,14 +29,14 @@ def downsample_cloud(cloud):
     print cloud_xyzrgb_downsamp.shape
     return cloud_xyzrgb_downsamp
 
-def run_experiments(input_file, output_folder, plot_color):
-    clouds = h5py.File(input_file)
+def run_experiments(args):
+    clouds = h5py.File(args.input_file)
     _,d = clouds['dem_cloud'][()].shape
     d = d - 3  # ignore the RGB values
     x_xyzrgb = downsample_cloud(clouds['dem_cloud'][()])
     x_nd = x_xyzrgb[:,:d]
-    if output_folder:
-        output_prefix = os.path.join(output_folder, "")
+    if args.output_folder:
+        output_prefix = os.path.join(args.output_folder, "")
     else:
         output_prefix = None
 
@@ -50,10 +50,10 @@ def run_experiments(input_file, output_folder, plot_color):
 
         def plot_cb_gen(output_prefix):
             def plot_cb(x_nd, y_md, corr_nm, f, iteration):
-                if plot_color:
-                    registrations.plot_callback(x_nd, y_md, corr_nm, f, iteration, output_prefix, x_color = x_xyzrgb[:,d:], y_color = y_xyzrgb[:,d:])
+                if args.plot_color:
+                    registrations.plot_callback(x_nd, y_md, corr_nm, f, iteration, output_prefix, x_color = x_xyzrgb[:,d:], y_color = y_xyzrgb[:,d:], proj_2d=args.proj)
                 else:
-                    registrations.plot_callback(x_nd, y_md, corr_nm, f, iteration, output_prefix)
+                    registrations.plot_callback(x_nd, y_md, corr_nm, f, iteration, output_prefix, proj_2d=args.proj)
             return plot_cb
 
         print "Reg4 EM, w/ visual features"
@@ -77,7 +77,7 @@ def run_experiments(input_file, output_folder, plot_color):
                 plotting=1, plot_cb = plot_cb_gen(output_prefix + k + "_rpm" if output_prefix else None))
         
         def plot_cb_bij(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f):
-            if plot_color:
+            if args.plot_color:
                 registrations.plot_callback(x_nd, y_md, corr_nm, f, output_prefix + k + "_rpmbij", iteration, res = (.3, .3, .12), x_color = x_xyzrgb[:,d:], y_color = y_xyzrgb[:,d:])
             else:
                 registrations.plot_callback(x_nd, y_md, corr_nm, f, output_prefix + k + "_rpmbij", iteration, res = (.4, .3, .12))
@@ -92,9 +92,10 @@ def main():
     parser.add_argument("input_file", type=str)
     parser.add_argument("--output_folder", type=str, default="")
     parser.add_argument("--plot_color", type=int, default=1)
+    parser.add_argument("--proj", type=int, default=1, help="project 3d visualization into 2d")
 
     args = parser.parse_args()
-    run_experiments(args.input_file, args.output_folder, args.plot_color)
+    run_experiments(args)
 
 if __name__ == "__main__":
     main()
