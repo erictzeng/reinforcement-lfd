@@ -35,7 +35,7 @@ def plot_warped_grid_2d(f, mins, maxes, grid_res=None, color = 'gray', flipax = 
         xy[:,1] = y
         lines.append(f(xy)[:,::sgn])        
 
-    lc = matplotlib.collections.LineCollection(lines,colors=color,lw=2)
+    lc = matplotlib.collections.LineCollection(lines,colors=color,lw=1)
     ax = plt.gca()
     ax.add_collection(lc)
     plt.draw()
@@ -88,7 +88,41 @@ def plot_warped_grid_3d(f, mins, maxes, xres = .1, yres = .1, zres = .04, color 
             xyz[:,2] = z
             lines.append(f(xyz))
 
-    lc = art3d.Line3DCollection(lines,colors=color,lw=2)
+    lc = art3d.Line3DCollection(lines,colors=color,lw=1)
+    ax = plt.gca()
+    ax.add_collection(lc)
+    plt.draw()
+
+def plot_warped_grid_proj_2d(f, mins, maxes, xres = .1, yres = .1, color = 'gray'):
+    import matplotlib.pyplot as plt
+    import matplotlib
+    xmin, ymin = mins
+    xmax, ymax = maxes
+
+    nfine = 30
+    xcoarse = np.arange(xmin, xmax, xres)
+    xmax = xcoarse[-1];
+    ycoarse = np.arange(ymin, ymax, yres)
+    ymax = ycoarse[-1];
+    xfine = np.linspace(xmin, xmax, nfine)
+    yfine = np.linspace(ymin, ymax, nfine)
+    
+    lines = []
+    for y in ycoarse:
+        xyz = np.zeros((nfine, 3))
+        xyz[:,0] = xfine
+        xyz[:,1] = y
+        xyz[:,2] = 0
+        lines.append(f(xyz)[:,:2])
+        
+    for x in xcoarse:
+        xyz = np.zeros((nfine, 3))
+        xyz[:,0] = x
+        xyz[:,1] = yfine
+        xyz[:,2] = 0
+        lines.append(f(xyz)[:,:2])
+
+    lc = matplotlib.collections.LineCollection(lines,colors=color,lw=1)
     ax = plt.gca()
     ax.add_collection(lc)
     plt.draw()
