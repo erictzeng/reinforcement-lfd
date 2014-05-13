@@ -64,7 +64,7 @@ def ab_cost(xyzrgb1, xyzrgb2):
     cost = ssd.cdist(lab1[:,1:], lab2[:,1:], 'euclidean')
     return cost
 
-def sim_annealing_registration(x_nd, y_md, em_step_fcn, output_prefix = None, n_iter = 20, lambda_init = 1., lambda_final = .05, T_init = .02, T_final = .0002, 
+def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init = 10., lambda_final = .1, T_init = .04, T_final = .0002, 
                                plotting = False, plot_cb = None, rot_reg = np.r_[1e-4, 1e-4, 1e-1], beta = 1., vis_cost_xy = None, em_iter = 5):
     """
     Outer loop of simulated annealing
@@ -89,14 +89,14 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, output_prefix = None, n_
             corr_nm, f, res_cost, bend_cost, total_cost = em_step_fcn(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, beta, vis_cost_xy = vis_cost_xy, T0 = T_init)
         
         if plotting and i%plotting==0:
-            plot_cb(x_nd, y_md, corr_nm, f, output_prefix, i)
+            plot_cb(x_nd, y_md, corr_nm, f, i)
     print "TPS cost:", bend_cost
     print "Lambda:", lambda_final
     print "Sq Dist / wt.mean():", res_cost
     print "Sq Dist + Lambda * TPS cost (optimization function): ", total_cost
     return f, bend_cost, res_cost, total_cost
 
-def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, T0 = .02, outlierfrac = 0.01, normalize_iter = 20):
+def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, T0 = .04, outlierfrac = 0.01, normalize_iter = 20):
     """
     Function for TPS-RPM (as described in Chui et al.), with and w/o visual
     features.
@@ -242,7 +242,7 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = Non
     bend_cost = bend_cost / float(l)
     return A, f, res_cost, bend_cost, total_cost
 
-def plot_callback(x_nd, y_md, corr_nm, f, output_prefix, iteration, res = (.1, .1, .04), x_color=None, y_color=None):
+def plot_callback(x_nd, y_md, corr_nm, f, iteration, output_prefix = None, res = (.1, .1, .04), x_color=None, y_color=None):
     """
     Plots warp visualization
     x_nd: source points plotted with '+' and x_color (or red if not especified)
@@ -260,11 +260,11 @@ def plot_callback(x_nd, y_md, corr_nm, f, output_prefix, iteration, res = (.1, .
         y_color = (0,0,1,1)
     
     if d == 3:
-        plot_callback_3d(x_nd, y_md, corr_nm, f, output_prefix, iteration, res, x_color, y_color, xwarped_color)
+        plot_callback_3d(x_nd, y_md, corr_nm, f, iteration, output_prefix, res, x_color, y_color, xwarped_color)
     else:
-        plot_callback_2d(x_nd, y_md, corr_nm, f, output_prefix, iteration, x_color, y_color, xwarped_color)
+        plot_callback_2d(x_nd, y_md, corr_nm, f, iteration, output_prefix, x_color, y_color, xwarped_color)
 
-def plot_callback_2d(x_nd, y_md, corr_nm, f, output_prefix, iteration, x_color, y_color, xwarped_color):
+def plot_callback_2d(x_nd, y_md, corr_nm, f, iteration, output_prefix, x_color, y_color, xwarped_color):
     # set interactive
     plt.ion()
     
@@ -284,7 +284,7 @@ def plot_callback_2d(x_nd, y_md, corr_nm, f, output_prefix, iteration, x_color, 
     
     plt.draw()
 
-def plot_callback_3d(x_nd, y_md, corr_nm, f, output_prefix, iteration, res, x_color, y_color, xwarped_color):
+def plot_callback_3d(x_nd, y_md, corr_nm, f, iteration, output_prefix, res, x_color, y_color, xwarped_color):
     # set interactive
     plt.ion()
     
