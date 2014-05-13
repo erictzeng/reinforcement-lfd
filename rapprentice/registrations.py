@@ -94,7 +94,7 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, output_prefix = None, n_
     print "Lambda:", lambda_final
     print "Sq Dist / wt.mean():", res_cost
     print "Sq Dist + Lambda * TPS cost (optimization function): ", total_cost
-    return f
+    return f, bend_cost, res_cost, total_cost
 
 def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, T0 = .02, outlierfrac = 0.01, normalize_iter = 20):
     """
