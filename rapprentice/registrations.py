@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 
 from __future__ import division
-import numpy as np
+import numpy as np, os
 import scipy.spatial.distance as ssd
 import scipy.spatial as sp_spat
-from rapprentice.registration import loglinspace, ThinPlateSpline, fit_ThinPlateSpline, tps_reg_cost
+from rapprentice.registration import loglinspace, ThinPlateSpline, fit_ThinPlateSpline
+from tps import tps_cost
 
+import pylab
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -62,7 +64,7 @@ def ab_cost(xyzrgb1, xyzrgb2):
     cost = ssd.cdist(lab1[:,1:], lab2[:,1:], 'euclidean')
     return cost
 
-def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init = 1., lambda_final = .05, T_init = .02, T_final = .0002, 
+def sim_annealing_registration(x_nd, y_md, em_step_fcn, output_prefix = None, n_iter = 20, lambda_init = 1., lambda_final = .05, T_init = .02, T_final = .0002, 
                                plotting = False, plot_cb = None, rot_reg = np.r_[1e-4, 1e-4, 1e-1], beta = 1., vis_cost_xy = None, em_iter = 5):
     """
     Outer loop of simulated annealing
@@ -84,11 +86,14 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init
 
     for i in xrange(n_iter):
         for _ in xrange(em_iter):
-            corr_nm, f = em_step_fcn(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, beta, vis_cost_xy = vis_cost_xy, T0 = T_init)
+            corr_nm, f, res_cost, bend_cost, total_cost = em_step_fcn(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, beta, vis_cost_xy = vis_cost_xy, T0 = T_init)
         
         if plotting and i%plotting==0:
-            plot_cb(x_nd, y_md, corr_nm, f)
-    print "Warp cost:", tps_reg_cost(f)
+            plot_cb(x_nd, y_md, corr_nm, f, output_prefix, i)
+    print "TPS cost:", bend_cost
+    print "Lambda:", lambda_final
+    print "Sq Dist / wt.mean():", res_cost
+    print "Sq Dist + Lambda * TPS cost (optimization function): ", total_cost
     return f
 
 def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, T0 = .02, normalize_iter = 20):
@@ -126,7 +131,10 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None
     xtarg_nd = (corr_nm/wt_n[:,None]).dot(y_md)
 
     f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = l, wt_n = wt_n, rot_coef = rot_reg[:d])
-    return corr_nm, f
+    res_cost, bend_cost, total_cost = tps_cost(f.lin_ag, f.trans_g, f.w_ng, f.x_na, xtarg_nd, l, wt_n=wt_n, return_tuple = True)
+    res_cost = res_cost / wt_n.mean()
+    bend_cost = bend_cost / float(l)
+    return corr_nm, f, res_cost, bend_cost, total_cost
 
 def reg4_em_step_slow(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, delta = 10., T0 = .02):
     """
@@ -220,9 +228,12 @@ def reg4_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = Non
         
     # M-step
     f = fit_ThinPlateSpline(x_nd, y_md_approx, bend_coef = l, wt_n = wt, rot_coef = rot_reg[:d])
-    return A, f
+    res_cost, bend_cost, total_cost = tps_cost(f.lin_ag, f.trans_g, f.w_ng, f.x_na, y_md_approx, l, wt_n=wt, return_tuple = True)
+    res_cost = res_cost / wt.mean()
+    bend_cost = bend_cost / float(l)
+    return A, f, res_cost, bend_cost, total_cost
 
-def plot_callback(x_nd, y_md, corr_nm, f, res = (.1, .1, .04), x_color=None, y_color=None):
+def plot_callback(x_nd, y_md, corr_nm, f, output_prefix, iteration, res = (.1, .1, .04), x_color=None, y_color=None):
     """
     Plots warp visualization
     x_nd: source points plotted with '+' and x_color (or red if not especified)
@@ -240,11 +251,11 @@ def plot_callback(x_nd, y_md, corr_nm, f, res = (.1, .1, .04), x_color=None, y_c
         y_color = (0,0,1,1)
     
     if d == 3:
-        plot_callback_3d(x_nd, y_md, corr_nm, f, res, x_color, y_color, xwarped_color)
+        plot_callback_3d(x_nd, y_md, corr_nm, f, output_prefix, iteration, res, x_color, y_color, xwarped_color)
     else:
-        plot_callback_2d(x_nd, y_md, corr_nm, f, x_color, y_color, xwarped_color)
+        plot_callback_2d(x_nd, y_md, corr_nm, f, output_prefix, iteration, x_color, y_color, xwarped_color)
 
-def plot_callback_2d(x_nd, y_md, corr_nm, f, x_color, y_color, xwarped_color):
+def plot_callback_2d(x_nd, y_md, corr_nm, f, output_prefix, iteration, x_color, y_color, xwarped_color):
     # set interactive
     plt.ion()
     
@@ -264,7 +275,7 @@ def plot_callback_2d(x_nd, y_md, corr_nm, f, x_color, y_color, xwarped_color):
     
     plt.draw()
 
-def plot_callback_3d(x_nd, y_md, corr_nm, f, res, x_color, y_color, xwarped_color):
+def plot_callback_3d(x_nd, y_md, corr_nm, f, output_prefix, iteration, res, x_color, y_color, xwarped_color):
     # set interactive
     plt.ion()
     
@@ -295,6 +306,10 @@ def plot_callback_3d(x_nd, y_md, corr_nm, f, res, x_color, y_color, xwarped_colo
     plot_warped_grid_3d(f.transform_points, grid_mins, grid_maxs, xres=res[0], yres=res[1], zres=res[2])
     
     plt.draw()
+
+    # save plot to file
+    if output_prefix is not None:
+        pylab.savefig(output_prefix + "_iter" + str(iteration) + '.png')
 
 def main():
     # Test reg4_em_step
