@@ -96,25 +96,34 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, output_prefix = None, n_
     print "Sq Dist + Lambda * TPS cost (optimization function): ", total_cost
     return f
 
-def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, T0 = .02, normalize_iter = 20):
+def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, T0 = .02, outlierfrac = 0.01, normalize_iter = 20):
     """
     Function for TPS-RPM (as described in Chui et al.), with and w/o visual
     features.
     """
-    _,d = x_nd.shape
+    n,d = x_nd.shape
+    m,_ = y_md.shape
     xwarped_nd = prev_f.transform_points(x_nd)
     
-    dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean') / (2*T)
+    dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean')
+    prob_nm = np.exp( -dist_nm / (2*T) ) / np.sqrt(T)
     if beta != 0 and vis_cost_xy != None:
-        dist_nm += beta * vis_cost_xy
-    prob_nm = np.exp( -dist_nm ) / np.sqrt(T)
-        
+        pi = np.exp( -beta * vis_cost_xy )
+        pi /= pi.sum(axis=0)[None,:] # normalize along columns
+        prob_nm *= pi
+    else:
+        prob_nm *= 1./float(n)
+    
     outlier_dist_1m = ssd.cdist(np.mean(xwarped_nd, axis=0)[None,:], y_md, 'sqeuclidean')
     outlier_dist_n1 = ssd.cdist(xwarped_nd, np.mean(y_md, axis=0)[None,:], 'sqeuclidean')
-    outlier_prob_1m = np.exp( -outlier_dist_1m / (2*T0) ) / np.sqrt(T0) # add visual cost to outlier terms?
+    outlier_prob_1m = np.exp( -outlier_dist_1m / (2*T0) ) / np.sqrt(T0)
     outlier_prob_n1 = np.exp( -outlier_dist_n1 / (2*T0) ) / np.sqrt(T0)
+    outlier_prob_1m *= outlierfrac/(1.-outlierfrac)
+    if beta != 0 and vis_cost_xy != None:
+        outlier_prob_n1 *= pi.sum(axis=1)[:,None] * outlierfrac/(1.-outlierfrac)
+    else:
+        outlier_prob_n1 *= (float(m)/float(n)) * outlierfrac/(1.-outlierfrac)
     
-    n,m = prob_nm.shape
     prob_NM = np.empty((n+1, m+1))
     prob_NM[:n, :m] = prob_nm
     prob_NM[:n, m][:,None] = outlier_prob_n1
