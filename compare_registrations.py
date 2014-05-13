@@ -35,7 +35,10 @@ def run_experiments(input_file, output_folder, plot_color):
     d = d - 3  # ignore the RGB values
     x_xyzrgb = downsample_cloud(clouds['dem_cloud'][()])
     x_nd = x_xyzrgb[:,:d]
-    output_prefix = os.path.join(output_folder, "")
+    if output_folder:
+        output_prefix = os.path.join(output_folder, "")
+    else:
+        output_prefix = None
 
     for k in clouds:
         if not k.startswith('warp'):
@@ -45,35 +48,33 @@ def run_experiments(input_file, output_folder, plot_color):
         y_md = y_xyzrgb[:,:d]
         vis_costs_xy = registrations.ab_cost(x_xyzrgb, y_xyzrgb)
 
-        def plot_cb(x_nd, y_md, corr_nm, f, output_prefix, iteration):
-            if plot_color:
-                registrations.plot_callback(x_nd, y_md, corr_nm, f, output_prefix, iteration, x_color = x_xyzrgb[:,d:], y_color = y_xyzrgb[:,d:])
-            else:
-                registrations.plot_callback(x_nd, y_md, corr_nm, f, output_prefix, iteration)
+        def plot_cb_gen(output_prefix):
+            def plot_cb(x_nd, y_md, corr_nm, f, iteration):
+                if plot_color:
+                    registrations.plot_callback(x_nd, y_md, corr_nm, f, iteration, output_prefix, x_color = x_xyzrgb[:,d:], y_color = y_xyzrgb[:,d:])
+                else:
+                    registrations.plot_callback(x_nd, y_md, corr_nm, f, iteration, output_prefix)
+            return plot_cb
 
         print "Reg4 EM, w/ visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.reg4_em_step, vis_cost_xy = vis_costs_xy,
-                plotting=1, plot_cb = plot_cb,
-                output_prefix = output_prefix + k + "_reg4vis")
+                plotting=1, plot_cb = plot_cb_gen(output_prefix + k + "_reg4vis" if output_prefix else None))
 
         print "Reg4 EM, w/o visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.reg4_em_step,
-                plotting=1, plot_cb = plot_cb,
-                output_prefix = output_prefix + k + "_reg4")
+                plotting=1, plot_cb = plot_cb_gen(output_prefix + k + "_reg4" if output_prefix else None))
 
         print "RPM EM, w/ visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.rpm_em_step, vis_cost_xy = vis_costs_xy,
-                plotting=1, plot_cb = plot_cb,
-                output_prefix = output_prefix + k + "_rpmvis")
+                plotting=1, plot_cb = plot_cb_gen(output_prefixk + "_rpmvis" if output_prefix else None))
 
         print "RPM EM, w/o visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.rpm_em_step,
-                plotting=1, plot_cb = plot_cb,
-                output_prefix = output_prefix + k + "_rpm")
+                plotting=1, plot_cb = plot_cb_gen(output_prefix + k + "_rpm" if output_prefix else None))
         
         def plot_cb_bij(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f):
             if plot_color:
@@ -89,7 +90,7 @@ def run_experiments(input_file, output_folder, plot_color):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("input_file", type=str)
-    parser.add_argument("output_folder", type=str)
+    parser.add_argument("--output_folder", type=str, default="")
     parser.add_argument("--plot_color", type=int, default=1)
 
     args = parser.parse_args()
