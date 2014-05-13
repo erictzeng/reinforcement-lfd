@@ -321,7 +321,7 @@ def plot_callback_3d(x_nd, y_md, corr_nm, f, iteration, output_prefix, res, x_co
 
     # save plot to file
     if output_prefix is not None:
-        pylab.savefig(output_prefix + "_iter" + str(iteration) + '.png')
+        plt.savefig(output_prefix + "_iter" + str(iteration) + '.png')
 
 def plot_callback_proj_2d(x_nd, y_md, corr_nm, f, iteration, output_prefix, res, x_color, y_color, xwarped_color):
     # set interactive
@@ -331,7 +331,15 @@ def plot_callback_proj_2d(x_nd, y_md, corr_nm, f, iteration, output_prefix, res,
     plt.clf()
     plt.cla()
     
-    plt.scatter(x_nd[:,0], x_nd[:,1], c=x_color, edgecolors=x_color, marker=',', s=5)
+    plt.axis('off')
+    
+    if output_prefix is not None:
+        plt.scatter(x_nd[:,0], x_nd[:,1], c=x_color, edgecolors=x_color, marker=',', s=5)
+        plt.savefig(output_prefix + "_orig.png", bbox_inches='tight')
+        plt.clf()
+        plt.cla()
+        plt.axis('off')
+    
     plt.scatter(y_md[:,0], y_md[:,1], c=y_color, marker='+', s=50)
     xwarped_nd = f.transform_points(x_nd)
     plt.scatter(xwarped_nd[:,0], xwarped_nd[:,1], edgecolors=xwarped_color, facecolors='none', marker='o', s=50)
@@ -340,6 +348,10 @@ def plot_callback_proj_2d(x_nd, y_md, corr_nm, f, iteration, output_prefix, res,
     grid_mins = grid_means - (x_nd.max(axis=0) - x_nd.min(axis=0))
     grid_maxs = grid_means + (x_nd.max(axis=0) - x_nd.min(axis=0))
     plot_warped_grid_proj_2d(f.transform_points, grid_mins[:2], grid_maxs[:2], xres=res[0], yres=res[1])
+    
+    # save plot to file
+    if output_prefix is not None:
+        plt.savefig(output_prefix + "_iter" + str(iteration) + '.png', bbox_inches='tight')
     
     plt.draw()
 

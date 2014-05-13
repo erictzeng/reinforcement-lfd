@@ -69,7 +69,7 @@ def run_experiments(args):
         print "RPM EM, w/ visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
                 registrations.rpm_em_step, vis_cost_xy = vis_costs_xy,
-                plotting=1, plot_cb = plot_cb_gen(output_prefixk + "_rpmvis" if output_prefix else None))
+                plotting=1, plot_cb = plot_cb_gen(output_prefix + k + "_rpmvis" if output_prefix else None))
 
         print "RPM EM, w/o visual features"
         f = registrations.sim_annealing_registration(x_nd, y_md,
