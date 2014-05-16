@@ -141,6 +141,8 @@ def main():
     import argparse, h5py, os
     import matplotlib.pyplot as plt
     from rapprentice import clouds, plotting_plt
+    import registration
+    import time
     
     parser = argparse.ArgumentParser()
     parser.add_argument("input_file", type=str)
@@ -148,6 +150,7 @@ def main():
     parser.add_argument("--plot_color", type=int, default=1)
     parser.add_argument("--proj", type=int, default=1, help="project 3d visualization into 2d")
     parser.add_argument("--visual_prior", type=int, default=1)
+    parser.add_argument("--plotting", type=int, default=1)
 
     args = parser.parse_args()
     
@@ -177,25 +180,78 @@ def main():
                 plt.savefig(output_prefix + "_iter" + str(iteration) + '.png')
         return plot_cb
 
+    def plot_cb_bij_gen(output_prefix, args, x_color, y_color):
+        def plot_cb_bij(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f):
+            if args.plot_color:
+                plotting_plt.plot_tps_registration(x_nd, y_md, f, res = (.3, .3, .12), x_color = x_color, y_color = y_color, proj_2d=args.proj)
+            else:
+                plotting_plt.plot_tps_registration(x_nd, y_md, f, res = (.4, .3, .12), proj_2d=args.proj)
+            # save plot to file
+            if output_prefix is not None:
+                plt.savefig(output_prefix + "_iter" + str(iteration) + '.png')
+        return plot_cb_bij
+
+    # preprocess and downsample clouds
     infile = h5py.File(args.input_file)
+    source_clouds = {}
+    target_clouds = {}
     for i in range(len(infile)):
         source_cloud = downsample_cloud(infile[str(i)]['source_cloud'][()])
-        
+        source_clouds[i] = source_cloud
+        target_clouds[i] = []
         for (cloud_key, target_cloud) in infile[str(i)]['target_clouds'].iteritems():
             target_cloud = downsample_cloud(target_cloud[()])
+            target_clouds[i].append(target_cloud)
+    infile.close()
+    
+    start_time = time.time()
+    for i in range(len(source_clouds)):
+        source_cloud = source_clouds[i]
+        for target_cloud in target_clouds[i]:
             print "source cloud %d and target cloud %s"%(i, cloud_key)
-            
             if args.visual_prior:
                 vis_costs_xy = ab_cost(source_cloud, target_cloud)
             else:
                 vis_costs_xy = None
-    
             f, corr_nm = tps_rpm(source_cloud[:,:-3], target_cloud[:,:-3],
                                  vis_cost_xy = vis_costs_xy,
-                                 plotting=1, plot_cb = plot_cb_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpmvis") if args.output_folder else None,
-                                                                   args,
-                                                                   source_cloud[:,-3:],
-                                                                   target_cloud[:,-3:]))
-
+                                 plotting=args.plotting, plot_cb = plot_cb_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm") if args.output_folder else None,
+                                                                               args,
+                                                                               source_cloud[:,-3:],
+                                                                               target_cloud[:,-3:]))
+    print "tps_rpm time elapsed", time.time() - start_time
+    
+    start_time = time.time()
+    for i in range(len(source_clouds)):
+        source_cloud = source_clouds[i]
+        for target_cloud in target_clouds[i]:
+            print "source cloud %d and target cloud %s"%(i, cloud_key)
+            x_nd = source_cloud[:,:3]
+            y_md = target_cloud[:,:3]
+            scaled_x_nd, _ = registration.unit_boxify(x_nd)
+            scaled_y_md, _ = registration.unit_boxify(y_md)
+            f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, rot_reg=np.r_[1e-4, 1e-4, 1e-1], n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2,
+                                           plotting=args.plotting, plot_cb=plot_cb_bij_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm_bij") if args.output_folder else None,
+                                                                                           args,
+                                                                                           source_cloud[:,-3:],
+                                                                                           target_cloud[:,-3:]))
+    print "tps_rpm_bij time elapsed", time.time() - start_time
+    
+    start_time = time.time()
+    for i in range(len(source_clouds)):
+        source_cloud = source_clouds[i]
+        for target_cloud in target_clouds[i]:
+            print "source cloud %d and target cloud %s"%(i, cloud_key)
+            x_nd = source_cloud[:,:3]
+            y_md = target_cloud[:,:3]
+            scaled_x_nd, _ = registration.unit_boxify(x_nd)
+            scaled_y_md, _ = registration.unit_boxify(y_md)
+            f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, rot_reg=1e-3, n_iter=10,
+                                           plotting=args.plotting, plot_cb=plot_cb_bij_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm_bij_cheap") if args.output_folder else None,
+                                                                                           args,
+                                                                                           source_cloud[:,-3:],
+                                                                                           target_cloud[:,-3:]))
+    print "tps_rpm_bij_cheap time elapsed", time.time() - start_time
+    
 if __name__ == "__main__":
     main()
