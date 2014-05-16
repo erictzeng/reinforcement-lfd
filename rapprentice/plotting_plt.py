@@ -2,7 +2,7 @@
 Plotting functions using matplotlib
 """
 import numpy as np
-def plot_warped_grid_2d(f, mins, maxes, grid_res=None, color = 'gray', flipax = True):
+def plot_warped_grid_2d(f, mins, maxes, grid_res=None, color = 'gray', flipax = True, draw=True):
     import matplotlib.pyplot as plt
     import matplotlib
     xmin, ymin = mins
@@ -38,10 +38,11 @@ def plot_warped_grid_2d(f, mins, maxes, grid_res=None, color = 'gray', flipax = 
     lc = matplotlib.collections.LineCollection(lines,colors=color,lw=1)
     ax = plt.gca()
     ax.add_collection(lc)
-    plt.draw()
+    if draw:
+        plt.draw()
 
 # almost copied from plotting_openrave
-def plot_warped_grid_3d(f, mins, maxes, xres = .1, yres = .1, zres = .04, color = 'gray'):
+def plot_warped_grid_3d(f, mins, maxes, xres = .1, yres = .1, zres = .04, color = 'gray', draw=True):
     import matplotlib.pyplot as plt
     import matplotlib
     from mpl_toolkits.mplot3d import art3d
@@ -91,9 +92,11 @@ def plot_warped_grid_3d(f, mins, maxes, xres = .1, yres = .1, zres = .04, color 
     lc = art3d.Line3DCollection(lines,colors=color,lw=1)
     ax = plt.gca()
     ax.add_collection(lc)
-    plt.draw()
+    if draw:
+        plt.draw()
 
-def plot_warped_grid_proj_2d(f, mins, maxes, xres = .1, yres = .1, color = 'gray'):
+
+def plot_warped_grid_proj_2d(f, mins, maxes, xres = .1, yres = .1, color = 'gray', draw=True):
     import matplotlib.pyplot as plt
     import matplotlib
     xmin, ymin = mins
@@ -125,7 +128,9 @@ def plot_warped_grid_proj_2d(f, mins, maxes, xres = .1, yres = .1, color = 'gray
     lc = matplotlib.collections.LineCollection(lines,colors=color,lw=1)
     ax = plt.gca()
     ax.add_collection(lc)
-    plt.draw()
+    if draw:
+        plt.draw()
+
 
 def plot_correspondence(x_nd, y_nd):
     lines = np.array(zip(x_nd, y_nd))
