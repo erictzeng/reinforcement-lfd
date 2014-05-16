@@ -11,7 +11,9 @@
 
 import argparse, h5py, numpy as np, os
 import scipy.spatial.distance as ssd
-from rapprentice import clouds, registration, registrations
+from rapprentice import clouds, registration, registrations, plotting_plt
+import matplotlib
+import matplotlib.pyplot as plt
 
 DS_SIZE = 0.025
 
@@ -31,9 +33,12 @@ def downsample_cloud(cloud):
 def plot_cb_gen(output_prefix, args, x_color, y_color):
     def plot_cb(x_nd, y_md, corr_nm, f, iteration):
         if args.plot_color:
-            registrations.plot_callback(x_nd, y_md, corr_nm, f, iteration, output_prefix, x_color = x_color, y_color = y_color, proj_2d=args.proj)
+            plotting_plt.plot_tps_registration(x_nd, y_md, f, x_color = x_color, y_color = y_color, proj_2d=args.proj)
         else:
-            registrations.plot_callback(x_nd, y_md, corr_nm, f, iteration, output_prefix, proj_2d=args.proj)
+            plotting_plt.plot_tps_registration(x_nd, y_md, f, proj_2d=args.proj)
+        # save plot to file
+        if output_prefix is not None:
+            plt.savefig(output_prefix + "_iter" + str(iteration) + '.png')
     return plot_cb
 
 def run_experiments(args):
@@ -55,7 +60,7 @@ def run_experiments1(args):
     
             f, bend_cost, res_cost, total_cost = registrations.sim_annealing_registration(source_cloud[:,:-3], target_cloud[:,:-3],
                 registrations.rpm_em_step, vis_cost_xy = vis_costs_xy,
-                plotting=1, plot_cb = plot_cb_gen(os.path.join(args.output_folder, k + "_" + cloud_key + "_rpmvis") if args.output_folder else None,
+                plotting=1, plot_cb = plot_cb_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpmvis") if args.output_folder else None,
                                                   args,
                                                   source_cloud[:,-3:],
                                                   target_cloud[:,-3:]))
