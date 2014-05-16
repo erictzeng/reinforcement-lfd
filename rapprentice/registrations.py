@@ -96,6 +96,23 @@ def sim_annealing_registration(x_nd, y_md, em_step_fcn, n_iter = 20, lambda_init
     print "Sq Dist + Lambda * TPS cost (optimization function): ", total_cost
     return f, bend_cost, res_cost, total_cost
 
+def sinkhorn_balance_coeffs(prob_NM, normalize_iter):
+    """
+    Computes the coefficients to balance the matrix prob_NM. Row-normalization happens first.
+    The coefficients are computed with type 'f4', so it's better if prob_NM is already in type 'f4'.
+    The sinkhorn_balance_matrix can be then computed in the following way:
+    prob_NM *= r_N[:,None]
+    prob_NM *= c_M[None,:]
+    """
+    if prob_NM.dtype != np.dtype('f4'):
+        prob_NM = prob_NM.astype('f4')
+    N,M = prob_NM.shape
+    c_M = np.ones(M,'f4')
+    for _ in xrange(normalize_iter):
+        r_N = 1./prob_NM.dot(c_M) # normalize along rows
+        c_M = 1./r_N.dot(prob_NM) # normalize along columns
+    return r_N, c_M
+
 def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None, T0 = .04, outlierfrac = 0.01, normalize_iter = 20):
     """
     Function for TPS-RPM (as described in Chui et al.), with and w/o visual
@@ -106,33 +123,24 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, beta = 1., vis_cost_xy = None
     xwarped_nd = prev_f.transform_points(x_nd)
     
     dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean')
-    prob_nm = np.exp( -dist_nm / (2*T) ) / np.sqrt(T)
+    prob_nm = np.exp( -dist_nm / (2*T) )
     if beta != 0 and vis_cost_xy != None:
         pi = np.exp( -beta * vis_cost_xy )
-        pi /= pi.sum(axis=0)[None,:] # normalize along columns
         prob_nm *= pi
-    else:
-        prob_nm *= 1./float(n)
-    
-    outlier_dist_1m = ssd.cdist(np.mean(xwarped_nd, axis=0)[None,:], y_md, 'sqeuclidean')
-    outlier_dist_n1 = ssd.cdist(xwarped_nd, np.mean(y_md, axis=0)[None,:], 'sqeuclidean')
-    outlier_prob_1m = np.exp( -outlier_dist_1m / (2*T0) ) / np.sqrt(T0)
-    outlier_prob_n1 = np.exp( -outlier_dist_n1 / (2*T0) ) / np.sqrt(T0)
-    outlier_prob_1m *= outlierfrac/(1.-outlierfrac)
-    if beta != 0 and vis_cost_xy != None:
-        outlier_prob_n1 *= pi.sum(axis=1)[:,None] * outlierfrac/(1.-outlierfrac)
-    else:
-        outlier_prob_n1 *= (float(m)/float(n)) * outlierfrac/(1.-outlierfrac)
-    
-    prob_NM = np.empty((n+1, m+1))
+    prob_nm /= prob_nm.sum(axis=0)[None,:] # normalize along columns; these are proper probabilities over j = 1,...,N
+
+    outlier_prob_1m = outlierfrac/(1.-outlierfrac) * np.ones((1,m)) # so that outlier_prob_1m[0,:] / (prob_nm.sum(axis=0) + outlier_prob_1m[0,:]) = outlierfrac * np.ones(m)
+    outlier_prob_n1 = outlierfrac * prob_nm.sum(axis=1)[:,None]/(1. - outlierfrac) # so that outlier_prob_n1[:,0] / (prob_nm.sum(axis=1) + outlier_prob_n1[:,0]) = outlierfrac * np.ones(n)
+
+    prob_NM = np.empty((n+1, m+1), 'f4')
     prob_NM[:n, :m] = prob_nm
     prob_NM[:n, m][:,None] = outlier_prob_n1
     prob_NM[n, :m][None,:] = outlier_prob_1m
     prob_NM[n, m] = 0
-    
-    for _ in xrange(normalize_iter):
-        prob_NM /= prob_NM.sum(axis=0)[None,:] # normalize along columns
-        prob_NM /= prob_NM.sum(axis=1)[:,None] # normalize along rows
+
+    r_N, c_M = sinkhorn_balance_coeffs(prob_NM, normalize_iter)
+    prob_NM *= r_N[:,None]
+    prob_NM *= c_M[None,:]
     corr_nm = prob_NM[:n,:m]
 
     wt_n = corr_nm.sum(axis=1)
