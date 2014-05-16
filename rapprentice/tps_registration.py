@@ -4,6 +4,7 @@ from __future__ import division
 import numpy as np
 import scipy.spatial.distance as ssd
 from rapprentice.registration import loglinspace, ThinPlateSpline, fit_ThinPlateSpline
+import tps
 
 import IPython as ipy
 
@@ -74,7 +75,7 @@ def sinkhorn_balance_coeffs(prob_NM, normalize_iter):
     return r_N, c_M
 
 def tps_rpm(x_nd, y_md, n_iter = 20, lambda_init = 10., lambda_final = .1, T_init = .04, T_final = .00004, rot_reg = np.r_[1e-4, 1e-4, 1e-1], 
-            plotting = False, plot_cb = None, outlierfrac = 1e-2, vis_cost_xy = None, em_iter = 5):
+            plotting = False, plot_cb = None, outlierfrac = 1e-2, vis_cost_xy = None, em_iter = 2):
     """
     tps-rpm algorithm mostly as described by chui and rangaran
     lambda_init/lambda_final: regularization on curvature
@@ -134,7 +135,8 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, vis_cost_xy = None, outlierfr
     f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = l, wt_n = wt_n, rot_coef = rot_reg)
     f._bend_coef = l
     f._rot_coef = rot_reg
-    
+    f._cost = tps.tps_cost(f.lin_ag, f.trans_g, f.w_ng, f.x_na, xtarg_nd, l, wt_n=wt_n)/wt_n.mean()
+
     return f, corr_nm
 
 def main():
@@ -205,53 +207,82 @@ def main():
     infile.close()
     
     start_time = time.time()
+    rpm_tps_costs = []
+    rpm_tps_reg_cost = []
     for i in range(len(source_clouds)):
         source_cloud = source_clouds[i]
         for target_cloud in target_clouds[i]:
-            print "source cloud %d and target cloud %s"%(i, cloud_key)
             if args.visual_prior:
-                vis_costs_xy = ab_cost(source_cloud, target_cloud)
+                vis_cost_xy = ab_cost(source_cloud, target_cloud)
             else:
-                vis_costs_xy = None
+                vis_cost_xy = None
             f, corr_nm = tps_rpm(source_cloud[:,:-3], target_cloud[:,:-3],
-                                 vis_cost_xy = vis_costs_xy,
+                                 vis_cost_xy = vis_cost_xy,
                                  plotting=args.plotting, plot_cb = plot_cb_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm") if args.output_folder else None,
                                                                                args,
                                                                                source_cloud[:,-3:],
                                                                                target_cloud[:,-3:]))
+            rpm_tps_costs.append(f._cost)
+            rpm_tps_reg_cost.append(registration.tps_reg_cost(f))
     print "tps_rpm time elapsed", time.time() - start_time
     
     start_time = time.time()
+    rpm_bij_tps_costs = []
+    rpm_bij_tps_reg_cost = []
     for i in range(len(source_clouds)):
         source_cloud = source_clouds[i]
         for target_cloud in target_clouds[i]:
-            print "source cloud %d and target cloud %s"%(i, cloud_key)
+            if args.visual_prior:
+                vis_cost_xy = ab_cost(source_cloud, target_cloud)
+            else:
+                vis_cost_xy = None
             x_nd = source_cloud[:,:3]
             y_md = target_cloud[:,:3]
             scaled_x_nd, _ = registration.unit_boxify(x_nd)
             scaled_y_md, _ = registration.unit_boxify(y_md)
-            f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, rot_reg=np.r_[1e-4, 1e-4, 1e-1], n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2,
+            f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, rot_reg=np.r_[1e-4, 1e-4, 1e-1], n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2, vis_cost_xy=vis_cost_xy,
                                            plotting=args.plotting, plot_cb=plot_cb_bij_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm_bij") if args.output_folder else None,
                                                                                            args,
                                                                                            source_cloud[:,-3:],
                                                                                            target_cloud[:,-3:]))
+            rpm_bij_tps_costs.append(f._cost)
+            rpm_bij_tps_reg_cost.append(registration.tps_reg_cost(f))
     print "tps_rpm_bij time elapsed", time.time() - start_time
     
     start_time = time.time()
+    rpm_bij_cheap_tps_costs = []
+    rpm_bij_cheap_tps_reg_cost = []
     for i in range(len(source_clouds)):
         source_cloud = source_clouds[i]
         for target_cloud in target_clouds[i]:
-            print "source cloud %d and target cloud %s"%(i, cloud_key)
+            if args.visual_prior:
+                vis_cost_xy = ab_cost(source_cloud, target_cloud)
+            else:
+                vis_cost_xy = None
             x_nd = source_cloud[:,:3]
             y_md = target_cloud[:,:3]
             scaled_x_nd, _ = registration.unit_boxify(x_nd)
             scaled_y_md, _ = registration.unit_boxify(y_md)
-            f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, rot_reg=1e-3, n_iter=10,
+            f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, rot_reg=np.r_[1e-4, 1e-4, 1e-1], n_iter=10, vis_cost_xy=vis_cost_xy, # Note registration_cost_cheap in rope_qlearn has a different rot_reg
                                            plotting=args.plotting, plot_cb=plot_cb_bij_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm_bij_cheap") if args.output_folder else None,
                                                                                            args,
                                                                                            source_cloud[:,-3:],
                                                                                            target_cloud[:,-3:]))
+            rpm_bij_cheap_tps_costs.append(f._cost)
+            rpm_bij_cheap_tps_reg_cost.append(registration.tps_reg_cost(f))
     print "tps_rpm_bij_cheap time elapsed", time.time() - start_time
     
+    np.set_printoptions(suppress=True)
+    
+    print ""
+    print "tps_costs"
+    print "rpm, bij, bij_cheap"
+    print np.array([rpm_tps_costs, rpm_bij_tps_costs, rpm_bij_cheap_tps_costs]).T
+    
+    print ""
+    print "tps_reg_cost"
+    print "rpm, bij, bij_cheap"
+    print np.array([rpm_tps_reg_cost, rpm_bij_tps_reg_cost, rpm_bij_cheap_tps_reg_cost]).T
+
 if __name__ == "__main__":
     main()
