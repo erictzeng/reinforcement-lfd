@@ -8,6 +8,8 @@ import tps
 
 import IPython as ipy
 
+N_ITER_CHEAP = 9
+
 def rgb2lab(rgb):
     return xyz2lab(rgb2xyz(rgb))
 
@@ -225,6 +227,8 @@ def main():
             rpm_tps_costs.append(f._cost)
             rpm_tps_reg_cost.append(registration.tps_reg_cost(f))
     print "tps_rpm time elapsed", time.time() - start_time
+
+
     
     start_time = time.time()
     rpm_bij_tps_costs = []
@@ -249,6 +253,26 @@ def main():
             rpm_bij_tps_reg_cost.append(registration.tps_reg_cost(f))
     print "tps_rpm_bij time elapsed", time.time() - start_time
     
+    start_time = time.time()
+    rpm_cheap_tps_costs = []
+    rpm_cheap_tps_reg_cost = []
+    for i in range(len(source_clouds)):
+        source_cloud = source_clouds[i]
+        for target_cloud in target_clouds[i]:
+            if args.visual_prior:
+                vis_cost_xy = ab_cost(source_cloud, target_cloud)
+            else:
+                vis_cost_xy = None
+            f, corr_nm = tps_rpm(source_cloud[:,:-3], target_cloud[:,:-3],
+                                 vis_cost_xy = vis_cost_xy, n_iter = N_ITER_CHEAP,
+                                 plotting=args.plotting, plot_cb = plot_cb_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm_cheap") if args.output_folder else None,
+                                                                               args,
+                                                                               source_cloud[:,-3:],
+                                                                               target_cloud[:,-3:]))
+            rpm_cheap_tps_costs.append(f._cost)
+            rpm_cheap_tps_reg_cost.append(registration.tps_reg_cost(f))
+    print "tps_rpm_cheap time elapsed", time.time() - start_time
+
     start_time = time.time()
     rpm_bij_cheap_tps_costs = []
     rpm_bij_cheap_tps_reg_cost = []
@@ -276,13 +300,13 @@ def main():
     
     print ""
     print "tps_costs"
-    print "rpm, bij, bij_cheap"
-    print np.array([rpm_tps_costs, rpm_bij_tps_costs, rpm_bij_cheap_tps_costs]).T
+    print "rpm, bij, rpm_cheap, bij_cheap"
+    print np.array([rpm_tps_costs, rpm_bij_tps_costs, rpm_cheap_tps_costs, rpm_bij_cheap_tps_costs]).T
     
     print ""
     print "tps_reg_cost"
-    print "rpm, bij, bij_cheap"
-    print np.array([rpm_tps_reg_cost, rpm_bij_tps_reg_cost, rpm_bij_cheap_tps_reg_cost]).T
+    print "rpm, bij, rpm_cheap, bij_cheap"
+    print np.array([rpm_tps_reg_cost, rpm_bij_tps_reg_cost, rpm_cheap_tps_reg_cost, rpm_bij_cheap_tps_reg_cost]).T
 
 if __name__ == "__main__":
     main()
