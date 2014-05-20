@@ -34,9 +34,7 @@
 
 \begin{document}
 % paper title
-%\title{A Max-Margin Q-Learning Approach to Learning from Multiple Demonstrations}
-%\title{Max-Margin Q-Learning:\\ {\huge An Approach to Learning from Multiple Demonstrations}}
-\title{Max-Margin Q-Learning with Application to Manipulation of Deformable Objects}
+\title{Learning to Use Expert Demonstrations for Deformable Object Manipulation}
 % Learning to Use Expert Demonstrations
 
 % You will get a Paper-ID when submitting a pdf file to the conference system
@@ -108,7 +106,7 @@
 %% nearest neighbor approach described in \citet{Schulmanetal_ISRR2013} achieves a
 %% 68.8\% success rate. Our approach achieves a success rate of 95.2\%.
 %% \end{abstract}
-
+\section{Overview}
 Automated manipulation of deformable objects tends to be challenging
 due to high-dimensional, continuous state-action spaces and due to the
 complicated dynamics of deformable objects. Direct planning or optimal
@@ -124,15 +122,7 @@ demonstrated gripper trajectory. This approach has been validated in
 simulated and real-world environments for knot-tying, suturing, and
 folding tasks.
 
-In particular, this method of trajectory transfer uses a thin-plate
-spline (TPS) to find a mapping between these two scenes. A TPS
-minimizes the curvature of the mapping function and will (hopefully)
-find a mapping, or warping, that is close to rigid. This is motivated
-by the observation that for many tasks, success in a task is preserved
-over Euclidean transformation. Furthermore, the associated
-optimization problem can be solved efficiently~\cite{Wahba_TPS1990}.
-
-Full demonstrations of complex tasks with multiple steps will be hard
+Full demonstrations of complex tasks with multiple steps are hard
 to collect and transfer successfully. As such, we assume that
 demonstrations often correspond to steps in the task, rather than the
 entire task itself. Figure~\ref{fig:knot_steps} shows an example of
@@ -142,15 +132,16 @@ scenarios that arise during execution.  The natural solution to this
 is to use a library of demonstrations with multiple demonstrations for
 each step.
 
-Realizing these benefits requires a robust technique to select a good
-trajectory to transfer.  Certain trajectories will generalize better
-than others, and particular sequences of demonstrations may perform
-tasks more efficiently than others.
+Realizing the benefits of a demonstration library requires a robust
+technique to select a good trajectory to transfer.  Certain
+trajectories will generalize better than others, and particular
+sequences of demonstrations may perform tasks more efficiently than
+others.
 
 The original paper on the approach of trajectory transfer
 prescribes choosing the trajectory segment from the demonstrations
 library with the lowest warping cost onto the current
-scene~\cite{Schulmanetal_ISRR2013}.  This approach does not account
+scene~\citep{Schulmanetal_ISRR2013}.  This approach does not account
 for the inherent generalizability of a particular demonstration. For
 brittle demonstrations (e.g. grabbing near the edge of a rope), a
 small change in the rope can have low registration cost, but the
@@ -173,55 +164,147 @@ problem that can account for the variability in robustness of
 demonstrations and incorporates the sequential nature of our
 tasks. Our contributions are as follows: (i) We formulate the
 demonstration selection problem as a Markov Decision Process (MDP);
-(ii) We present Max-Margin Q-Learning (\mmql{}), a method for
-approximating Q-functions from expert-guided task executions, based on
-the optimality of the expert's action selection; (iii) We describe
-task-independent features that are rich enough to allow learning but
-make no additional assumptions beyond those of trajectory transfer;
-and (iv) We validate this approach in a simulated knot-tying
-experiment and show strong improvement over previous approaches. 
+(ii) We present a method for approximating $Q$-functions from
+expert-guided task executions, based on the optimality of the expert's
+action selection; (iii) We describe task-independent features that are
+rich enough to allow learning but make no additional assumptions
+beyond those of trajectory transfer; and (iv) We validate this
+approach in a simulated knot-tying experiment and show strong
+improvement over previous approaches.
 
-A central component of our approach is framing the demonstration
-selection problem as an MDP. Given a state and a demonstration,
-trajectory transfer produces an trajectory that can be executed on a
-robot. Thus, given a manipulation problem and a demonstration library,
-we can view the library as discretizing the action space. The savings
-in this reduction can be large. For a two-armed manipulation problem
-with 7DOF per arm, the action space is a parametrized trajectory with
-40 intermediate poses, which is roughly $\mathbb{R}^{240}$. Using a
-demonstration library will reduce the action space to a finite
-set. The hope is that this discretization will still allow reasonable
-solutions for the task of interest.
+\section{Trajectory Transfer \& MDP Formulation}
 
-Using this formalism, we apply Q-learning to find a good approximate
-policy to which demonstration to transfer. We introduce \mmql{} as a
-method to do this with human input. The procedure combines
-maximum-margin structured prediction with approximate linear
-programming to learn a $Q$-function that 1) matches the human
-demonstrator's $Q$-function and 2) is consistent with the dynamic
-programming equations for the MDP. We improve on this approach with a
-lookahead policy, which acts to maximizes the predicted $Q$-value over
-a search horizon.
+Non-rigid registration computes a function $f$ that minimizes error
+between landmark points, subject to a regularization term.  A
+commonly-used, effective method for registering spatial data is the
+Thin Plate Spline (TPS) regularizer~\citep{Carr_SIGGRAPH2001,
+  Wahba_TPS1990}.  Given a set of correspondence points
+$(\mathbf{x}_i, \mathbf{y}_i)$, the goal is to find the warping
+function $\mathbf{f} : \mathbb{R}^3 \rightarrow \mathbb{R}^3$ that
+minimizes the following objective:
+$$\min_{\mathbf{f}} \sum_i ||\mathbf{x}_i - \mathbf{y}_i||^2 + C\int
+dx ||\text{D}^2(\mathbf{f})||^2_{\text{Frob}},$$ where $C$ is a
+hyper-parameter that trades off between correspondence error and
+increased curvature.  The second term measures curvature:
+$\text{D}^2(\mathbf{f})$ is the matrix of second order partial
+derivatives of $\mathbf{f}$, and $||\cdot||^2_{\text{Frob}}$ denotes
+the Frobenius norm.  This problem has a finite dimensional solution in
+terms of basis functions around the correspondence points.  More
+concretely, $\mathbf{f}$ has the form
+$$\mathbf{f}(\mathbf{x}) = \sum_i \mathbf{a}_i K(\mathbf{x}_i, \mathbf{x}) + \mathbf{B}\mathbf{x} + \mathbf{c}$$
+where $K$ is the 3D TPS kernel $K(\mathbf{x}, \mathbf{x}') = - ||\mathbf{x} - \mathbf{x}'||$, and $\mathbf{a}_i \in \mathbb{R}^3$, $\mathbf{B} \in \mathbb{R}^{3\text{x}3}$, and $\mathbf{c} \in \mathbb{R}^3$.
 
-We developed a knot-tying benchmark for evaluating the effectiveness of
-our proposed approach.   This benchmark is available at
-\href{https://sites.google.com/site/rss2014mmql}{sites.google.com/site/rss2014mmql}). The
-nearest neighbor approach described in \citet{Schulmanetal_ISRR2013} achieves a
-68.8\% success rate on this benchmark.  The greedy policy with respect to our learned
-approximate Q-function achieves a success rate of 85.6\%. Augmenting our
-policy with a simulator and beam search raises the success rate to 95.2\%.
 
-While our running example and experiments deal with knot tying, our presented
-\mmql{} approach makes no assumptions about the
-specifics of the task except for the availability of point clouds of
-the scene.
 
+In particular, this method of trajectory transfer uses a thin- plate
+spline (TPS) to find a mapping between these two scenes. A TPS
+minimizes the curvature of the mapping function and tries to find a
+mapping, or warping, that is close to rigid. This is motivated by the
+observation that for many tasks, success in a task is preserved under
+Euclidean transformation. Furthermore, the associated optimization
+problem can be solved efficiently~\citep{Wahba_TPS1990}.
+
+\citet{Schulmanetal_ISRR2013} leverage thin plate splines to perform
+trajectory transfer.  Using a point cloud representation of both
+scenes they find a TPS that maps from the demonstration scene to the
+new scene.  The transformation function is used to warp the path
+traced by the end effector of the robot in the demonstration,
+represented as a sequence of end effector poses. The warped trajectory
+is executed, with the hope that the registration will account for
+changes in the environment but maintain the important aspects of the
+manipulation.
+
+
+We consider the case where an agent has access to a library of expert
+demonstrations. Such a library enables task execution from different
+initial conditions and provides robustness to different types of
+environmental variation. With many demonstrations, the decision making
+problem is to select which demonstration trajectory to transfer.
+
+We approach the problem of selecting a trajectory to transfer as an
+abstract MDP. Our base manipulation task is an MDP with
+high-dimensional, continuous, states and action. For a knot-tying
+task, the state space is the joint state of the robot and the
+rope. The action space is the set of torques that can be applied at
+the motors. With a library of demonstrations, we can reduce this
+problem to an abstract MDP where the state space is the same, but the
+actions correspond to selecting a trajectory and transferring it to
+the current state. This abstracts the problem temporally and
+signifigantly reduces the size of the action space. Actions follow a
+sequence of waypoints reducing the time horizon to be considered
+signifigantly. Furthermore, because there are finitely many
+demonstrations, we reduce from a continuous action space to a finite
+set of options.
+
+Using this formalization, we learn an approximate Q-function for the
+abstract MDP. This is still a continuous-state reinforcement learning
+problem, so we propose a method to do this learning with human
+input. The procedure combines maximum-margin structured prediction
+with approximate linear programming to learn a $Q$-function that 1)
+matches a human demonstrator's $Q$-function and 2) is consistent
+with the dynamic programming equations for the MDP. 
+
+\section{Experiments and Benchmark}
+
+We developed a knot-tying benchmark for evaluating the effectiveness
+of our proposed approach.  This benchmark is available at
+\href{https://sites.google.com/site/rss2014mmql}{sites.google.com/site/rss2014mmql}). It
+contains the 148 pairs of point clouds and gripper trajectories used
+in~\citet{Schulmanetal_ISRR2013}. It contains a training set of new
+initial rope configurations, which are generated by randomly selecting
+an intial rope configuration from the demonstrations and perturbing
+it. We also include a testing set and a set of human-labeled examples
+that include the correct demonstration to transfer.
+
+Our experiments are carried out using Bullet Physics to simulate the
+dynamics. We define success as tying a knot within 5 steps. We
+explored the performance of two policies: 1-step greedy maximization
+of the learned Q-function and using a beam search to maximize the
+learned Q-function over a search horizon. We compared to he nearest
+neighbor approach described in \citet{Schulmanetal_ISRR2013}.  The
+success rates obtained under these policies are summarized in
+Table~\ref{table:performance}. Note that our best results surpass the
+baseline by 26.4\%.
+\begin{table}
+  \centering
+  \normalsize
+  \begin{tabular}{lc}
+    \toprule
+      Policy & Success Rate\\
+    \midrule
+      Nearest neighbor \cite{Schulmanetal_ISRR2013} & 68.8\% \\
+    \midrule
+      Greedy & 85.6\% \\
+      Lookahead (depth 1, width 10) & 93.6\% \\
+      Lookahead (depth 2, width 5) & 95.2\% \\
+    \bottomrule
+  \end{tabular}
+  \caption{Success rate of tying a knot using the expert-labeled
+    examples. The neareast-neighbor method selects the demonstration
+    that minimizes a bi-directional registration cost associated with
+    the trajectory transfer.  Other policies maximize a learned
+    Q-function. Greedy maximizes this value in the current state. The
+    lookahead policies act to maximize a back up value computed by
+    beam search with the specified parameters. The greedy succeeds in
+    an additional 17\% of examples when compared with the
+    baseline. Lookahead policies achieve very high performance rates
+    and approach the best possible with our demonstration library.}
+  \label{table:performance}
+\end{table}
+
+We find that this approach can offer signifigant improvements over the
+nearest-neighbor method in simulation. We have initial experiments
+that indicate robustness to modeling error for the lookahead
+simulation. We are currently in the process of testing this on a real
+PR2 robot and are in the process of extending to other deformable
+object tasks. 
 
 \maketitle
 
 %% Use plainnat to work nicely with natbib. 
 
 \bibliographystyle{plainnat}
+\footnotesize
 \bibliography{references}
 
 \end{document}
