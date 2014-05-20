@@ -8,7 +8,7 @@ import tps
 
 import IPython as ipy
 
-N_ITER_CHEAP = 8
+N_ITER_CHEAP = 14
 EM_ITER_CHEAP = 1
 
 def rgb2lab(rgb):
@@ -62,7 +62,7 @@ def ab_cost(xyzrgb1, xyzrgb2):
 
 def sinkhorn_balance_coeffs(prob_NM, normalize_iter):
     """
-    Computes the coefficients to balance the matrix prob_NM. Unlike balance_matrix2, row-normalization happens first.
+    Computes the coefficients to balance the matrix prob_NM. Similar to balance_matrix3. Column-normalization happens first.
     The coefficients are computed with type 'f4', so it's better if prob_NM is already in type 'f4'.
     The sinkhorn_balance_matrix can be then computed in the following way:
     prob_NM *= r_N[:,None]
@@ -71,10 +71,10 @@ def sinkhorn_balance_coeffs(prob_NM, normalize_iter):
     if prob_NM.dtype != np.dtype('f4'):
         prob_NM = prob_NM.astype('f4')
     N,M = prob_NM.shape
-    c_M = np.ones(M,'f4')
+    r_N = np.ones(N,'f4')
     for _ in xrange(normalize_iter):
-        r_N = 1./prob_NM.dot(c_M) # normalize along rows
         c_M = 1./r_N.dot(prob_NM) # normalize along columns
+        r_N = 1./prob_NM.dot(c_M) # normalize along rows
     return r_N, c_M
 
 def tps_rpm(x_nd, y_md, n_iter = 20, lambda_init = 10., lambda_final = .1, T_init = .04, T_final = .00004, rot_reg = np.r_[1e-4, 1e-4, 1e-1], 
@@ -98,42 +98,53 @@ def tps_rpm(x_nd, y_md, n_iter = 20, lambda_init = 10., lambda_final = .1, T_ini
 
     for i in xrange(n_iter):
         for _ in xrange(em_iter):
-            f, corr_nm = rpm_em_step(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, vis_cost_xy = vis_cost_xy)
+            f, corr_nm = rpm_em_step(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, vis_cost_xy = vis_cost_xy, T0 = T_init)
 
         if plotting and (i%plotting==0 or i==(n_iter-1)):
             plot_cb(x_nd, y_md, corr_nm, f, i)
     return f, corr_nm
 
-def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, vis_cost_xy = None, outlierfrac = 1e-2, normalize_iter = 20):
+def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, vis_cost_xy = None, outlierprior = 1e-2, normalize_iter = 20, T0 = .04):
     n,d = x_nd.shape
     m,_ = y_md.shape
     xwarped_nd = prev_f.transform_points(x_nd)
     
     dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean')
-    prob_nm = np.exp( -dist_nm / (2*T) )
+    outlier_dist_1m = ssd.cdist(xwarped_nd.mean(axis=0)[None,:], y_md, 'sqeuclidean')
+    outlier_dist_n1 = ssd.cdist(xwarped_nd, y_md.mean(axis=0)[None,:], 'sqeuclidean')
+
+    # Note: proportionality constants within a column can be ignored since Sinkorn balancing normalizes the columns first
+    prob_nm = np.exp( -(dist_nm / (2*T)) + (outlier_dist_1m / (2*T0)) ) / np.sqrt(T) # divide by np.exp( outlier_dist_1m / (2*T0) ) to prevent prob collapsing to zero
     if vis_cost_xy != None:
         pi = np.exp( -vis_cost_xy )
-        prob_nm *= pi
-    prob_nm /= prob_nm.sum(axis=0)[None,:] # normalize along columns; these are proper probabilities over j = 1,...,N
-    prob_nm = np.maximum(prob_nm, (1e-40)*np.ones((n,m))) # clamp at 1e-40 to prevent nans in the normalization. TODO figure out a better way to handle these cases
-
-    outlier_prob_1m = outlierfrac/(1.-outlierfrac) * np.ones((1,m)) # so that outlier_prob_1m[0,:] / (prob_nm.sum(axis=0) + outlier_prob_1m[0,:]) = outlierfrac * np.ones(m)
-    outlier_prob_n1 = outlierfrac * prob_nm.sum(axis=1)[:,None]/(1. - outlierfrac) # so that outlier_prob_n1[:,0] / (prob_nm.sum(axis=1) + outlier_prob_n1[:,0]) = outlierfrac * np.ones(n)
-
+        pi /= pi.sum(axis=0)[None,:] # normalize along columns; these are proper probabilities over j = 1,...,N
+        prob_nm *= (1. - outlierprior) * pi
+    else:
+        prob_nm *= (1. - outlierprior) / float(n)
+    outlier_prob_1m = outlierprior * np.ones((1,m)) / np.sqrt(T0) # divide by np.exp( outlier_dist_1m / (2*T0) )
+    outlier_prob_n1 = np.exp( -outlier_dist_n1 / (2*T0) ) / np.sqrt(T0)
     prob_NM = np.empty((n+1, m+1), 'f4')
     prob_NM[:n, :m] = prob_nm
     prob_NM[:n, m][:,None] = outlier_prob_n1
     prob_NM[n, :m][None,:] = outlier_prob_1m
     prob_NM[n, m] = 0
-
+    
     r_N, c_M = sinkhorn_balance_coeffs(prob_NM, normalize_iter)
     prob_NM *= r_N[:,None]
     prob_NM *= c_M[None,:]
-    corr_nm = prob_NM[:n,:m]
-
+    # prob_NM needs to be row-normalized at this point
+    corr_nm = prob_NM[:n, :m]
+    
     wt_n = corr_nm.sum(axis=1)
 
-    xtarg_nd = (corr_nm/wt_n[:,None]).dot(y_md)
+    # discard points that are outliers (i.e. their total correspondence is smaller than 1e-2)    
+    inlier = wt_n > 1e-2
+    if np.any(~inlier):
+        x_nd = x_nd[inlier,:]
+        wt_n = wt_n[inlier,:]
+        xtarg_nd = (corr_nm[inlier,:]/wt_n[:,None]).dot(y_md)
+    else:
+        xtarg_nd = (corr_nm/wt_n[:,None]).dot(y_md)
 
     f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = l, wt_n = wt_n, rot_coef = rot_reg)
     f._bend_coef = l
