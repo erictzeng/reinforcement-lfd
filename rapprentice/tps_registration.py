@@ -8,7 +8,8 @@ import tps
 
 import IPython as ipy
 
-N_ITER_CHEAP = 9
+N_ITER_CHEAP = 8
+EM_ITER_CHEAP = 1
 
 def rgb2lab(rgb):
     return xyz2lab(rgb2xyz(rgb))
@@ -227,8 +228,6 @@ def main():
             rpm_tps_costs.append(f._cost)
             rpm_tps_reg_cost.append(registration.tps_reg_cost(f))
     print "tps_rpm time elapsed", time.time() - start_time
-
-
     
     start_time = time.time()
     rpm_bij_tps_costs = []
@@ -264,7 +263,7 @@ def main():
             else:
                 vis_cost_xy = None
             f, corr_nm = tps_rpm(source_cloud[:,:-3], target_cloud[:,:-3],
-                                 vis_cost_xy = vis_cost_xy, n_iter = N_ITER_CHEAP,
+                                 vis_cost_xy = vis_cost_xy, n_iter = N_ITER_CHEAP, em_iter = EM_ITER_CHEAP, 
                                  plotting=args.plotting, plot_cb = plot_cb_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm_cheap") if args.output_folder else None,
                                                                                args,
                                                                                source_cloud[:,-3:],
@@ -272,7 +271,7 @@ def main():
             rpm_cheap_tps_costs.append(f._cost)
             rpm_cheap_tps_reg_cost.append(registration.tps_reg_cost(f))
     print "tps_rpm_cheap time elapsed", time.time() - start_time
-
+    
     start_time = time.time()
     rpm_bij_cheap_tps_costs = []
     rpm_bij_cheap_tps_reg_cost = []
