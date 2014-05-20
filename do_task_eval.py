@@ -5,11 +5,11 @@ from __future__ import division
 import argparse
 import eval_util, sim_util
 
-from rapprentice import colorize, task_execution, planning, resampling, clouds, math_utils as mu
+from rapprentice import colorize, task_execution, planning, resampling, math_utils as mu
 import pdb, time
 
 import trajoptpy, openravepy
-from rope_qlearn import select_feature_fn, warp_hmats
+from rope_qlearn import select_feature_fn, warp_hmats, ActionSet
 from knot_classifier import isKnot as is_knot
 import os, os.path, numpy as np, h5py
 from numpy import asarray
@@ -23,9 +23,7 @@ class GlobalVars:
     unique_id = 0
     actions = None
     gripper_weighting = False
-
-def get_ds_cloud(sim_env, action):
-    return clouds.downsample(GlobalVars.actions[action]['cloud_xyz'], DS_SIZE)
+    downsample = True
 
 def redprint(msg):
     print colorize.colorize(msg, "red", bold=True)
@@ -39,8 +37,9 @@ def compute_trans_traj(sim_env, new_xyz, seg_info, ignore_infeasibility=True, an
     redprint("Generating end-effector trajectory")    
     
     old_xyz = np.squeeze(seg_info["cloud_xyz"])
-    old_xyz = clouds.downsample(old_xyz, DS_SIZE)
-    new_xyz = clouds.downsample(new_xyz, DS_SIZE)
+    if GlobalVars.downsample:
+        old_xyz = clouds.downsample(old_xyz, DS_SIZE)
+        new_xyz = clouds.downsample(new_xyz, DS_SIZE)
     
     link_names = ["%s_gripper_tool_frame"%lr for lr in ('lr')]
     hmat_list = [(lr, seg_info[ln]['hmat']) for lr, ln in zip('lr', link_names)]
@@ -83,7 +82,7 @@ def compute_trans_traj(sim_env, new_xyz, seg_info, ignore_infeasibility=True, an
         ####
 
         ### Generate fullbody traj
-        bodypart2traj = {}
+        lr2newtraj = {}
 
         for (lr,old_joint_traj) in lr2oldtraj.items():
             
@@ -98,11 +97,10 @@ def compute_trans_traj(sim_env, new_xyz, seg_info, ignore_infeasibility=True, an
             new_joint_traj, pose_errs = planning.plan_follow_traj(sim_env.robot, manip_name,
                                                        sim_env.robot.GetLink(ee_link_name), new_ee_traj_rs,old_joint_traj_rs)
 
-            part_name = {"l":"larm", "r":"rarm"}[lr]
-            bodypart2traj[part_name] = new_joint_traj
+            lr2newtraj[lr] = new_joint_traj
             ################################    
-            redprint("Executing joint trajectory for part %i using arms '%s'"%(i_miniseg, bodypart2traj.keys()))
-        full_traj = sim_util.getFullTraj(sim_env, bodypart2traj)
+        redprint("Executing joint trajectory for part %i using arms '%s'"%(i_miniseg, lr2newtraj.keys()))
+        full_traj = sim_util.get_full_traj(sim_env, lr2newtraj)
         full_trajs.append(full_traj)
 
         for lr in 'lr':
@@ -139,9 +137,10 @@ def simulate_demo_traj(sim_env, new_xyz, seg_info, full_trajs, ignore_infeasibil
     sim_util.reset_arms_to_side(sim_env)
     
     old_xyz = np.squeeze(seg_info["cloud_xyz"])
-    old_xyz = clouds.downsample(old_xyz, DS_SIZE)
-    new_xyz = clouds.downsample(new_xyz, DS_SIZE)
-    
+    if GlobalVars.downsample:
+        old_xyz = clouds.downsample(old_xyz, DS_SIZE)
+        new_xyz = clouds.downsample(new_xyz, DS_SIZE)
+
     handles = []
     if animate:
         handles.append(sim_env.env.plot3(old_xyz,5, (1,0,0)))
@@ -204,6 +203,10 @@ def set_global_vars(args, sim_env):
     GlobalVars.actions = h5py.File(args.actionfile, 'r')
     if args.subparser_name == "eval":
         GlobalVars.gripper_weighting = args.gripper_weighting
+    
+    GlobalVars.downsample = args.downsample
+    if GlobalVars.downsample:
+        from rapprentice import clouds
 
 def parse_input_args():
     parser = argparse.ArgumentParser()
@@ -216,6 +219,8 @@ def parse_input_args():
     parser.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelve', 'boxes'], default=[])
     parser.add_argument("--num_steps", type=int, default=5, help="maximum number of steps to simulate each task")
     parser.add_argument("--resultfile", type=str, help="no results are saved if this is not specified")
+    
+    parser.add_argument("--downsample", type=int, default=1)
 
     # selects tasks to evaluate/replay
     parser.add_argument("--tasks", type=int, nargs='*', metavar="i_task")
@@ -223,8 +228,8 @@ def parse_input_args():
     parser.add_argument("--i_start", type=int, default=-1, metavar="i_task")
     parser.add_argument("--i_end", type=int, default=-1, metavar="i_task")
     
-    parser.add_argument("--camera_matrix_file", type=str, default='.camera_matrix.npy')
-    parser.add_argument("--window_prop_file", type=str, default='.win_prop.npy')
+    parser.add_argument("--camera_matrix_file", type=str, default='.camera_matrix.txt')
+    parser.add_argument("--window_prop_file", type=str, default='.win_prop.txt')
     parser.add_argument("--fake_data_segment",type=str, default='demo1-seg00')
     parser.add_argument("--fake_data_transform", type=float, nargs=6, metavar=("tx","ty","tz","rx","ry","rz"),
         default=[0,0,0,0,0,0], help="translation=(tx,ty,tz), axis-angle rotation=(rx,ry,rz)")
@@ -261,7 +266,9 @@ def get_unique_id():
     return GlobalVars.unique_id - 1
 
 def eval_on_holdout(args, sim_env):
-    feature_fn, _, num_features, actions = select_feature_fn(args)
+    act_set = ActionSet(args.actionfile, landmarks=args.landmark_features, gripper_weighting=args.gripper_weighting, downsample=args.downsample)
+    actions = act_set.actions
+    feature_fn, _, num_features = select_feature_fn(args, act_set)
     
     weightfile = h5py.File(args.weightfile, 'r')
     weights = weightfile['weights'][:]
@@ -287,7 +294,7 @@ def eval_on_holdout(args, sim_env):
         if args.animation:
             sim_env.viewer.Step()
 
-        eval_util.save_task_results_init(args.resultfile, sim_env, i_task, rope_nodes, args.exec_rope_params)
+        eval_util.save_task_results_init(args.resultfile, sim_env, i_task, rope_nodes, args, args.exec_rope_params)
 
         for i_step in range(args.num_steps):
             print "task %s step %i" % (i_task, i_step)
@@ -375,7 +382,7 @@ def replay_on_holdout(args, sim_env):
         print "task %s" % i_task
         sim_util.reset_arms_to_side(sim_env)
         redprint("Replace rope")
-        rope_nodes, rope_params, _, _ = eval_util.load_task_results_init(args.loadresultfile, i_task)
+        rope_nodes, rope_params, loaded_args, _, _ = eval_util.load_task_results_init(args.loadresultfile, i_task)
         # uncomment if the results file don't have the right rope nodes
         #rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
         if args.replay_rope_params:
@@ -386,7 +393,7 @@ def replay_on_holdout(args, sim_env):
         if args.animation:
             sim_env.viewer.Step()
 
-        eval_util.save_task_results_init(args.resultfile, sim_env, i_task, rope_nodes, rope_params)
+        eval_util.save_task_results_init(args.resultfile, sim_env, i_task, rope_nodes, args, rope_params)
 
         for i_step in range(len(loadresultfile[i_task]) - (1 if 'init' in loadresultfile[i_task] else 0)):
             print "task %s step %i" % (i_task, i_step)
@@ -450,8 +457,8 @@ def load_simulation(args, sim_env):
         sim_env.viewer = trajoptpy.GetViewer(sim_env.env)
         if args.animation > 1 and os.path.isfile(args.window_prop_file) and os.path.isfile(args.camera_matrix_file):
             print "loading window and camera properties"
-            window_prop = np.load(args.window_prop_file)
-            camera_matrix = np.load(args.camera_matrix_file)
+            window_prop = np.loadtxt(args.window_prop_file)
+            camera_matrix = np.loadtxt(args.camera_matrix_file)
             try:
                 sim_env.viewer.SetWindowProp(*window_prop)
                 sim_env.viewer.SetCameraManipulatorMatrix(camera_matrix)
@@ -465,8 +472,8 @@ def load_simulation(args, sim_env):
             try:
                 window_prop = sim_env.viewer.GetWindowProp()
                 camera_matrix = sim_env.viewer.GetCameraManipulatorMatrix()
-                np.save(args.window_prop_file, window_prop)
-                np.save(args.camera_matrix_file, camera_matrix)
+                np.savetxt(args.window_prop_file, window_prop, fmt='%d')
+                np.savetxt(args.camera_matrix_file, camera_matrix)
             except:
                 print "GetWindowProp and GetCameraManipulatorMatrix are not defined. Pull and recompile Trajopt."
 

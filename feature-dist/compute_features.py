@@ -168,13 +168,17 @@ if __name__ == '__main__':
     parser.add_argument('loginconf', nargs='?', default='logins.yml')
     parser.add_argument('--overwrite', action='store_true', default=False)
     parser.add_argument('--collect_only', action='store_true', default=False)
+    parser.add_argument('--pw', type=str, default=None)
     args = parser.parse_args()
     logins = defaultdict(lambda: None)
     if os.path.exists(args.loginconf):
         print 'Using login information in {}.'.format(args.loginconf)
         logins = read_logins(args.loginconf)
     conf = read_conf(args.serverconf)
-    pw = getpass.getpass()
+    if args.pw == None:
+        pw = getpass.getpass()
+    else:
+        pw = args.pw
     if args.collect_only:
         collect_results(conf, logins=logins, password=pw)
     else:

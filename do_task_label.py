@@ -10,12 +10,6 @@ from rapprentice import math_utils as mu
 from rapprentice.yes_or_no import yes_or_no
 import pdb, time
 
-try:
-    from rapprentice import pr2_trajectories, PR2
-    import rospy
-except ImportError:
-    print "Couldn't import ros stuff"
-
 import cloudprocpy, trajoptpy, openravepy
 import util
 from rope_qlearn import *
@@ -30,8 +24,13 @@ import sys
 
 from joblib import Parallel, delayed
 
+STEPS = ['init', '0', '1', '2', '3', '4']
+
 def redprint(msg):
     print colorize.colorize(msg, "red", bold=True)
+
+def get_downsampled_clouds(demofile):
+    return [clouds.downsample(seg["cloud_xyz"], DS_SIZE) for seg in demofile.values()]
     
 def split_trajectory_by_gripper(seg_info):
     rgrip = asarray(seg_info["r_gripper_joint"])
@@ -157,11 +156,19 @@ def sample_rope_state(demofile, human_check=False, perturb_points=5, min_rad=0, 
         replace_rope(rope_nodes)
         Globals.sim.settle()
         Globals.viewer.Step()
+        raw_input("Press enter to continue")
         if human_check:
             resp = raw_input("Use this simulation?[Y/n]")
             success = resp not in ('N', 'n')
         else:
             success = True
+
+def load_dagger_state(sampled_state):
+    replace_rope(sampled_state['rope_nodes'])
+    Globals.sim.settle()
+    Globals.viewer.Step()
+    user_input = raw_input("Press i if this loaded state is a knot or deadend, to skip to the next state. Otherwise press enter to continue")
+    return user_input not in ['i', 'I']
 
 def replace_rope(new_rope):
     import bulletsimpy
@@ -174,7 +181,7 @@ def replace_rope(new_rope):
                                                Globals.sim.rope_params)
     return old_rope_nodes
 
-def check_outfile(outfile):
+def check_outfile(outfile, use_dagger=False):
     # Assumes keys in outfile are consecutive integers, starting with 0
     prev_start = 0;
     for i in range(len(outfile.keys())):
@@ -186,16 +193,17 @@ def check_outfile(outfile):
         pred = int(outfile[k]['pred'][()])
         # Check that each trajectory has length at least 4 (including endstate)
         if pred == i and i != 0:
-            if i - prev_start < 4:
+            if i - prev_start < 4 and not use_dagger:
                 print "trajectory has length less than 4 (including endstate); index: ", k, ", length: ", i - prev_start
                 outfile.close()
                 return False
             if i - prev_start > 5:
                 print "possible mistake: trajectory has length greater than 5 (including endstate); index: ", k, ", length: ", i - prev_start
             if not outfile[str(i-1)]['knot'][()]:
-                print "trajectory must end with a knot; index: ", i-1
-                outfile.close()
-                return False
+                if not use_dagger or (use_dagger and not outfile[str(i-1)]['deadend'][()]):
+                    print "trajectory must end with a knot or deadend; index: ", i-1
+                    outfile.close()
+                    return False
             prev_start = i
         if pred != int(k) and pred != int(k) - 1:
             print "predecessors not correct", k, pred            
@@ -207,28 +215,35 @@ def check_outfile(outfile):
             print "end states labelled improperly"
             outfile.close()
             return False
-    if i - prev_start < 3:
+        if deadend in outfile[k].keys():
+            deadend = outfile[k]['deadend'][()]
+            if deadend and not action.startswith('deadend'):
+                print "deadend states labelled improperly"
+                outfile.close()
+                return False
+    if i - prev_start < 3 and not use_dagger:
         print "trajectory has length less than 4 (including endstate); index: ", k, ", length: ", i - prev_start
         outfile.close()
         return False
     if i - prev_start > 4:
         print "possible mistake: trajectory has length greater than 5 (including endstate); index: ", k, ", length: ", i - prev_start
     if not outfile[str(i)]['knot'][()]:
-        print "trajectory must end with a knot; index: ", i-1
-        outfile.close()
-        return False
+        if not use_dagger or (use_dagger and not outfile[str(i-1)]['deadend'][()]):
+            print "trajectory must end with a knot or deadend; index: ", i-1
+            outfile.close()
+            return False
         
     return True
 
-def concat_datafiles(in_f1, in_f2, ofname):
+def concat_datafiles(in_f1, in_f2, ofname, with_dagger=False):
     """ 
     assumes both files are opened in append mode
     puts the examples from of2 into of1
     """
-    if not check_outfile(in_f1):
+    if not check_outfile(in_f1, with_dagger):
         in_f2.close()
         raise Exception, "input file 1 not formatted correctly"
-    if not check_outfile(in_f2):
+    if not check_outfile(in_f2, with_dagger):
         in_f1.close()
         raise Exception, "input file 2 not formatted correctly " + str(in_f2)
     of = h5py.File(ofname, 'a')
@@ -282,11 +297,12 @@ def remove_last_example(outfile):
             raise Exception, "issue deleting examples, check your file"
 
 def get_input(start_state, action_name, next_state, outfile, pred):
-    print "d accepts and resamples rope"
+    print "d accepts as knot and resamples rope"
+    print "x accepts as deadend and resamples rope"
     print "i ignores and resamples rope"
     print "r removes this entire example"
     print "you can C-c to quit safely"
-    response = raw_input("Use this demonstration?[y/N/d/i/r]")
+    response = raw_input("Use this demonstration?[y/N/d/x/i/r]")
     resample = False
     success = False
     if response in ('R', 'r'):
@@ -301,19 +317,40 @@ def get_input(start_state, action_name, next_state, outfile, pred):
                     items=[['cloud_xyz', start_state],
                            ['action', action_name],
                            ['knot', 0], # additional flag to tell if this is a knot
+                           ['deadend', 0],
                            ['pred', pred]])
         # write the end state
         write_flush(outfile,
                     items = [['cloud_xyz', next_state],
                              ['action', 'endstate:' + action_name],
                              ['knot', 1],
+                             ['deadend', 0],
                              ['pred', str(len(outfile)-1)]])
+        success = True
+    elif response in ('X', 'x'):
+        resample = True
+        # write the demonstration
+        write_flush(outfile, 
+                    items=[['cloud_xyz', start_state],
+                           ['action', action_name],
+                           ['knot', 0], # additional flag to tell if this is a knot
+                           ['deadend', 0],
+                           ['pred', pred]])
+        # write the end state
+        write_flush(outfile,
+                    items = [['cloud_xyz', next_state],
+                             ['action', 'endstate:' + action_name],
+                             ['knot', 0],
+                             ['deadend', 1],
+                             ['pred', str(len(outfile)-1)]])
+
         success = True
     elif response in ('Y', 'y'):
         write_flush(outfile, 
                     items=[['cloud_xyz', start_state],
                            ['action', action_name],
                            ['knot', 0], # additional flag to tell if this is a knot
+                           ['deadend', 0],
                            ['pred', pred]]) 
         success = True
     return (success, resample)    
@@ -322,7 +359,7 @@ def multiple_rc(target, clds):
     return [registration_cost_cheap(target, cl) for cl in clds]
 
 
-def manual_select_demo(xyz, demofile, outfile, pred):
+def manual_select_demo(xyz, demofile, outfile, pred, label_single_step):
     start_rope_state = Globals.sim.rope.GetControlPoints()    
     ds_clouds = dict(zip(demofile.keys(), get_downsampled_clouds(demofile)))
     if args.parallel:
@@ -345,19 +382,18 @@ def manual_select_demo(xyz, demofile, outfile, pred):
             replace_rope(start_rope_state)
             continue # no point in going further with this one
         (success, resample) = get_input(xyz, str(seg_name), new_xyz, outfile, pred)
-        if resample:
-            sample_rope_state(demofile)
-            break
-        elif success:
+        if resample or success:
             break
         else:
             replace_rope(start_rope_state)
     if resample:
         # return the key for the next sample we'll see (so it is its own pred)
-        return str(len(outfile))
+        return (str(len(outfile)), resample)
+    elif label_single_step:
+        return (str(len(outfile)), True)
     else:
         # return the key for the most recent addition
-        return str(len(outfile)-1)
+        return (str(len(outfile)-1), resample)
         
 
 
@@ -567,6 +603,7 @@ if __name__ == "__main__":
     parser.add_argument('actionfile')
     parser.add_argument('outfile')
         
+    parser.add_argument("--dagger_states_file", type=str)
     parser.add_argument("--fake_data_segment",type=str, default='demo1-seg00')
     parser.add_argument("--fake_data_transform", type=float, nargs=6, metavar=("tx","ty","tz","rx","ry","rz"),
         default=[0,0,0,0,0,0], help="translation=(tx,ty,tz), axis-angle rotation=(rx,ry,rz)")
@@ -574,8 +611,19 @@ if __name__ == "__main__":
     parser.add_argument("--interactive",action="store_true")
     parser.add_argument("--log", type=str, default="", help="")
     parser.add_argument("--parallel", action="store_true")
+    parser.add_argument("--label_single_step", action="store_true")
     
     args = parser.parse_args()
+
+    use_dagger = False
+    if args.dagger_states_file:
+        use_dagger = True
+
+    label_single_step = False
+    if args.label_single_step:
+        label_single_step = True
+
+    dagger_states = h5py.File(args.dagger_states_file, 'r')
 
     if args.random_seed is not None: np.random.seed(args.random_seed)
 
@@ -611,7 +659,15 @@ if __name__ == "__main__":
     print "then hit 'p' to continue"
     Globals.viewer.Idle()
 
-    sample_rope_state(actionfile)
+    if use_dagger:
+        # Load initial state of first complete trajectory
+        dagger_states = h5py.File(args.dagger_states_file, 'r')
+        task_indices = sorted(dagger_states.keys())
+        curr_task_index = 0
+        curr_step_index = 0
+        load_dagger_state(dagger_states[task_indices[curr_task_index]][STEPS[curr_step_index]])
+    else:
+        sample_rope_state(actionfile)
 
     #####################
     try:
@@ -623,10 +679,30 @@ if __name__ == "__main__":
             Globals.viewer.Step()
         
             xyz = Globals.sim.observe_cloud()
-            pred = manual_select_demo(xyz, actionfile, outfile, pred)
+            (pred, resample) = manual_select_demo(xyz, actionfile, outfile, pred, label_single_step)
+
+            if resample and use_dagger:
+                end_of_file = False
+                use_state = False
+                while not use_state:
+                    curr_step_index += 1
+                    if curr_step_index == len(STEPS) or STEPS[curr_step_index] not in dagger_states[task_indices[curr_task_index]]:
+                        curr_task_index += 1
+                        curr_step_index = 0
+                        if curr_task_index == len(task_indices):
+                            dagger_states.close()
+                            end_of_file = True
+                            break
+                    print "LOADING NEW DAGGER-SAMPLED STATE"
+                    use_state = load_dagger_state(dagger_states[task_indices[curr_task_index]][STEPS[curr_step_index]])
+                if end_of_file:
+                    break
+
+            elif resample and not use_dagger:
+                sample_rope_state(actionfile)
     except KeyboardInterrupt:
         actionfile.close()
         h5_no_endstate_len(outfile)
-        safe = check_outfile(outfile)
+        safe = check_outfile(outfile, use_dagger)
         if not safe:
             print args.outfile+" is not properly formatted, check it manually!!!!!"

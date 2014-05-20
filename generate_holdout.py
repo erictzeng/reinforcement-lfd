@@ -26,6 +26,7 @@ parser.add_argument("demos_h5file", type=str)
 parser.add_argument("holdout_file", type=str)
 
 parser.add_argument("--human_check", action="store_true")
+parser.add_argument("--no_animation", action="store_true")
 parser.add_argument("--perturb_points", type=int, default=5)
 parser.add_argument("--min_rad", type=float, default=0)
 parser.add_argument("--max_rad", type=float, default=0.15)
@@ -41,7 +42,8 @@ class Globals:
     env = None
     robot = None
     sim = None
-    viewer = None    
+    viewer = None
+    animation = True
 
 def make_table_xml(translation, extents):
     xml = """
@@ -73,7 +75,8 @@ def replace_rope(new_rope):
         Globals.sim.create(new_rope)
         return
 
-    Globals.viewer.RemoveKinBody(Globals.env.GetKinBody('rope'))
+    if Globals.animation:
+        Globals.viewer.RemoveKinBody(Globals.env.GetKinBody('rope'))
     Globals.env.Remove(Globals.env.GetKinBody('rope'))
     Globals.sim.bt_env.Remove(Globals.sim.bt_env.GetObjectByName('rope'))
     Globals.sim.rope = bulletsimpy.CapsuleRope(Globals.sim.bt_env, 'rope',
@@ -91,8 +94,8 @@ def sample_rope_state(demofile):
 
         replace_rope(rope_nodes)
         Globals.sim.settle()
-        Globals.viewer.Step()
-        Globals.viewer.Idle()
+        if Globals.animation:
+            Globals.viewer.Step()
         if args.human_check:
             resp = raw_input("Use this start simulation?[Y/n]")
             success = resp not in ('N', 'n')
@@ -130,6 +133,9 @@ def main():
     demofile = h5py.File(args.demos_h5file, 'r')
     trajoptpy.SetInteractive(False)
 
+    if args.no_animation:
+        Globals.animation = False
+
     Globals.env = openravepy.Environment()
     Globals.env.StopSimulation()
     Globals.env.Load("robots/pr2-beta-static.zae")
@@ -144,12 +150,14 @@ def main():
     Globals.env.LoadData(table_xml)
     Globals.sim = ropesim.Simulation(Globals.env, Globals.robot)
 
-    Globals.viewer = trajoptpy.GetViewer(Globals.env)
+    if Globals.animation:
+        Globals.viewer = trajoptpy.GetViewer(Globals.env)
+        Globals.viewer.Idle()
 
     for i in range(0, args.dataset_size):
         print "State ", i, " of ", args.dataset_size
         rope_nodes, demo_id = sample_rope_state(demofile)
         save_example_action(rope_nodes, demo_id)
-        
+
 if __name__ == "__main__":
     main()
