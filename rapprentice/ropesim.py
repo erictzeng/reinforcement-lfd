@@ -130,14 +130,30 @@ class Simulation(object):
         self.env.UpdatePublishedBodies()
         print "settled in %d iterations" % (i+1)
 
-    def observe_cloud(self, upsample=0):
+    def observe_cloud(self, upsample=0, upsample_perp=1):
+        """
+        If upsample > 0, the number of points along the rope's backbone is resampled to be upsample points
+        If upsample_perp > 1, the number of points perpendicular to the backbone points is resampled to be upsample_perp points, within the radius of the rope
+        The total number of points is then: (upsample if upsample > 0 else len(self.rope.GetControlPoints())) * upsample_perp
+        """
         pts = self.rope.GetControlPoints()
-        if upsample == 0:
-            return pts
-        lengths = np.r_[0, self.rope.GetHalfHeights() * 2]
-        summed_lengths = np.cumsum(lengths)
-        assert len(lengths) == len(pts)
-        return math_utils.interp2d(np.linspace(0, summed_lengths[-1], upsample), summed_lengths, pts)
+        if upsample > 0:
+            lengths = np.r_[0, self.rope.GetHalfHeights() * 2]
+            summed_lengths = np.cumsum(lengths)
+            assert len(lengths) == len(pts)
+            pts = math_utils.interp2d(np.linspace(0, summed_lengths[-1], upsample), summed_lengths, pts)
+        if upsample_perp > 1:
+            # add points perpendicular to the points in pts at various distance between -r and +r
+            v = pts[1:,:] - pts[:-1,:] # vectors between the current and next points
+            v /= np.apply_along_axis(np.linalg.norm, 1, v)[:,None]
+            v_perp = np.c_[-v[:,1], v[:,0], np.zeros(v.shape[0])] # perpendicular vectors between the current and next points in the z-plane
+            v_perp /= np.apply_along_axis(np.linalg.norm, 1, v_perp)[:,None]
+            v_perp = np.r_[v_perp, v_perp[-1,:][None,:]] # define the perpendicular vector of the last point to be the same as the second to last one
+            perp_pts = []
+            for r in np.linspace(-self.rope_params.radius, self.rope_params.radius, upsample_perp):
+                perp_pts.append(pts + r*v_perp)
+            pts = np.concatenate(perp_pts)
+        return pts
 
     def grab_rope(self, lr):
         nodes, ctl_pts = self.rope.GetNodes(), self.rope.GetControlPoints()
