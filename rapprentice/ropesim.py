@@ -154,6 +154,49 @@ class Simulation(object):
                 perp_pts.append(pts + r*v_perp)
             pts = np.concatenate(perp_pts)
         return pts
+    
+    def raycast_cloud(self, T_w_k=None, obj=None, z=1., endpoints=0):
+        """
+        T_w_k: world transform of the kinect. The robot's wide_stereo_optical_frame is used by default. TODO: use the actual kinect's frame
+        obj: the BulletObject to do ray test onto. The rope is used by default
+        z: length of the rays. 1 meter by default
+        endpoints: also return the indices of the points that came from the rope's endpoints. Assumes obj is a rope
+        """
+        if T_w_k is None:
+            T_w_k = self.robot.GetLink("wide_stereo_optical_frame").GetTransform()
+        if obj is None:
+            obj = self.rope
+        
+        # camera's parameters
+        cx = 320.-.5
+        cy = 240.-.5
+        f = 525. # focal length
+        w = 640.
+        h = 480.
+        
+        pixel_ij = np.array(np.meshgrid(np.arange(w), np.arange(h))).T.reshape((-1,2)) # all pixel positions
+        rayTos = z * np.c_[(pixel_ij - np.array([cx, cy])) / f, np.ones(pixel_ij.shape[0])]
+        rayFroms = np.zeros_like(rayTos)
+        # transform the rays from the camera frame to the world frame
+        rayTos = rayTos.dot(T_w_k[:3,:3].T) + T_w_k[:3,3]
+        rayFroms = rayFroms.dot(T_w_k[:3,:3].T) + T_w_k[:3,3]
+
+        ray_collisions = self.bt_env.RayTest(rayFroms, rayTos, obj)
+
+        pts = np.empty((len(ray_collisions), 3))
+        for i, ray_collision in enumerate(ray_collisions):
+            pts[i,:] = ray_collision.pt
+
+        if endpoints:
+            links = self.rope.GetKinBody().GetLinks()
+            end_links = links[:endpoints] + links[-endpoints:]
+            endpoint_inds = np.zeros(len(pts), dtype=bool)
+            for i, ray_collision in enumerate(ray_collisions):
+                if ray_collision.link in end_links:
+                    endpoint_inds[i] = True
+            return pts, endpoint_inds
+        
+        return pts
 
     def grab_rope(self, lr):
         nodes, ctl_pts = self.rope.GetNodes(), self.rope.GetControlPoints()
