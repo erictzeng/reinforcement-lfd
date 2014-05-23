@@ -26,11 +26,25 @@ def depth_to_xyz(depth,f=DEFAULT_F):
     
 def downsample(xyz, v):
     import cloudprocpy
-    cloud = cloudprocpy.CloudXYZ()
-    xyz1 = np.ones((len(xyz),4),'float')
-    xyz1[:,:3] = xyz
-    cloud.from2dArray(xyz1)
-    cloud = cloudprocpy.downsampleCloud(cloud, v)
-    return cloud.to2dArray()[:,:3]
-
+    if xyz.shape[1] == 3:
+        cloud = cloudprocpy.CloudXYZ()
+        xyz1 = np.ones((len(xyz),4),'float')
+        xyz1[:,:3] = xyz
+        cloud.from2dArray(xyz1)
+        cloud = cloudprocpy.downsampleCloud(cloud, v)
+        return cloud.to2dArray()[:,:3]
+    else:
+        # rgb fields needs to be packed and upacked as described in here
+        # http://docs.pointclouds.org/1.7.0/structpcl_1_1_point_x_y_z_r_g_b.html
+        xyzrgb = xyz
+        n = xyzrgb.shape[0]
+        cloud = cloudprocpy.CloudXYZRGB()
+        xyzrgb1 = np.ones((n,8),'float')
+        xyzrgb1[:,:3] = xyzrgb[:,:3]
+        xyzrgb1[:,4] = cloudprocpy.packRGBs(xyzrgb[:,3:] * 255.0)
+        xyzrgb1[:,5:] = np.zeros((n,3)) # padding that is not used. set to zero just in case
+        cloud.from2dArray(xyzrgb1)
+        cloud = cloudprocpy.downsampleColorCloud(cloud, v)
+        xyzrgb1 = cloud.to2dArray()
+        return np.c_[xyzrgb1[:,:3], cloudprocpy.unpackRGBs(xyzrgb1[:,4]) / 255.0]
     
