@@ -30,3 +30,8 @@ def linspace2d(start,end,n):
 def remove_duplicate_rows(mat):
     diffs = mat[1:] - mat[:-1]
     return mat[np.r_[True,(abs(diffs) >= 1e-5).any(axis=1)]]
+def invertHmat(hmat):
+    R = hmat[:3,:3]
+    t = hmat[:3,3]
+    hmat_inv = np.r_[np.c_[R.T, -R.T.dot(t)], hmat[3,:][None,:]]
+    return hmat_inv
