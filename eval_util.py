@@ -51,6 +51,8 @@ def save_task_results_init(fname, sim_env, task_index, rope_nodes, args, rope_pa
         result_file[task_index]['init']['rope_params'] = rope_params
     if hasattr(args, 'jointopt'):
         result_file[task_index]['init']['jointopt'] = args.jointopt
+    if hasattr(args, 'use_color'):
+        result_file[task_index]['init']['use_color'] = args.use_color
     result_file[task_index]['init']['trans'] = trans
     result_file[task_index]['init']['rots'] = rots
     result_file.close()
@@ -64,8 +66,10 @@ def load_task_results_init(fname, task_index):
     rope_nodes = result_file[task_index]['init']['rope_nodes'][()]
     rope_params = result_file[task_index]['init']['rope_params'][()] if 'rope_params' in result_file[task_index]['init'].keys() else None
     args_dict = {}
-    if 'joint_opt' in result_file[task_index]['init']:
+    if 'jointopt' in result_file[task_index]['init']:
         args_dict['jointopt'] = result_file[task_index]['init']['jointopt'][()]
+    if 'use_color' in result_file[task_index]['init']:
+        args_dict['use_color'] = result_file[task_index]['init']['use_color'][()]
     args = util.Bunch(args_dict)
     trans = result_file[task_index]['init']['trans'][()]
     rots = result_file[task_index]['init']['rots'][()]
