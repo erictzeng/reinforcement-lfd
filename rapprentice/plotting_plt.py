@@ -95,7 +95,7 @@ def plot_warped_grid_3d(f, mins, maxes, xres = .1, yres = .1, zres = .04, color 
         plt.draw()
 
 
-def plot_warped_grid_proj_2d(f, mins, maxes, xres = .1, yres = .1, color = 'gray', draw=True):
+def plot_warped_grid_proj_2d(f, mins, maxes, z=.0, xres = .1, yres = .1, color = 'gray', draw=True):
     xmin, ymin = mins
     xmax, ymax = maxes
 
@@ -112,14 +112,14 @@ def plot_warped_grid_proj_2d(f, mins, maxes, xres = .1, yres = .1, color = 'gray
         xyz = np.zeros((nfine, 3))
         xyz[:,0] = xfine
         xyz[:,1] = y
-        xyz[:,2] = 0
+        xyz[:,2] = z
         lines.append(f(xyz)[:,:2])
         
     for x in xcoarse:
         xyz = np.zeros((nfine, 3))
         xyz[:,0] = x
         xyz[:,1] = yfine
-        xyz[:,2] = 0
+        xyz[:,2] = z
         lines.append(f(xyz)[:,:2])
 
     lc = matplotlib.collections.LineCollection(lines,colors=color,lw=1)
@@ -233,14 +233,15 @@ def plot_tps_registration_proj_2d(x_nd, y_md, f, res, x_color, y_color, xwarped_
     grid_means = .5 * (x_nd.max(axis=0) + x_nd.min(axis=0))
     grid_mins = grid_means - (x_nd.max(axis=0) - x_nd.min(axis=0))
     grid_maxs = grid_means + (x_nd.max(axis=0) - x_nd.min(axis=0))
-    plot_warped_grid_proj_2d(lambda xyz: xyz, grid_mins[:2], grid_maxs[:2], xres=res[0], yres=res[1], draw=False)
+    x_median = np.median(x_nd, axis=0)
+    plot_warped_grid_proj_2d(lambda xyz: xyz, grid_mins[:2], grid_maxs[:2], z=x_median[2], xres=res[0], yres=res[1], draw=False)
     
     plt.subplot(122, aspect='equal')
     plt.scatter(y_md[:,0], y_md[:,1], c=y_color, marker='+', s=50)
     xwarped_nd = f.transform_points(x_nd)
     plt.scatter(xwarped_nd[:,0], xwarped_nd[:,1], edgecolors=xwarped_color, facecolors='none', marker='o', s=50)
 
-    plot_warped_grid_proj_2d(f.transform_points, grid_mins[:2], grid_maxs[:2], xres=res[0], yres=res[1], draw=False)
+    plot_warped_grid_proj_2d(f.transform_points, grid_mins[:2], grid_maxs[:2], z=x_median[2], xres=res[0], yres=res[1], draw=False)
     
     plt.draw()
 
