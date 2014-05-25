@@ -343,10 +343,10 @@ class ActionSet(object):
 
     state is assumed to be a list [<state_id>, <point_cloud>]
     """
-    # set up openrave env for traj cost
-    env, robot = traj_utils.initialize_lite_sim()
-    
     def __init__(self, actionfile, landmarks=[], gripper_weighting = False, use_cache = True, downsample = True):
+        # set up openrave env for traj cost
+        self.env, self.robot = traj_utils.initialize_lite_sim()
+        
         if type(actionfile) is str:
             self.actionfile = h5py.File(actionfile, 'r')
         else:
