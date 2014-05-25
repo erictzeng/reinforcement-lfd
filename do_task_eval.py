@@ -206,6 +206,7 @@ def set_global_vars(args, sim_env):
     
     GlobalVars.downsample = args.downsample
     if GlobalVars.downsample:
+        global clouds
         from rapprentice import clouds
 
 def parse_input_args():
@@ -217,7 +218,6 @@ def parse_input_args():
     parser.add_argument("--animation", type=int, default=0, help="if greater than 1, the viewer tries to load the window and camera properties without idling at the beginning")
     parser.add_argument("--interactive", action="store_true", help="step animation and optimization if specified")
     parser.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelve', 'boxes'], default=[])
-    parser.add_argument("--num_steps", type=int, default=5, help="maximum number of steps to simulate each task")
     parser.add_argument("--resultfile", type=str, help="no results are saved if this is not specified")
     
     parser.add_argument("--downsample", type=int, default=1)
@@ -254,7 +254,8 @@ def parse_input_args():
     parser_eval.add_argument("--rope_dist_features", action="store_true")
     parser_eval.add_argument("--traj_features", action="store_true")
     parser_eval.add_argument("--gripper_weighting", action="store_true")
-    
+    parser_eval.add_argument("--num_steps", type=int, default=5, help="maximum number of steps to simulate each task")
+
     parser_replay = subparsers.add_parser('replay')
     parser_replay.add_argument("loadresultfile", type=str)
     parser_replay.add_argument("--replay_rope_params", type=str, default=None, help="if not specified, uses the rope_params that is saved in the result file")
@@ -277,8 +278,7 @@ def eval_on_holdout(args, sim_env):
     assert weights.shape[0] == num_features, "Dimensions of weights and features don't match. Make sure the right feature is being used"
     
     holdoutfile = h5py.File(args.holdoutfile, 'r')
-    tasks = eval_util.get_specified_tasks(args.tasks, args.taskfile, args.i_start, args.i_end)
-    holdout_items = eval_util.get_holdout_items(holdoutfile, tasks)
+    holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
 
     num_successes = 0
     num_total = 0
@@ -368,12 +368,10 @@ def eval_on_holdout(args, sim_env):
 
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
-# make args more module (i.e. remove irrelevant args for replay mode)
 def replay_on_holdout(args, sim_env):
     holdoutfile = h5py.File(args.holdoutfile, 'r')
-    tasks = eval_util.get_specified_tasks(args.tasks, args.taskfile, args.i_start, args.i_end)
     loadresultfile = h5py.File(args.loadresultfile, 'r')
-    loadresult_items = eval_util.get_holdout_items(loadresultfile, tasks)
+    loadresult_items = eval_util.get_holdout_items(loadresultfile, args.tasks, args.taskfile, args.i_start, args.i_end)
 
     num_successes = 0
     num_total = 0

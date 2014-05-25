@@ -16,7 +16,7 @@ class EvalStats:
         self.action_elapsed_time = 0
         self.exec_elapsed_time = 0
 
-def get_specified_tasks(task_list, task_file, i_start, i_end):
+def get_holdout_items(holdoutfile, task_list, task_file, i_start, i_end):
     tasks = [] if task_list is None else task_list
     if task_file is not None:
         file = open(task_file, 'r')
@@ -25,11 +25,12 @@ def get_specified_tasks(task_list, task_file, i_start, i_end):
                 tasks.append(int(line))
             except:
                 print "get_specified_tasks:", line, "is not a valid task"
-    if i_start != -1 and i_end != -1:
+    if i_start != -1 or i_end != -1:
+        if i_end == -1:
+            i_end = len(holdoutfile)
+        if i_start == -1:
+            i_start = 0
         tasks.extend(range(i_start, i_end))
-    return tasks
-
-def get_holdout_items(holdoutfile, tasks):
     if not tasks:
         return sorted(holdoutfile.iteritems(), key=lambda item: int(item[0]))
     else:
