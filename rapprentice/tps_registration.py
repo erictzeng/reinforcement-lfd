@@ -170,21 +170,6 @@ def main():
 
     args = parser.parse_args()
     
-    # TODO use PCL's downsampling for color as well
-    DS_SIZE = 0.025
-    def downsample_cloud(cloud):
-        # cloud should have XYZRGB info per row
-        d = 3
-        cloud_xyz = cloud[:,:d]
-        cloud_xyz_downsamp = clouds.downsample(cloud_xyz, DS_SIZE)
-        new_n,_ = cloud_xyz_downsamp.shape
-        dists = ssd.cdist(cloud_xyz_downsamp, cloud_xyz)
-        min_indices = dists.argmin(axis=1)
-        cloud_xyzrgb_downsamp = np.zeros((new_n,d+3))
-        cloud_xyzrgb_downsamp[:,:d] = cloud_xyz_downsamp
-        cloud_xyzrgb_downsamp[:,d:] = cloud[min_indices,d:]
-        return cloud_xyzrgb_downsamp
-
     def plot_cb_gen(output_prefix, args, x_color, y_color):
         def plot_cb(x_nd, y_md, corr_nm, f, iteration):
             if args.plot_color:
@@ -208,15 +193,16 @@ def main():
         return plot_cb_bij
 
     # preprocess and downsample clouds
+    DS_SIZE = 0.025
     infile = h5py.File(args.input_file)
     source_clouds = {}
     target_clouds = {}
     for i in range(len(infile)):
-        source_cloud = downsample_cloud(infile[str(i)]['source_cloud'][()])
+        source_cloud = clouds.downsample(infile[str(i)]['source_cloud'][()], DS_SIZE)
         source_clouds[i] = source_cloud
         target_clouds[i] = []
         for (cloud_key, target_cloud) in infile[str(i)]['target_clouds'].iteritems():
-            target_cloud = downsample_cloud(target_cloud[()])
+            target_cloud = clouds.downsample(target_cloud[()], DS_SIZE)
             target_clouds[i].append(target_cloud)
     infile.close()
     
