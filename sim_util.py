@@ -229,11 +229,16 @@ def get_full_traj(sim_env, lr2traj):
         full_traj = (np.zeros((0,0)), [])
     return full_traj
 
-def get_ee_traj(sim_env, lr, joint_traj):
+def get_ee_traj(sim_env, lr, joint_or_full_traj):
     manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
     ee_link_name = "%s_gripper_tool_frame"%lr
     ee_link = sim_env.robot.GetLink(ee_link_name)
-    dof_inds = sim_env.robot.GetManipulator(manip_name).GetArmIndices()
+    if type(joint_or_full_traj) == tuple: # it is a full_traj
+        joint_traj = joint_or_full_traj[0]
+        dof_inds = joint_or_full_traj[1]
+    else:
+        joint_traj = joint_or_full_traj
+        dof_inds = sim_env.robot.GetManipulator(manip_name).GetArmIndices()
     ee_traj = []
     with openravepy.RobotStateSaver(sim_env.robot):
         for i_step in range(joint_traj.shape[0]):
