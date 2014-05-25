@@ -78,7 +78,7 @@ def sinkhorn_balance_coeffs(prob_NM, normalize_iter):
     return r_N, c_M
 
 def tps_rpm(x_nd, y_md, n_iter = 20, lambda_init = 10., lambda_final = .1, T_init = .04, T_final = .00004, rot_reg = np.r_[1e-4, 1e-4, 1e-1], 
-            plotting = False, plot_cb = None, outlierfrac = 1e-2, vis_cost_xy = None, em_iter = 2):
+            plotting = False, plot_cb = None, outlierfrac = 1e-2, vis_cost_xy = None, em_iter = 2, user_data=None):
     """
     tps-rpm algorithm mostly as described by chui and rangaran
     lambda_init/lambda_final: regularization on curvature
@@ -98,13 +98,13 @@ def tps_rpm(x_nd, y_md, n_iter = 20, lambda_init = 10., lambda_final = .1, T_ini
 
     for i in xrange(n_iter):
         for _ in xrange(em_iter):
-            f, corr_nm = rpm_em_step(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, vis_cost_xy = vis_cost_xy, T0 = T_init)
+            f, corr_nm = rpm_em_step(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, vis_cost_xy = vis_cost_xy, T0 = T_init, user_data = user_data)
 
         if plotting and (i%plotting==0 or i==(n_iter-1)):
             plot_cb(x_nd, y_md, corr_nm, f, i)
     return f, corr_nm
 
-def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, vis_cost_xy = None, outlierprior = 1e-2, normalize_iter = 20, T0 = .04):
+def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, vis_cost_xy = None, outlierprior = 1e-2, normalize_iter = 20, T0 = .04, user_data=None):
     n,d = x_nd.shape
     m,_ = y_md.shape
     xwarped_nd = prev_f.transform_points(x_nd)
