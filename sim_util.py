@@ -244,11 +244,11 @@ def get_ee_traj(sim_env, lr, joint_traj):
 def load_random_start_segment(demofile):
     start_keys = [k for k in demofile.keys() if k.startswith('demo') and k.endswith('00')]
     seg_name = random.choice(start_keys)
-    return demofile[seg_name]['cloud_xyz']
+    return demofile[seg_name]['cloud_xyz'][:,:3]
 
 def load_fake_data_segment(sim_env, demofile, fake_data_segment, fake_data_transform, set_robot_state=True):
     fake_seg = demofile[fake_data_segment]
-    new_xyz = np.squeeze(fake_seg["cloud_xyz"])
+    new_xyz = np.squeeze(fake_seg["cloud_xyz"])[:,:3]
     hmat = openravepy.matrixFromAxisAngle(fake_data_transform[3:6])
     hmat[:3,3] = fake_data_transform[0:3]
     new_xyz = new_xyz.dot(hmat[:3,:3].T) + hmat[:3,3][None,:]
