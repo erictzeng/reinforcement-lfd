@@ -163,6 +163,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("input_file", type=str)
     parser.add_argument("--output_folder", type=str, default="")
+    parser.add_argument("--i_start", type=int, default=0)
+    parser.add_argument("--i_end", type=int, default=-1)
+    regtype_choices = ['rpm', 'rpm-cheap', 'rpm-bij', 'rpm-bij-cheap']
+    parser.add_argument("--regtypes", type=str, nargs='*', choices=regtype_choices, default=regtype_choices)
     parser.add_argument("--plot_color", type=int, default=1)
     parser.add_argument("--proj", type=int, default=1, help="project 3d visualization into 2d")
     parser.add_argument("--visual_prior", type=int, default=1)
@@ -197,7 +201,7 @@ def main():
     infile = h5py.File(args.input_file)
     source_clouds = {}
     target_clouds = {}
-    for i in range(len(infile)):
+    for i in range(args.i_start, len(infile) if args.i_end==-1 else args.i_end):
         source_cloud = clouds.downsample(infile[str(i)]['source_cloud'][()], DS_SIZE)
         source_clouds[i] = source_cloud
         target_clouds[i] = []
@@ -206,103 +210,70 @@ def main():
             target_clouds[i].append(target_cloud)
     infile.close()
     
-    start_time = time.time()
-    rpm_tps_costs = []
-    rpm_tps_reg_cost = []
-    for i in range(len(source_clouds)):
-        source_cloud = source_clouds[i]
-        for target_cloud in target_clouds[i]:
-            if args.visual_prior:
-                vis_cost_xy = ab_cost(source_cloud, target_cloud)
-            else:
-                vis_cost_xy = None
-            f, corr_nm = tps_rpm(source_cloud[:,:-3], target_cloud[:,:-3],
-                                 vis_cost_xy = vis_cost_xy,
-                                 plotting=args.plotting, plot_cb = plot_cb_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm") if args.output_folder else None,
-                                                                               args,
-                                                                               source_cloud[:,-3:],
-                                                                               target_cloud[:,-3:]))
-            rpm_tps_costs.append(f._cost)
-            rpm_tps_reg_cost.append(registration.tps_reg_cost(f))
-    print "tps_rpm time elapsed", time.time() - start_time
-    
-    start_time = time.time()
-    rpm_bij_tps_costs = []
-    rpm_bij_tps_reg_cost = []
-    for i in range(len(source_clouds)):
-        source_cloud = source_clouds[i]
-        for target_cloud in target_clouds[i]:
-            if args.visual_prior:
-                vis_cost_xy = ab_cost(source_cloud, target_cloud)
-            else:
-                vis_cost_xy = None
-            x_nd = source_cloud[:,:3]
-            y_md = target_cloud[:,:3]
-            scaled_x_nd, _ = registration.unit_boxify(x_nd)
-            scaled_y_md, _ = registration.unit_boxify(y_md)
-            f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, rot_reg=np.r_[1e-4, 1e-4, 1e-1], n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2, vis_cost_xy=vis_cost_xy,
-                                           plotting=args.plotting, plot_cb=plot_cb_bij_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm_bij") if args.output_folder else None,
-                                                                                           args,
-                                                                                           source_cloud[:,-3:],
-                                                                                           target_cloud[:,-3:]))
-            rpm_bij_tps_costs.append(f._cost)
-            rpm_bij_tps_reg_cost.append(registration.tps_reg_cost(f))
-    print "tps_rpm_bij time elapsed", time.time() - start_time
-    
-    start_time = time.time()
-    rpm_cheap_tps_costs = []
-    rpm_cheap_tps_reg_cost = []
-    for i in range(len(source_clouds)):
-        source_cloud = source_clouds[i]
-        for target_cloud in target_clouds[i]:
-            if args.visual_prior:
-                vis_cost_xy = ab_cost(source_cloud, target_cloud)
-            else:
-                vis_cost_xy = None
-            f, corr_nm = tps_rpm(source_cloud[:,:-3], target_cloud[:,:-3],
-                                 vis_cost_xy = vis_cost_xy, n_iter = N_ITER_CHEAP, em_iter = EM_ITER_CHEAP, 
-                                 plotting=args.plotting, plot_cb = plot_cb_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm_cheap") if args.output_folder else None,
-                                                                               args,
-                                                                               source_cloud[:,-3:],
-                                                                               target_cloud[:,-3:]))
-            rpm_cheap_tps_costs.append(f._cost)
-            rpm_cheap_tps_reg_cost.append(registration.tps_reg_cost(f))
-    print "tps_rpm_cheap time elapsed", time.time() - start_time
-    
-    start_time = time.time()
-    rpm_bij_cheap_tps_costs = []
-    rpm_bij_cheap_tps_reg_cost = []
-    for i in range(len(source_clouds)):
-        source_cloud = source_clouds[i]
-        for target_cloud in target_clouds[i]:
-            if args.visual_prior:
-                vis_cost_xy = ab_cost(source_cloud, target_cloud)
-            else:
-                vis_cost_xy = None
-            x_nd = source_cloud[:,:3]
-            y_md = target_cloud[:,:3]
-            scaled_x_nd, _ = registration.unit_boxify(x_nd)
-            scaled_y_md, _ = registration.unit_boxify(y_md)
-            f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, rot_reg=np.r_[1e-4, 1e-4, 1e-1], n_iter=10, vis_cost_xy=vis_cost_xy, # Note registration_cost_cheap in rope_qlearn has a different rot_reg
-                                           plotting=args.plotting, plot_cb=plot_cb_bij_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm_bij_cheap") if args.output_folder else None,
-                                                                                           args,
-                                                                                           source_cloud[:,-3:],
-                                                                                           target_cloud[:,-3:]))
-            rpm_bij_cheap_tps_costs.append(f._cost)
-            rpm_bij_cheap_tps_reg_cost.append(registration.tps_reg_cost(f))
-    print "tps_rpm_bij_cheap time elapsed", time.time() - start_time
-    
+    tps_costs = []
+    tps_reg_costs = []
+    for regtype in args.regtypes:
+        start_time = time.time()
+        costs = []
+        reg_costs = []
+        for i in range(args.i_start, len(source_clouds) if args.i_end==-1 else args.i_end):
+            source_cloud = source_clouds[i]
+            for target_cloud in target_clouds[i]:
+                if args.visual_prior:
+                    vis_cost_xy = ab_cost(source_cloud, target_cloud)
+                else:
+                    vis_cost_xy = None
+                if regtype == 'rpm':
+                    f, corr_nm = tps_rpm(source_cloud[:,:-3], target_cloud[:,:-3],
+                                         vis_cost_xy = vis_cost_xy,
+                                         plotting=args.plotting, plot_cb = plot_cb_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm") if args.output_folder else None,
+                                                                                       args,
+                                                                                       source_cloud[:,-3:],
+                                                                                       target_cloud[:,-3:]))
+                elif regtype == 'rpm-cheap':
+                    f, corr_nm = tps_rpm(source_cloud[:,:-3], target_cloud[:,:-3],
+                                         vis_cost_xy = vis_cost_xy, n_iter = N_ITER_CHEAP, em_iter = EM_ITER_CHEAP, 
+                                         plotting=args.plotting, plot_cb = plot_cb_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm_cheap") if args.output_folder else None,
+                                                                                       args,
+                                                                                       source_cloud[:,-3:],
+                                                                                       target_cloud[:,-3:]))
+                elif regtype == 'rpm-bij':
+                    x_nd = source_cloud[:,:3]
+                    y_md = target_cloud[:,:3]
+                    scaled_x_nd, _ = registration.unit_boxify(x_nd)
+                    scaled_y_md, _ = registration.unit_boxify(y_md)
+                    f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, rot_reg=np.r_[1e-4, 1e-4, 1e-1], n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2, vis_cost_xy=vis_cost_xy,
+                                                   plotting=args.plotting, plot_cb=plot_cb_bij_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm_bij") if args.output_folder else None,
+                                                                                                   args,
+                                                                                                   source_cloud[:,-3:],
+                                                                                                   target_cloud[:,-3:]))
+                elif regtype == 'rpm-bij-cheap':
+                    x_nd = source_cloud[:,:3]
+                    y_md = target_cloud[:,:3]
+                    scaled_x_nd, _ = registration.unit_boxify(x_nd)
+                    scaled_y_md, _ = registration.unit_boxify(y_md)
+                    f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, rot_reg=np.r_[1e-4, 1e-4, 1e-1], n_iter=10, vis_cost_xy=vis_cost_xy, # Note registration_cost_cheap in rope_qlearn has a different rot_reg
+                                                   plotting=args.plotting, plot_cb=plot_cb_bij_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm_bij_cheap") if args.output_folder else None,
+                                                                                                   args,
+                                                                                                   source_cloud[:,-3:],
+                                                                                                   target_cloud[:,-3:]))
+                costs.append(f._cost)
+                reg_costs.append(registration.tps_reg_cost(f))
+        tps_costs.append(costs)
+        tps_reg_costs.append(reg_costs)
+        print regtype, "time elapsed", time.time() - start_time
+
     np.set_printoptions(suppress=True)
     
     print ""
     print "tps_costs"
-    print "rpm, bij, rpm_cheap, bij_cheap"
-    print np.array([rpm_tps_costs, rpm_bij_tps_costs, rpm_cheap_tps_costs, rpm_bij_cheap_tps_costs]).T
+    print args.regtypes
+    print np.array(tps_costs).T
     
     print ""
-    print "tps_reg_cost"
-    print "rpm, bij, rpm_cheap, bij_cheap"
-    print np.array([rpm_tps_reg_cost, rpm_bij_tps_reg_cost, rpm_cheap_tps_reg_cost, rpm_bij_cheap_tps_reg_cost]).T
+    print "tps_reg_costs"
+    print args.regtypes
+    print np.array(tps_reg_costs).T
 
 if __name__ == "__main__":
     main()
