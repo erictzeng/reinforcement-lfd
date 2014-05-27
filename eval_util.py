@@ -75,7 +75,7 @@ def load_task_results_init(fname, task_index):
     rots = result_file[task_index]['init']['rots'][()]
     return rope_nodes, rope_params, args, trans, rots
 
-def save_task_results_step(fname, sim_env, task_index, step_index, eval_stats, best_root_action, full_trajs, q_values_root):
+def save_task_results_step(fname, sim_env, task_index, step_index, eval_stats, best_root_action, full_trajs, q_values_root, demo_cloud=None, demo_cloud_ds=None, cloud=None, cloud_ds=None):
     if fname is None:
         return
     result_file = h5py.File(fname, 'a')
@@ -88,6 +88,14 @@ def save_task_results_step(fname, sim_env, task_index, step_index, eval_stats, b
     result_file[task_index][step_index]['misgrasp'] = 1 if eval_stats.misgrasp else 0
     result_file[task_index][step_index]['infeasible'] = 1 if not eval_stats.feasible else 0
     result_file[task_index][step_index]['rope_nodes'] = sim_env.sim.rope.GetControlPoints()
+    if demo_cloud is not None:
+        result_file[task_index][step_index]['demo_cloud'] = demo_cloud
+    if demo_cloud_ds is not None:
+        result_file[task_index][step_index]['demo_cloud_ds'] = demo_cloud_ds
+    if cloud is not None:
+        result_file[task_index][step_index]['cloud'] = cloud
+    if cloud_ds is not None:
+        result_file[task_index][step_index]['cloud_ds'] = cloud_ds
     trans, rots = sim_util.get_rope_transforms(sim_env)
     result_file[task_index][step_index]['trans'] = trans
     result_file[task_index][step_index]['rots'] = rots
