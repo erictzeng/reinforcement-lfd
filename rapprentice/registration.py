@@ -315,7 +315,9 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
         r = rads[i]
         prob_nm = np.exp( -(fwddist_nm + invdist_nm) / (2*r) )
         if vis_cost_xy != None:
-            prob_nm *= np.exp( -vis_cost_xy ) # TODO scale outlier properly when this prior is used
+            pi = np.exp( -vis_cost_xy )
+            pi /= pi.sum(axis=0)[None,:] # normalize along columns; these are proper probabilities over j = 1,...,N
+            prob_nm *= pi # TODO scale outlier properly when this prior is used
 
         corr_nm, r_N, _ =  balance_matrix3(prob_nm, 10, x_priors, y_priors, outlierfrac) # edit final value to change outlier percentage
         corr_nm += 1e-9
