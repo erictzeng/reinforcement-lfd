@@ -283,6 +283,8 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
     rad_init/rad_final: radius for correspondence calculation (meters)
     plotting: 0 means don't plot. integer n means plot every n iterations
     interest_pts are points in either scene where we want a lower prior of outliers
+    x_weights: rescales the weights of the forward tps fitting of the last iteration
+    y_weights: same as x_weights, but for the backward tps fitting
     """
     _,d=x_nd.shape
     regs = loglinspace(reg_init, reg_final, n_iter)
@@ -316,8 +318,8 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
         prob_nm = np.exp( -(fwddist_nm + invdist_nm) / (2*r) )
         if vis_cost_xy != None:
             pi = np.exp( -vis_cost_xy )
-            pi /= pi.sum(axis=0)[None,:] # normalize along columns; these are proper probabilities over j = 1,...,N
-            prob_nm *= pi # TODO scale outlier properly when this prior is used
+            pi /= pi.max() # rescale the maximum probability to be 1. effectively, the outlier priors are multiplied by a visual prior of 1 (since the outlier points have a visual prior of 1 with any point)
+            prob_nm *= pi
 
         corr_nm, r_N, _ =  balance_matrix3(prob_nm, 10, x_priors, y_priors, outlierfrac) # edit final value to change outlier percentage
         corr_nm += 1e-9
@@ -325,17 +327,20 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
         wt_n = corr_nm.sum(axis=1)
         wt_m = corr_nm.sum(axis=0)
 
-
         xtarg_nd = (corr_nm/wt_n[:,None]).dot(y_md)
         ytarg_md = (corr_nm/wt_m[None,:]).T.dot(x_nd)
         
         if plotting and i%plotting==0:
             plot_cb(x_nd, y_md, xtarg_nd, corr_nm, wt_n, f)
         
+        if i == (n_iter-1):
+            if x_weights is not None:
+                wt_n=wt_n*x_weights
+            if y_weights is not None:
+                wt_m=wt_m*y_weights
         f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = regs[i], wt_n=wt_n, rot_coef = rot_reg)
         g = fit_ThinPlateSpline(y_md, ytarg_md, bend_coef = regs[i], wt_n=wt_m, rot_coef = rot_reg)
-    if x_weights != None or y_weights != None:
-        raise NonImplementedError
+    
     f._cost = tps_cost(f.lin_ag, f.trans_g, f.w_ng, f.x_na, xtarg_nd, regs[i], wt_n=wt_n)/wt_n.mean()
     g._cost = tps_cost(g.lin_ag, g.trans_g, g.w_ng, g.x_na, ytarg_md, regs[i], wt_n=wt_m)/wt_m.mean()
     return f,g
