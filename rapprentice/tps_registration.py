@@ -3,6 +3,7 @@
 from __future__ import division
 import numpy as np
 import scipy.spatial.distance as ssd
+from rapprentice import registration
 from rapprentice.registration import loglinspace, ThinPlateSpline, fit_ThinPlateSpline
 import tps
 
@@ -86,7 +87,7 @@ def sinkhorn_balance_coeffs(prob_NM, normalize_iter):
     return r_N, c_M
 
 def tps_rpm(x_nd, y_md, n_iter = 20, lambda_init = 10., lambda_final = .1, T_init = .04, T_final = .00004, rot_reg = np.r_[1e-4, 1e-4, 1e-1], 
-            plotting = False, plot_cb = None, outlierfrac = 1e-2, vis_cost_xy = None, em_iter = 2, user_data=None):
+            plotting = False, plot_cb = None, vis_cost_xy = None, outlierprior = 1e-1, outlierfrac = 1e-2, em_iter = 2, user_data=None):
     """
     tps-rpm algorithm mostly as described by chui and rangaran
     lambda_init/lambda_final: regularization on curvature
@@ -106,13 +107,44 @@ def tps_rpm(x_nd, y_md, n_iter = 20, lambda_init = 10., lambda_final = .1, T_ini
 
     for i in xrange(n_iter):
         for _ in xrange(em_iter):
-            f, corr_nm = rpm_em_step(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, vis_cost_xy = vis_cost_xy, T0 = T_init, user_data = user_data)
+            f, corr_nm = rpm_em_step(x_nd, y_md, lambdas[i], Ts[i], rot_reg, f, vis_cost_xy = vis_cost_xy, outlierprior = outlierprior, outlierfrac = outlierfrac, user_data = user_data)
 
         if plotting and (i%plotting==0 or i==(n_iter-1)):
             plot_cb(x_nd, y_md, corr_nm, f, i)
     return f, corr_nm
 
-def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, vis_cost_xy = None, outlierprior = 1e-2, normalize_iter = 20, T0 = .04, user_data=None):
+def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, vis_cost_xy = None, outlierprior = 1e-1, outlierfrac = 1e-2, normalize_iter = 10, user_data=None):
+    n,d = x_nd.shape
+    m,_ = y_md.shape
+    xwarped_nd = prev_f.transform_points(x_nd)
+    
+    dist_nm = ssd.cdist(xwarped_nd, y_md, 'sqeuclidean')
+    prob_nm = np.exp( -dist_nm / (2*T) ) / np.sqrt(2 * np.pi * T) # divide by constant term so that outlierprior makes sense as a pr
+    if vis_cost_xy != None:
+        pi = np.exp( -vis_cost_xy )
+        pi /= pi.max() # rescale the maximum probability to be 1. effectively, the outlier priors are multiplied by a visual prior of 1 (since the outlier points have a visual prior of 1 with any point)
+        prob_nm *= pi
+    
+    x_priors = np.ones(n)*outlierprior    
+    y_priors = np.ones(m)*outlierprior    
+    corr_nm, r_N, _ =  registration.balance_matrix3(prob_nm, normalize_iter, x_priors, y_priors, outlierfrac)
+    corr_nm += 1e-9
+    
+    wt_n = corr_nm.sum(axis=1)
+
+    xtarg_nd = (corr_nm/wt_n[:,None]).dot(y_md)
+
+    f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = l, wt_n = wt_n, rot_coef = rot_reg)
+    f._bend_coef = l
+    f._rot_coef = rot_reg
+    f._cost = tps.tps_cost(f.lin_ag, f.trans_g, f.w_ng, f.x_na, xtarg_nd, l, wt_n=wt_n)/wt_n.mean()
+
+    return f, corr_nm
+
+def rpm_em_step_stat(x_nd, y_md, l, T, rot_reg, prev_f, vis_cost_xy = None, outlierprior = 1e-2, normalize_iter = 20, T0 = .04, user_data=None):
+    """
+    Statiscal interpretation of the RPM EM step
+    """
     n,d = x_nd.shape
     m,_ = y_md.shape
     xwarped_nd = prev_f.transform_points(x_nd)
@@ -260,7 +292,7 @@ def main():
                     y_md = target_cloud[:,:3]
                     scaled_x_nd, _ = registration.unit_boxify(x_nd)
                     scaled_y_md, _ = registration.unit_boxify(y_md)
-                    f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, rot_reg=np.r_[1e-4, 1e-4, 1e-1], n_iter=10, vis_cost_xy=vis_cost_xy, # Note registration_cost_cheap in rope_qlearn has a different rot_reg
+                    f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, rot_reg=np.r_[1e-4, 1e-4, 1e-1], n_iter=10, outlierfrac=1e-2, vis_cost_xy=vis_cost_xy, # Note registration_cost_cheap in rope_qlearn has a different rot_reg and outlierfrac
                                                    plotting=args.plotting, plot_cb=plot_cb_bij_gen(os.path.join(args.output_folder, str(i) + "_" + cloud_key + "_rpm_bij_cheap") if args.output_folder else None,
                                                                                                    args,
                                                                                                    source_cloud[:,-3:],
