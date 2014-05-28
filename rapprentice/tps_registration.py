@@ -72,9 +72,17 @@ def sinkhorn_balance_coeffs(prob_NM, normalize_iter):
         prob_NM = prob_NM.astype('f4')
     N,M = prob_NM.shape
     r_N = np.ones(N,'f4')
+    c_M = np.ones(M,'f4')
     for _ in xrange(normalize_iter):
-        c_M = 1./r_N.dot(prob_NM) # normalize along columns
-        r_N = 1./prob_NM.dot(c_M) # normalize along rows
+        c_inv_M = r_N.dot(prob_NM)
+        c_zero_M = c_inv_M < 1e-20
+        c_M[~c_zero_M] = 1./c_inv_M[~c_zero_M] # normalize along columns
+        c_M[c_zero_M] = 0.
+        r_inv_N = prob_NM.dot(c_M)
+        r_zero_N = r_inv_N < 1e-20
+        r_N[~r_zero_N] = 1./r_inv_N[~r_zero_N] # normalize along rows
+        r_N[r_zero_N] = 0.
+
     return r_N, c_M
 
 def tps_rpm(x_nd, y_md, n_iter = 20, lambda_init = 10., lambda_final = .1, T_init = .04, T_final = .00004, rot_reg = np.r_[1e-4, 1e-4, 1e-1], 
