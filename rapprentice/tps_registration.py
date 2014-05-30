@@ -3,9 +3,10 @@
 from __future__ import division
 import numpy as np
 import scipy.spatial.distance as ssd
-from rapprentice import registration
+from rapprentice import registration, math_utils
 from rapprentice.registration import loglinspace, ThinPlateSpline, fit_ThinPlateSpline
 import tps
+import knot_classifier
 
 import IPython as ipy
 
@@ -130,6 +131,11 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, vis_cost_xy = None, outlierpr
     corr_nm, r_N, _ =  registration.balance_matrix3(prob_nm, normalize_iter, x_priors, y_priors, outlierfrac)
     corr_nm += 1e-9
     
+    f = fit_ThinPlateSpline_corr(x_nd, y_md, corr_nm, l, rot_reg)
+
+    return f, corr_nm
+
+def fit_ThinPlateSpline_corr(x_nd, y_md, corr_nm, l, rot_reg):
     wt_n = corr_nm.sum(axis=1)
 
     xtarg_nd = (corr_nm/wt_n[:,None]).dot(y_md)
@@ -138,8 +144,8 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, vis_cost_xy = None, outlierpr
     f._bend_coef = l
     f._rot_coef = rot_reg
     f._cost = tps.tps_cost(f.lin_ag, f.trans_g, f.w_ng, f.x_na, xtarg_nd, l, wt_n=wt_n)/wt_n.mean()
-
-    return f, corr_nm
+    
+    return f
 
 def rpm_em_step_stat(x_nd, y_md, l, T, rot_reg, prev_f, vis_cost_xy = None, outlierprior = 1e-2, normalize_iter = 20, T0 = .04, user_data=None):
     """
@@ -190,6 +196,78 @@ def rpm_em_step_stat(x_nd, y_md, l, T, rot_reg, prev_f, vis_cost_xy = None, outl
     f._bend_coef = l
     f._rot_coef = rot_reg
     f._cost = tps.tps_cost(f.lin_ag, f.trans_g, f.w_ng, f.x_na, xtarg_nd, l, wt_n=wt_n)/wt_n.mean()
+
+    return f, corr_nm
+
+def calc_segment_corr(rope_nodes1, pts_segmentation_inds0, pts_segmentation_inds1):
+    n = pts_segmentation_inds0[-1]
+    m = pts_segmentation_inds1[-1]
+    corr_nm = np.zeros((n, m))
+    for i, (i_start0, i_end0, i_start1, i_end1) in enumerate(zip(pts_segmentation_inds0[:-1], pts_segmentation_inds0[1:], pts_segmentation_inds1[:-1], pts_segmentation_inds1[1:])):
+        heights = np.apply_along_axis(np.linalg.norm, 1, np.diff(rope_nodes1[i_start1:i_end1,:], axis=0))
+        lengths = np.r_[0, heights]
+        summed_lengths = np.cumsum(lengths)
+        corr_nm[i_start0:i_end0,i_start1:i_end1] = math_utils.interp_mat(np.linspace(0, summed_lengths[-1], i_end0-i_start0), summed_lengths)
+    return corr_nm
+
+def tps_segment(rope_nodes0, rope_nodes1, reg = .1, rot_reg = np.r_[1e-4, 1e-4, 1e-1], plotting = False, plot_cb = None):
+    """
+    Find a registration by assigning correspondences based on the topology of the rope
+    If rope_nodes0 and rope_nodes1 have the same topology, the correspondences are given by linearly interpolating segments of both rope_nodes. The rope_nodes are segmented based on crossings.
+    If rope_nodes0 and rope_nodes1 don't have the same topology, this function returns None
+    rope_nodes0 and rope_nodes1 are ordered sequence of points (i.e. they are the back bones of their respective ropes)
+    """
+    n,d = rope_nodes0.shape
+    m,_ = rope_nodes1.shape
+
+    crossings0, crossings_links_inds0, cross_pairs0, _ = knot_classifier.calculateCrossings(rope_nodes0)
+    crossings1, crossings_links_inds1, cross_pairs1, _ = knot_classifier.calculateCrossings(rope_nodes1)
+    
+    crossings0 = np.array(crossings0)
+    crossings1 = np.array(crossings1)
+    crossings_links_inds0 = np.array(crossings_links_inds0)
+    crossings_links_inds1 = np.array(crossings_links_inds1)
+    
+    pts_segmentation_inds0 = np.r_[0, crossings_links_inds0 + 1, n]
+    pts_segmentation_inds1 = np.r_[0, crossings_links_inds1 + 1, m]
+
+    if cross_pairs0 != cross_pairs1: # different topology
+        f = None
+        corr_nm = None
+    else:
+        # need to try the tps registration f for rope_nodes1 and/or the reverse rope_nodes1
+        reversed_rope_points1_variations = []
+        if np.all(crossings0 == crossings1):
+            reversed_rope_points1_variations.append(False)
+         # could happen when (1) rope_nodes1 are in a reverse order compared to rope_nodes0, or (2) crossings1 is a palindrome, or (3) both
+         # don't consider reversing when there are no crossings (assuming data consistently goes in one way for this case)
+        if len(crossings0) > 0 and np.all(crossings0 == crossings1[::-1]):
+            reversed_rope_points1_variations.append(True)
+    
+        corr_nm_variations = []
+        f_variations = []
+        for reversed_rope_points1 in reversed_rope_points1_variations:
+            if reversed_rope_points1:
+                corr_nm = calc_segment_corr(rope_nodes1[::-1], pts_segmentation_inds0, m - pts_segmentation_inds1[::-1])
+                corr_nm = corr_nm[:,::-1]
+            else:
+                corr_nm = calc_segment_corr(rope_nodes1, pts_segmentation_inds0, pts_segmentation_inds1)
+            
+            f = fit_ThinPlateSpline_corr(rope_nodes0, rope_nodes1, corr_nm, reg, rot_reg)
+    
+            corr_nm_variations.append(corr_nm)
+            f_variations.append(f)
+        
+        if len(f_variations) == 1:
+            best_f_ind = 0
+        else:
+            reg_costs = [registration.tps_reg_cost(f) for f in f_variations]
+            best_f_ind = np.argmin(reg_costs)
+        f = f_variations[best_f_ind]
+        corr_nm = corr_nm_variations[best_f_ind]
+    
+    if plotting:
+        plot_cb(rope_nodes0, rope_nodes1, corr_nm, f, pts_segmentation_inds0, pts_segmentation_inds1)
 
     return f, corr_nm
 
