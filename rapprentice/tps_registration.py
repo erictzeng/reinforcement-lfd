@@ -217,11 +217,17 @@ def tps_segment_registration(rope_nodes0, rope_nodes1, reg = .1, rot_reg = np.r_
     If rope_nodes0 and rope_nodes1 don't have the same topology, this function returns None
     rope_nodes0 and rope_nodes1 are ordered sequence of points (i.e. they are the back bones of their respective ropes)
     """
+    if type(rope_nodes0) == tuple:
+        rope_nodes0, crossings0, crossings_links_inds0, cross_pairs0 = rope_nodes0
+    else:
+        crossings0, crossings_links_inds0, cross_pairs0, _ = knot_classifier.calculateCrossings(rope_nodes0)
+    if type(rope_nodes1) == tuple:
+        rope_nodes1, crossings1, crossings_links_inds1, cross_pairs1 = rope_nodes1
+    else:
+        crossings1, crossings_links_inds1, cross_pairs1, _ = knot_classifier.calculateCrossings(rope_nodes1)
+
     n,d = rope_nodes0.shape
     m,_ = rope_nodes1.shape
-
-    crossings0, crossings_links_inds0, cross_pairs0, _ = knot_classifier.calculateCrossings(rope_nodes0)
-    crossings1, crossings_links_inds1, cross_pairs1, _ = knot_classifier.calculateCrossings(rope_nodes1)
     
     crossings0 = np.array(crossings0)
     crossings1 = np.array(crossings1)
