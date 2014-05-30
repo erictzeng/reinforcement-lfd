@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 from mpl_toolkits.mplot3d import art3d
+import colorsys
 
 def plot_warped_grid_2d(f, mins, maxes, grid_res=None, color = 'gray', flipax = True, draw=True):
     xmin, ymin = mins
@@ -242,6 +243,43 @@ def plot_tps_registration_proj_2d(x_nd, y_md, f, res, x_color, y_color, xwarped_
     plt.scatter(xwarped_nd[:,0], xwarped_nd[:,1], edgecolors=xwarped_color, facecolors='none', marker='o', s=50)
 
     plot_warped_grid_proj_2d(f.transform_points, grid_mins[:2], grid_maxs[:2], z=x_median[2], xres=res[0], yres=res[1], draw=False)
+    
+    plt.draw()
+    
+def plot_tps_registration_segment_proj_2d(rope_nodes0, rope_nodes1, corr_nm, f, pts_segmentation_inds0, pts_segmentation_inds1):
+    # set interactive
+    plt.ion()
+    
+    fig = plt.figure('rope nodes segmentations')
+    fig.clear()
+    
+    plt.subplot(221, aspect='equal')
+    for i, (i_start, i_end) in enumerate(zip(pts_segmentation_inds0[:-1], pts_segmentation_inds0[1:])):
+        color = 'r' if len(pts_segmentation_inds0)<=2 else np.tile(np.array(colorsys.hsv_to_rgb(float(i)/(len(pts_segmentation_inds0)-2),1,1)), (i_end-i_start,1))
+        plt.scatter(rope_nodes0[i_start:i_end,0], rope_nodes0[i_start:i_end,1], c=color, edgecolors=color, marker=',', s=10)
+    
+    plt.subplot(222, aspect='equal')
+    for i, (i_start, i_end) in enumerate(zip(pts_segmentation_inds1[:-1], pts_segmentation_inds1[1:])):
+        color = 'r' if len(pts_segmentation_inds1)<=2 else np.tile(np.array(colorsys.hsv_to_rgb(float(i)/(len(pts_segmentation_inds1)-2),1,1)), (i_end-i_start,1))
+        plt.scatter(rope_nodes1[i_start:i_end,0], rope_nodes1[i_start:i_end,1], c=color, edgecolors=color, marker=',', s=10)
+    
+    if corr_nm is not None:
+        plt.subplot(223, aspect='equal')
+        rope_nodes1_resampled = corr_nm.dot(rope_nodes1)
+        for i, (i_start, i_end) in enumerate(zip(pts_segmentation_inds0[:-1], pts_segmentation_inds0[1:])):
+            color = 'r' if len(pts_segmentation_inds0)<=2 else np.tile(np.array(colorsys.hsv_to_rgb(float(i)/(len(pts_segmentation_inds0)-2),1,1)), (i_end-i_start,1))
+            plt.scatter(rope_nodes1_resampled[i_start:i_end,0], rope_nodes1_resampled[i_start:i_end,1], c=color, edgecolors=color, marker=',', s=10)
+    
+    if f is not None:
+        plt.subplot(224, aspect='equal')
+        warped_rope_nodes0 = f.transform_points(rope_nodes0)
+        for i, (i_start, i_end) in enumerate(zip(pts_segmentation_inds0[:-1], pts_segmentation_inds0[1:])):
+            color = 'r' if len(pts_segmentation_inds0)<=2 else np.tile(np.array(colorsys.hsv_to_rgb(float(i)/(len(pts_segmentation_inds0)-2),1,1)), (i_end-i_start,1))
+            plt.scatter(warped_rope_nodes0[i_start:i_end,0], warped_rope_nodes0[i_start:i_end,1], c=color, edgecolors=color, marker=',', s=10)
+        grid_means = .5 * (rope_nodes0.max(axis=0) + rope_nodes0.min(axis=0))
+        grid_mins = grid_means - (rope_nodes0.max(axis=0) - rope_nodes0.min(axis=0))
+        grid_maxs = grid_means + (rope_nodes0.max(axis=0) - rope_nodes0.min(axis=0))
+        plot_warped_grid_proj_2d(f.transform_points, grid_mins[:2], grid_maxs[:2], z=np.median(rope_nodes0, axis=0)[2], xres=.1, yres=.1, draw=False)
     
     plt.draw()
 
