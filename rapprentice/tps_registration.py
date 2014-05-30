@@ -210,7 +210,7 @@ def calc_segment_corr(rope_nodes1, pts_segmentation_inds0, pts_segmentation_inds
         corr_nm[i_start0:i_end0,i_start1:i_end1] = math_utils.interp_mat(np.linspace(0, summed_lengths[-1], i_end0-i_start0), summed_lengths)
     return corr_nm
 
-def tps_segment(rope_nodes0, rope_nodes1, reg = .1, rot_reg = np.r_[1e-4, 1e-4, 1e-1], plotting = False, plot_cb = None):
+def tps_segment_registration(rope_nodes0, rope_nodes1, reg = .1, rot_reg = np.r_[1e-4, 1e-4, 1e-1], plotting = False, plot_cb = None):
     """
     Find a registration by assigning correspondences based on the topology of the rope
     If rope_nodes0 and rope_nodes1 have the same topology, the correspondences are given by linearly interpolating segments of both rope_nodes. The rope_nodes are segmented based on crossings.
