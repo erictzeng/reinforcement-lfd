@@ -9,6 +9,19 @@ def interp2d(x,xp,yp):
     yp = np.asarray(yp)
     assert yp.ndim == 2
     return np.array([np.interp(x,xp,col) for col in yp.T]).T
+def interp_mat(x, xp):
+    """
+    interp_mat(x, xp).dot(fp) should be the same as np.interp(x, xp, fp)
+    """
+    ixp = 0
+    m = np.zeros((len(x), len(xp)))
+    for ix in range(len(x)):
+        while x[ix] > xp[ixp+1]:
+            ixp += 1
+        u = (x[ix] - xp[ixp]) / (xp[ixp+1] - xp[ixp])
+        m[ix, ixp] = 1.-u
+        m[ix, ixp+1] = u
+    return m
 def normalize(x):
     return x / np.linalg.norm(x)
 def normr(x):
