@@ -25,7 +25,31 @@ def seg_intersect(p1,p2,p3,p4) :
     denom = (p2-p1).dot(perp(p3-p4))
     if denom == 0:
         if numa==0 or numb==0: # coincident lines
-            return (0.5,0.5)
+            if np.all(p1 == p2) or np.all(p3 == p4): # any of the segments are points
+                raise NotImplementedError
+            vb = p4-p3
+            w1 = p1-p3
+            w2 = p2-p3
+            if vb[0] != 0:
+                t1 = w1[0] / vb[0]
+                t2 = w2[0] / vb[0]
+            else:
+                t1 = w1[1] / vb[1]
+                t2 = w2[1] / vb[1]
+            if t1 > t2: # must have t1 smaller than t2
+                t1, t2 = t2, t1
+            if t1 > 1 or t2 < 0: # no overlap
+                return None
+            t1 = max(0.,t1) # clip to min 0
+            t2 = min(1.,t2) # clip to max 1
+            ub = (t1+t2) / 2. # define the intersection point to be the midpoint of overlapping segment
+            pt = p3 + ub*vb # intersection point
+            va = p2-p1
+            if va[0] != 0:
+                ua = (pt - p1)[0] / va[0]
+            else:
+                ua = (pt - p1)[1] / va[1]
+            return (ua, ub)
         else: # parallel lines
             return None
     ua = (numa / denom)
@@ -56,6 +80,7 @@ def calculateCrossings(rope_nodes):
     """
     intersections = calculateIntersections(rope_nodes)
     crossings = []
+    crossings_links_inds = []
     links_to_cross_info = {}  # Contains under-over crossing and crossing id info
     curr_cross_id = 1
     for i_link in range(intersections.shape[0]):
@@ -66,6 +91,7 @@ def calculateCrossings(rope_nodes):
             j_link_z = rope_nodes[j_link,2] + intersections[j_link,i_link] * (rope_nodes[j_link+1,2] - rope_nodes[j_link,2])
             i_over_j = 1 if i_link_z > j_link_z else -1
             crossings.append(i_over_j)
+            crossings_links_inds.append(i_link)
             link_pair_id = (min(i_link,j_link), max(i_link,j_link))
             if link_pair_id not in links_to_cross_info:
                 links_to_cross_info[link_pair_id] = []
@@ -85,7 +111,7 @@ def calculateCrossings(rope_nodes):
 #             dt_code[cross_info[1][0]/2] = i_over_j * cross_info[0][0]
 #         else:
 #             dt_code[cross_info[0][0]/2] = i_over_j * cross_info[1][0]
-    return (crossings, cross_pairs, rope_closed)
+    return (crossings, crossings_links_inds, cross_pairs, rope_closed)
 
 def crossingsToString(crossings):
     s = ''
@@ -114,7 +140,7 @@ def crossings_var_match(cross_pairs, top, s):
                (i+2,i+6) in cross_pairs and (i+3,i+7) in cross_pairs
 
 def isKnot(rope_nodes):
-    (crossings, cross_pairs, rope_closed) = calculateCrossings(rope_nodes)
+    (crossings, crossings_links_inds, cross_pairs, rope_closed) = calculateCrossings(rope_nodes)
     s = crossingsToString(crossings)
     knot_topologies = ['uououo', 'uoouuoou']
     for top in knot_topologies:
