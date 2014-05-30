@@ -128,7 +128,7 @@ class Simulation(object):
                 prev_nodes = curr_nodes
         self.rope.UpdateRave()
         self.env.UpdatePublishedBodies()
-        print "settled in %d iterations" % (i+1)
+#         print "settled in %d iterations" % (i+1)
 
     def observe_cloud(self, upsample=0, upsample_perp=1):
         """
@@ -230,7 +230,7 @@ class Simulation(object):
         return True
 
     def release_rope(self, lr):
-        print 'RELEASE: %s (%d constraints)' % (lr, len(self.constraints[lr]))
+#         print 'RELEASE: %s (%d constraints)' % (lr, len(self.constraints[lr]))
         for c in self.constraints[lr]:
             self.bt_env.RemoveConstraint(c)
         self.constraints[lr] = []
