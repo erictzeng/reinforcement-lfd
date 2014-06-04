@@ -273,23 +273,22 @@ def tps_segment_registration(rope_nodes_or_crossing_info0, rope_nodes_or_crossin
         reversed_rope_points1_variations = []
         if np.all(crossings0 == crossings1):
             reversed_rope_points1_variations.append(False)
-         # could happen when (1) rope_nodes1 are in a reverse order compared to rope_nodes0, or (2) crossings1 is a palindrome, or (3) both
-         # don't consider reversing when there are no crossings (assuming data consistently goes in one way for this case)
-        if len(crossings0) > 0 and np.all(crossings0 == crossings1[::-1]):
+        # could happen when (1) rope_nodes1 are in a reverse order compared to rope_nodes0, or (2) crossings1 is a palindrome, or (3) both
+        if np.all(crossings0 == crossings1[::-1]):
             reversed_rope_points1_variations.append(True)
         
         if len(reversed_rope_points1_variations) > 0:
             for reversed_rope_points1 in reversed_rope_points1_variations:
                 if reversed_rope_points1:
-                    corr_nm = calc_segment_corr(rope_nodes1[::-1], pts_segmentation_inds0, m - pts_segmentation_inds1[::-1])
-                    corr_nm = corr_nm[:,::-1]
+                    corr_nm_var = calc_segment_corr(rope_nodes1[::-1], pts_segmentation_inds0, m - pts_segmentation_inds1[::-1])
+                    corr_nm_var = corr_nm_var[:,::-1]
                 else:
-                    corr_nm = calc_segment_corr(rope_nodes1, pts_segmentation_inds0, pts_segmentation_inds1)
+                    corr_nm_var = calc_segment_corr(rope_nodes1, pts_segmentation_inds0, pts_segmentation_inds1)
                 
-                f = fit_ThinPlateSpline_corr(rope_nodes0, rope_nodes1, corr_nm, reg, rot_reg, x_weights)
+                f_var = fit_ThinPlateSpline_corr(rope_nodes0, rope_nodes1, corr_nm_var, reg, rot_reg, x_weights)
         
-                f_variations.append(f)
-                corr_nm_variations.append(corr_nm)
+                f_variations.append(f_var)
+                corr_nm_variations.append(corr_nm_var)
     
     # filter out the invalid registrations
     f_variations = [f_var for f_var in f_variations if f_var is not None]
@@ -299,13 +298,12 @@ def tps_segment_registration(rope_nodes_or_crossing_info0, rope_nodes_or_crossin
         f = None
         corr_nm = None
     else:
-        if len(f_variations) == 1:
-            best_f_ind = 0
-        else:
-            reg_costs = [registration.tps_reg_cost(f) for f in f_variations]
-            best_f_ind = np.argmin(reg_costs)
-        f = f_variations[best_f_ind]
-        corr_nm = corr_nm_variations[best_f_ind]
+        if len(f_variations) > 1:
+            reflected_reg_costs = [(np.linalg.det(f_var.lin_ag) < 0, registration.tps_reg_cost(f_var)) for f_var in f_variations] # first element indicates if the affine part of this transformation is a reflection
+            # sort the registrations from non-reflected to reflected transformations first and then from low to high bending cost to break ties
+            f_variations, corr_nm_variations = zip(*[(f_var, corr_nm_var) for (reflected_reg_cost, f_var, corr_nm_var) in sorted(zip(reflected_reg_costs, f_variations, corr_nm_variations))])
+        f = f_variations[0]
+        corr_nm = corr_nm_variations[0]
     
     if plotting:
         plot_cb(rope_nodes0, rope_nodes1, corr_nm, f, pts_segmentation_inds0, pts_segmentation_inds1)
