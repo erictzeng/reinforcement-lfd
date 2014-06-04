@@ -204,8 +204,10 @@ def calc_segment_corr(rope_nodes1, pts_segmentation_inds0, pts_segmentation_inds
     m = pts_segmentation_inds1[-1]
     corr_nm = np.zeros((n, m))
     for i, (i_start0, i_end0, i_start1, i_end1) in enumerate(zip(pts_segmentation_inds0[:-1], pts_segmentation_inds0[1:], pts_segmentation_inds1[:-1], pts_segmentation_inds1[1:])):
-        heights = np.apply_along_axis(np.linalg.norm, 1, np.diff(rope_nodes1[i_start1:i_end1,:], axis=0))
-        lengths = np.r_[0, heights]
+        lengths = np.array([0])
+        if i_end1-i_start1 > 1:
+            heights = np.apply_along_axis(np.linalg.norm, 1, np.diff(rope_nodes1[i_start1:i_end1,:], axis=0))
+            lengths = np.r_[lengths, heights]
         summed_lengths = np.cumsum(lengths)
         corr_nm[i_start0:i_end0,i_start1:i_end1] = math_utils.interp_mat(np.linspace(0, summed_lengths[-1], i_end0-i_start0), summed_lengths)
     return corr_nm
