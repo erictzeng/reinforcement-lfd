@@ -212,24 +212,50 @@ def calc_segment_corr(rope_nodes1, pts_segmentation_inds0, pts_segmentation_inds
         corr_nm[i_start0:i_end0,i_start1:i_end1] = math_utils.interp_mat(np.linspace(0, summed_lengths[-1], i_end0-i_start0), summed_lengths)
     return corr_nm
 
-def tps_segment_registration(rope_nodes0, rope_nodes1, reg = .1, rot_reg = np.r_[1e-4, 1e-4, 1e-1], plotting = False, plot_cb = None):
+def tps_segment_registration(rope_nodes_or_crossing_info0, rope_nodes_or_crossing_info1, x_weights = None, reg = .1, rot_reg = np.r_[1e-4, 1e-4, 1e-1], plotting = False, plot_cb = None):
     """
     Find a registration by assigning correspondences based on the topology of the rope
     If rope_nodes0 and rope_nodes1 have the same topology, the correspondences are given by linearly interpolating segments of both rope_nodes. The rope_nodes are segmented based on crossings.
     If rope_nodes0 and rope_nodes1 don't have the same topology, this function returns None
     rope_nodes0 and rope_nodes1 are ordered sequence of points (i.e. they are the back bones of their respective ropes)
     """
-    if type(rope_nodes0) == tuple:
-        rope_nodes0, crossings0, crossings_links_inds0, cross_pairs0 = rope_nodes0
+    if type(rope_nodes_or_crossing_info0) == tuple:
+        rope_nodes0, crossings0, crossings_links_inds0, cross_pairs0, rope_closed0 = rope_nodes_or_crossing_info0
     else:
-        crossings0, crossings_links_inds0, cross_pairs0, _ = knot_classifier.calculateCrossings(rope_nodes0)
-    if type(rope_nodes1) == tuple:
-        rope_nodes1, crossings1, crossings_links_inds1, cross_pairs1 = rope_nodes1
+        rope_nodes0 = rope_nodes_or_crossing_info0
+        crossings0, crossings_links_inds0, cross_pairs0, rope_closed0 = knot_classifier.calculateCrossings(rope_nodes0)
+    if type(rope_nodes_or_crossing_info1) == tuple:
+        rope_nodes1, crossings1, crossings_links_inds1, cross_pairs1, rope_closed1 = rope_nodes_or_crossing_info1
     else:
-        crossings1, crossings_links_inds1, cross_pairs1, _ = knot_classifier.calculateCrossings(rope_nodes1)
+        rope_nodes1 = rope_nodes_or_crossing_info1
+        crossings1, crossings_links_inds1, cross_pairs1, rope_closed1 = knot_classifier.calculateCrossings(rope_nodes1)
 
     n,d = rope_nodes0.shape
     m,_ = rope_nodes1.shape
+    
+    # Compile all possible (reasonable) registrations and later select the one with the lowest bending cost
+    f_variations = []
+    corr_nm_variations = []
+    
+    # Add registrations for the closed versions of any open rope
+    if not rope_closed0 or not rope_closed1:
+        rope_nodes_crossing_infos0 = []
+        rope_nodes_crossing_infos1 = []
+        if not rope_closed0:
+            for end in [0,-1]:
+                rope_nodes_crossing_infos0.append((rope_nodes0,) + knot_classifier.close_rope(crossings0, crossings_links_inds0, cross_pairs0, end) + (True,))
+        else:
+            rope_nodes_crossing_infos0.append((rope_nodes0, crossings0, crossings_links_inds0, cross_pairs0, True))
+        if not rope_closed1:
+            for end in [0,-1]:
+                rope_nodes_crossing_infos1.append((rope_nodes1,) + knot_classifier.close_rope(crossings1, crossings_links_inds1, cross_pairs1, end) + (True,))
+        else:
+            rope_nodes_crossing_infos1.append((rope_nodes1, crossings1, crossings_links_inds1, cross_pairs1, True))
+        for rope_nodes_crossing_info0 in rope_nodes_crossing_infos0:
+            for rope_nodes_crossing_info1 in rope_nodes_crossing_infos1:
+                f_var, corr_nm_var = tps_segment_registration(rope_nodes_crossing_info0, rope_nodes_crossing_info1, x_weights = x_weights, reg = reg, rot_reg = rot_reg, plotting = False, plot_cb = None)
+                f_variations.append(f_var)
+                corr_nm_variations.append(corr_nm_var)
     
     crossings0 = np.array(crossings0)
     crossings1 = np.array(crossings1)
@@ -239,10 +265,7 @@ def tps_segment_registration(rope_nodes0, rope_nodes1, reg = .1, rot_reg = np.r_
     pts_segmentation_inds0 = np.r_[0, crossings_links_inds0 + 1, n]
     pts_segmentation_inds1 = np.r_[0, crossings_links_inds1 + 1, m]
 
-    if cross_pairs0 != cross_pairs1: # different topology
-        f = None
-        corr_nm = None
-    else:
+    if cross_pairs0 == cross_pairs1: # same topology
         # need to try the tps registration f for rope_nodes1 and/or the reverse rope_nodes1
         reversed_rope_points1_variations = []
         if np.all(crossings0 == crossings1):
@@ -251,21 +274,28 @@ def tps_segment_registration(rope_nodes0, rope_nodes1, reg = .1, rot_reg = np.r_
          # don't consider reversing when there are no crossings (assuming data consistently goes in one way for this case)
         if len(crossings0) > 0 and np.all(crossings0 == crossings1[::-1]):
             reversed_rope_points1_variations.append(True)
-    
-        corr_nm_variations = []
-        f_variations = []
-        for reversed_rope_points1 in reversed_rope_points1_variations:
-            if reversed_rope_points1:
-                corr_nm = calc_segment_corr(rope_nodes1[::-1], pts_segmentation_inds0, m - pts_segmentation_inds1[::-1])
-                corr_nm = corr_nm[:,::-1]
-            else:
-                corr_nm = calc_segment_corr(rope_nodes1, pts_segmentation_inds0, pts_segmentation_inds1)
-            
-            f = fit_ThinPlateSpline_corr(rope_nodes0, rope_nodes1, corr_nm, reg, rot_reg)
-    
-            corr_nm_variations.append(corr_nm)
-            f_variations.append(f)
         
+        if len(reversed_rope_points1_variations) > 0:
+            for reversed_rope_points1 in reversed_rope_points1_variations:
+                if reversed_rope_points1:
+                    corr_nm = calc_segment_corr(rope_nodes1[::-1], pts_segmentation_inds0, m - pts_segmentation_inds1[::-1])
+                    corr_nm = corr_nm[:,::-1]
+                else:
+                    corr_nm = calc_segment_corr(rope_nodes1, pts_segmentation_inds0, pts_segmentation_inds1)
+                
+                f = fit_ThinPlateSpline_corr(rope_nodes0, rope_nodes1, corr_nm, reg, rot_reg, x_weights)
+        
+                f_variations.append(f)
+                corr_nm_variations.append(corr_nm)
+    
+    # filter out the invalid registrations
+    f_variations = [f_var for f_var in f_variations if f_var is not None]
+    corr_nm_variations = [corr_nm_var for corr_nm_var in corr_nm_variations if corr_nm_var is not None]
+
+    if not f_variations:
+        f = None
+        corr_nm = None
+    else:
         if len(f_variations) == 1:
             best_f_ind = 0
         else:
