@@ -135,10 +135,13 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, vis_cost_xy = None, outlierpr
 
     return f, corr_nm
 
-def fit_ThinPlateSpline_corr(x_nd, y_md, corr_nm, l, rot_reg):
+def fit_ThinPlateSpline_corr(x_nd, y_md, corr_nm, l, rot_reg, x_weights = None):
     wt_n = corr_nm.sum(axis=1)
 
     xtarg_nd = (corr_nm/wt_n[:,None]).dot(y_md)
+
+    if x_weights is not None:
+        wt_n=wt_n*x_weights
 
     f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = l, wt_n = wt_n, rot_coef = rot_reg)
     f._bend_coef = l
