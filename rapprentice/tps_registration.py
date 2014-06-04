@@ -218,9 +218,9 @@ def calc_segment_corr(rope_nodes1, pts_segmentation_inds0, pts_segmentation_inds
 def tps_segment_registration(rope_nodes_or_crossing_info0, rope_nodes_or_crossing_info1, x_weights = None, reg = .1, rot_reg = np.r_[1e-4, 1e-4, 1e-1], plotting = False, plot_cb = None):
     """
     Find a registration by assigning correspondences based on the topology of the rope
-    If rope_nodes0 and rope_nodes1 have the same topology, the correspondences are given by linearly interpolating segments of both rope_nodes. The rope_nodes are segmented based on crossings.
-    If rope_nodes0 and rope_nodes1 don't have the same topology, this function returns None
-    rope_nodes0 and rope_nodes1 are ordered sequence of points (i.e. they are the back bones of their respective ropes)
+    If rope_nodes0 and rope_nodes1 have the same topology (up to a variant of removing the last crossing in open ropes), the correspondences are given by linearly interpolating segments of both rope_nodes. The rope_nodes are segmented based on crossings.
+    If rope_nodes0 and rope_nodes1 don't have the same topology, this function returns None for the TPS and the correspondence matrix
+    rope_nodes_or_crossing_info is either rope nodes, which is an ordered sequence of points (i.e. it is the back bone of its respective rope), or is a tuple containing the rope nodes and crossings information (the information returned by knot_classifier.calculateCrossings)
     """
     if type(rope_nodes_or_crossing_info0) == tuple:
         rope_nodes0, crossings0, crossings_links_inds0, cross_pairs0, rope_closed0 = rope_nodes_or_crossing_info0
