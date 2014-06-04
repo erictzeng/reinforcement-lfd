@@ -10,6 +10,7 @@ from numpy import asarray
 import re
 
 from rapprentice import animate_traj, ropesim, ros2rave, math_utils as mu
+from do_task_eval import yellowprint
 
 PR2_L_POSTURES = dict(
     untucked = [0.4,  1.0,   0.0,  -2.05,  0.0,  -0.1,  0.0],
@@ -229,9 +230,9 @@ def get_full_traj(sim_env, lr2traj):
         full_traj = (np.zeros((0,0)), [])
     return full_traj
 
-def get_ee_traj(sim_env, lr, joint_or_full_traj):
+def get_ee_traj(sim_env, lr, joint_or_full_traj, ee_link_name_fmt="%s_gripper_tool_frame"):
     manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
-    ee_link_name = "%s_gripper_tool_frame"%lr
+    ee_link_name = ee_link_name_fmt%lr
     ee_link = sim_env.robot.GetLink(ee_link_name)
     if type(joint_or_full_traj) == tuple: # it is a full_traj
         joint_traj = joint_or_full_traj[0]
@@ -245,6 +246,26 @@ def get_ee_traj(sim_env, lr, joint_or_full_traj):
             sim_env.robot.SetDOFValues(joint_traj[i_step], dof_inds)
             ee_traj.append(ee_link.GetTransform())
     return np.array(ee_traj)
+
+def remove_tight_rope_pull(sim_env, full_traj):
+    if sim_env.sim.constraints['l'] and sim_env.sim.constraints['r']:
+        ee_trajs = {}
+        for lr in 'lr':
+            ee_trajs[lr] = get_ee_traj(sim_env, lr, full_traj, ee_link_name_fmt="%s_gripper_l_finger_tip_link")
+        min_length = np.inf
+        hs = sim_env.sim.rope.GetHalfHeights()
+        for i_end in [0,-1]:
+            for j_end in [0,-1]:
+                i_cnt_l = sim_env.sim.constraints_inds['l'][i_end]
+                i_cnt_r = sim_env.sim.constraints_inds['r'][j_end]
+                if i_cnt_l > i_cnt_r:
+                    i_cnt_l, i_cnt_r = i_cnt_r, i_cnt_l
+                min_length = min(min_length, 2*hs[i_cnt_l+1:i_cnt_r].sum() + hs[i_cnt_l] + hs[i_cnt_r])
+        valid_inds = np.apply_along_axis(np.linalg.norm, 1, (ee_trajs['r'][:,:3,3] - ee_trajs['l'][:,:3,3])) < min_length - 0.02
+        if not np.all(valid_inds):
+            full_traj = (full_traj[0][valid_inds,:], full_traj[1])
+            yellowprint("The grippers of the trajectory goes too far apart. Some steps of the trajectory are being removed.")
+    return full_traj
 
 def load_random_start_segment(demofile):
     start_keys = [k for k in demofile.keys() if k.startswith('demo') and k.endswith('00')]

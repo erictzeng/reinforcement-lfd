@@ -64,6 +64,7 @@ class Simulation(object):
         self.bt_robot = None
         self.rope = None
         self.constraints = {"l": [], "r": []}
+        self.constraints_inds = {"l": [], "r": []}
 
         if rope_params:
             self.rope_params = rope_params
@@ -227,6 +228,7 @@ class Simulation(object):
                     }
                 })
                 self.constraints[lr].append(cnt)
+                self.constraints_inds[lr].append(i_cnt)
 
         return True
 
@@ -235,3 +237,4 @@ class Simulation(object):
         for c in self.constraints[lr]:
             self.bt_env.RemoveConstraint(c)
         self.constraints[lr] = []
+        self.constraints_inds[lr] = []

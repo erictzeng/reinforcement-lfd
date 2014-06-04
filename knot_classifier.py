@@ -113,6 +113,37 @@ def calculateCrossings(rope_nodes):
 #             dt_code[cross_info[0][0]/2] = i_over_j * cross_info[1][0]
     return (crossings, crossings_links_inds, cross_pairs, rope_closed)
 
+def close_rope(crossings, crossings_links_inds, cross_pairs, end):
+    """
+    close the rope either by removing the first or last crossing
+    crossings, crossings_links_inds, cross_pairs: crossings for a rope that is not closed
+    end: 0 or -1, the first or last crossing, respectively
+    """
+    end_cross_ind = 1 if end == 0 else 2*len(cross_pairs)
+    end_cross_pair = [p for p in cross_pairs if end_cross_ind in p][0]
+    new_crossings = [c for (i,c) in enumerate(crossings) if i+1 not in end_cross_pair]
+    new_crossings_links_inds = [c for (i,c) in enumerate(crossings_links_inds) if i+1 not in end_cross_pair]
+    # make sure it is in increasing order
+    end_cross_pair_sorted = sorted(end_cross_pair)
+    new_crossing_pairs = set()
+    for cross_pair in cross_pairs:
+        if cross_pair == end_cross_pair:
+            continue
+        cross_ind0 = cross_pair[0]
+        cross_ind1 = cross_pair[1]
+        if cross_ind0 > end_cross_pair_sorted[0]:
+            if cross_ind0 > end_cross_pair_sorted[1]:
+                cross_ind0 -= 2
+            else:
+                cross_ind0 -= 1
+        if cross_ind1 > end_cross_pair_sorted[0]:
+            if cross_ind1 > end_cross_pair_sorted[1]:
+                cross_ind1 -= 2
+            else:
+                cross_ind1 -= 1
+        new_crossing_pairs.add((cross_ind0, cross_ind1))
+    return new_crossings, new_crossings_links_inds, new_crossing_pairs
+
 def crossingsToString(crossings):
     s = ''
     for c in crossings:
@@ -142,6 +173,11 @@ def crossings_var_match(cross_pairs, top, s):
 def isKnot(rope_nodes):
     (crossings, crossings_links_inds, cross_pairs, rope_closed) = calculateCrossings(rope_nodes)
     s = crossingsToString(crossings)
+    
+    # special cases
+    if cross_pairs == set([(2, 7), (5, 12), (8, 9), (3, 6), (1, 10), (4, 11)]):
+        return True
+    
     knot_topologies = ['uououo', 'uoouuoou']
     for top in knot_topologies:
         flipped_top = top.replace('u','t').replace('o','u').replace('t','o')
