@@ -75,6 +75,7 @@ class Simulation(object):
             self.rope_params.linDamping = .75
             self.rope_params.angLimit = .4
             self.rope_params.linStopErp = .2
+            self.rope_params.mass = 1.0
 
     def create(self, rope_pts):
         self.bt_env = bulletsimpy.BulletEnvironment(self.env, [])
