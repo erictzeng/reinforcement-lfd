@@ -182,11 +182,11 @@ def include_gripper_collisions(sim_env):
         for rope_link in sim_env.sim.rope.GetKinBody().GetLinks():
             cc.IncludeCollisionPair(gripper_link, rope_link)
 
-def sim_traj_maybesim(sim_env, lr2traj, animate=False, interactive=False):
+def sim_traj_maybesim(sim_env, lr2traj, animate=False, interactive=False, max_cart_vel_trans_traj=.05):
     full_traj = get_full_traj(sim_env, lr2traj)
-    return sim_full_traj_maybesim(sim_env, full_traj, animate=animate, interactive=interactive)
+    return sim_full_traj_maybesim(sim_env, full_traj, animate=animate, interactive=interactive, max_cart_vel_trans_traj=max_cart_vel_trans_traj)
 
-def sim_full_traj_maybesim(sim_env, full_traj, animate=False, interactive=False):
+def sim_full_traj_maybesim(sim_env, full_traj, animate=False, interactive=False, max_cart_vel_trans_traj=.05):
     def sim_callback(i):
         sim_env.sim.step()
 
@@ -202,7 +202,7 @@ def sim_full_traj_maybesim(sim_env, full_traj, animate=False, interactive=False)
     curr_vals = sim_env.robot.GetActiveDOFValues()
     transition_traj = np.r_[[curr_vals], [traj[0]]]
     unwrap_in_place(transition_traj)
-    transition_traj = ropesim.retime_traj(sim_env.robot, dof_inds, transition_traj, max_cart_vel=.05)
+    transition_traj = ropesim.retime_traj(sim_env.robot, dof_inds, transition_traj, max_cart_vel=max_cart_vel_trans_traj)
     animate_traj.animate_traj(transition_traj, sim_env.robot, restore=False, pause=interactive,
         callback=sim_callback, step_viewer=animate_speed)
     traj[0] = transition_traj[-1]
