@@ -365,11 +365,20 @@ def unif_resample(traj, max_diff, wt = None):
 def get_rope_transforms(sim_env):
     return (sim_env.sim.rope.GetTranslations(), sim_env.sim.rope.GetRotations())    
 
-def replace_rope(new_rope, sim_env, rope_params=None):
+def replace_rope(new_rope, sim_env, rope_params=None, restore=False):
+    """
+    restore indicates if this function is being called to restore an existing rope, in which case the color of the rope is saved and restored
+    """
     if sim_env.sim:
         for lr in 'lr':
             sim_env.sim.release_rope(lr)
     rope_kin_body = sim_env.env.GetKinBody('rope')
+    geom_colors = []
+    if restore:
+        assert rope_kin_body is not None # the rope should already exist when restore is happening
+        for link in rope_kin_body.GetLinks():
+            for geom in link.GetGeometries():
+                geom_colors.append(geom.GetDiffuseColor())
     if rope_kin_body:
         if sim_env.viewer:
             sim_env.viewer.RemoveKinBody(rope_kin_body)
@@ -377,6 +386,12 @@ def replace_rope(new_rope, sim_env, rope_params=None):
         del sim_env.sim
     sim_env.sim = ropesim.Simulation(sim_env.env, sim_env.robot, rope_params)
     sim_env.sim.create(new_rope)
+    rope_kin_body = sim_env.env.GetKinBody('rope')
+    if restore:
+        assert len(geom_colors) == len(rope_kin_body.GetLinks()) # the old and new rope should have the same number of links when restore is happening
+        for link in rope_kin_body.GetLinks():
+            for geom in link.GetGeometries():
+                geom.SetDiffuseColor(geom_colors.pop(0))
 
 def set_rope_transforms(tfs, sim_env):
     sim_env.sim.rope.SetTranslations(tfs[0])
@@ -427,7 +442,7 @@ class RopeSimTimeMachine(object):
         """
         self.rope_nodes = new_rope
         self.checkpoints = {}
-        replace_rope(self.rope_nodes, sim_env, rope_params)
+        replace_rope(self.rope_nodes, sim_env, rope_params, restore=False)
         sim_env.sim.settle()
         
     def set_checkpoint(self, id, sim_env, tfs=None):
@@ -441,7 +456,7 @@ class RopeSimTimeMachine(object):
     def restore_from_checkpoint(self, id, sim_env, rope_params=None):
         if id not in self.checkpoints:
             raise RuntimeError("Can not restore checkpoint with id %s since it has not been set"%id)
-        replace_rope(self.rope_nodes, sim_env, rope_params)
+        replace_rope(self.rope_nodes, sim_env, rope_params, restore=True)
         set_rope_transforms(self.checkpoints[id], sim_env)
         sim_env.sim.settle()
 
