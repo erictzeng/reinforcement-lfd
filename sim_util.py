@@ -208,8 +208,32 @@ def sim_full_traj_maybesim(sim_env, full_traj, animate=False, interactive=False,
     traj[0] = transition_traj[-1]
     unwrap_in_place(traj)
 
+    valid_inds = grippers_exceed_rope_length(sim_env, (traj, dof_inds), 0.05)
+    min_gripper_dist = [np.inf] # minimum distance between gripper when the rope capsules are too far apart
+    def is_rope_pulled_too_tight(i_step):
+        if valid_inds is None or valid_inds[i_step]: # gripper is not holding the rope or the grippers are not that far apart
+            return True
+        rope = sim_env.sim.rope
+        trans = rope.GetTranslations()
+        hhs = rope.GetHalfHeights()
+        rots = rope.GetRotations()
+        fwd_pts = (trans + hhs[:,None]*rots[:,:3,0])
+        bkwd_pts = (trans - hhs[:,None]*rots[:,:3,0])
+        pts_dists = np.apply_along_axis(np.linalg.norm, 1, fwd_pts[:-1] - bkwd_pts[1:])[:,None] # these should all be zero if the rope constraints are satisfied
+        if np.any(pts_dists > sim_env.sim.rope_params.radius):
+            if i_step == 0:
+                return True
+            ee_trajs = {}
+            for lr in 'lr':
+                ee_trajs[lr] = get_ee_traj(sim_env, lr, (traj[i_step-1:i_step+1], dof_inds), ee_link_name_fmt="%s_gripper_l_finger_tip_link")
+            min_gripper_dist[0] = min(min_gripper_dist[0], np.linalg.norm(ee_trajs['r'][0,:3,3] - ee_trajs['l'][0,:3,3]))
+            grippers_moved_closer = np.linalg.norm(ee_trajs['r'][1,:3,3] - ee_trajs['l'][1,:3,3]) < min_gripper_dist[0]
+            return grippers_moved_closer
+        return True
     animate_traj.animate_traj(traj, sim_env.robot, restore=False, pause=interactive,
-        callback=sim_callback, step_viewer=animate_speed)
+        callback=sim_callback, step_viewer=animate_speed, execute_step_cond=is_rope_pulled_too_tight)
+    if min_gripper_dist[0] != np.inf:
+        yellowprint("Some steps of the trajectory were not executed because the gripper was pulling the rope too tight.")
     if sim_env.viewer:
         sim_env.viewer.Step()
     return True
@@ -246,6 +270,30 @@ def get_ee_traj(sim_env, lr, joint_or_full_traj, ee_link_name_fmt="%s_gripper_to
             sim_env.robot.SetDOFValues(joint_traj[i_step], dof_inds)
             ee_traj.append(ee_link.GetTransform())
     return np.array(ee_traj)
+
+def grippers_exceed_rope_length(sim_env, full_traj, thresh):
+    """
+    Let min_length be the minimun length of the rope between the parts being held by the left and right gripper.
+    This function returns a mask of the trajectory steps in which the distance between the grippers doesn't exceed min_length-thresh.
+    If not both of the grippers are holding the rope, this function return None.
+    """
+    if sim_env.sim.constraints['l'] and sim_env.sim.constraints['r']:
+        ee_trajs = {}
+        for lr in 'lr':
+            ee_trajs[lr] = get_ee_traj(sim_env, lr, full_traj, ee_link_name_fmt="%s_gripper_l_finger_tip_link")
+        min_length = np.inf
+        hs = sim_env.sim.rope.GetHalfHeights()
+        for i_end in [0,-1]:
+            for j_end in [0,-1]:
+                i_cnt_l = sim_env.sim.constraints_inds['l'][i_end]
+                i_cnt_r = sim_env.sim.constraints_inds['r'][j_end]
+                if i_cnt_l > i_cnt_r:
+                    i_cnt_l, i_cnt_r = i_cnt_r, i_cnt_l
+                min_length = min(min_length, 2*hs[i_cnt_l+1:i_cnt_r].sum() + hs[i_cnt_l] + hs[i_cnt_r])
+        valid_inds = np.apply_along_axis(np.linalg.norm, 1, (ee_trajs['r'][:,:3,3] - ee_trajs['l'][:,:3,3])) < min_length - thresh
+        return valid_inds
+    else:
+        return None
 
 def remove_tight_rope_pull(sim_env, full_traj):
     if sim_env.sim.constraints['l'] and sim_env.sim.constraints['r']:
