@@ -213,22 +213,24 @@ class Simulation(object):
         robot_link = self.robot.GetLink("%s_gripper_l_finger_tip_link"%lr)
         rope_links = self.rope.GetKinBody().GetLinks()
         for i_node in graspable_inds:
-            for i_cnt in range(max(0, i_node-1), min(len(nodes), i_node+2)):
-                cnt = self.bt_env.AddConstraint({
-                    "type": "generic6dof",
-                    "params": {
-                        "link_a": robot_link,
-                        "link_b": rope_links[i_cnt],
-                        "frame_in_a": np.linalg.inv(robot_link.GetTransform()).dot(rope_links[i_cnt].GetTransform()),
-                        "frame_in_b": np.eye(4),
-                        "use_linear_reference_frame_a": False,
-                        "stop_erp": .8,
-                        "stop_cfm": .1,
-                        "disable_collision_between_linked_bodies": True,
-                    }
-                })
-                self.constraints[lr].append(cnt)
-                self.constraints_inds[lr].append(i_cnt)
+            i_cnt = i_node
+            for geom in rope_links[i_cnt].GetGeometries():
+                geom.SetDiffuseColor([1.,0.,0.])
+            cnt = self.bt_env.AddConstraint({
+                "type": "generic6dof",
+                "params": {
+                    "link_a": robot_link,
+                    "link_b": rope_links[i_cnt],
+                    "frame_in_a": np.linalg.inv(robot_link.GetTransform()).dot(rope_links[i_cnt].GetTransform()),
+                    "frame_in_b": np.eye(4),
+                    "use_linear_reference_frame_a": False,
+                    "stop_erp": .8,
+                    "stop_cfm": .1,
+                    "disable_collision_between_linked_bodies": True,
+                }
+            })
+            self.constraints[lr].append(cnt)
+            self.constraints_inds[lr].append(i_cnt)
 
         return True
 
@@ -236,5 +238,9 @@ class Simulation(object):
 #         print 'RELEASE: %s (%d constraints)' % (lr, len(self.constraints[lr]))
         for c in self.constraints[lr]:
             self.bt_env.RemoveConstraint(c)
+        rope_links = self.rope.GetKinBody().GetLinks()
+        for i_cnt in self.constraints_inds[lr]:
+            for geom in rope_links[i_cnt].GetGeometries():
+                geom.SetDiffuseColor([1.,1.,1.])
         self.constraints[lr] = []
         self.constraints_inds[lr] = []
