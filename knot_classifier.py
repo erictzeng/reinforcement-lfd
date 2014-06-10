@@ -157,6 +157,23 @@ def remove_consecutive_crossings(crossings, crossings_links_inds, cross_pairs):
         crossings, crossings_links_inds, cross_pairs = remove_cross_pair(crossings, crossings_links_inds, cross_pairs, cross_pair_to_remove)
     return crossings, crossings_links_inds, cross_pairs
 
+def remove_consecutive_cross_pairs(crossings, crossings_links_inds, cross_pairs):
+    while cross_pairs: # stop if there are no crossings anymore
+        cross_pairs_ordered = np.array(sorted(list(cross_pairs)))
+        crossings_ordered = np.array( [ [ crossings[cross_pairs_ordered[i,j]-1] for j in xrange(cross_pairs_ordered.shape[1])] for i in xrange(cross_pairs_ordered.shape[0])] )
+        consecutive_cross_pairs_inds = np.all(np.c_[np.abs(np.diff(cross_pairs_ordered, axis=0)) == 1, np.diff(crossings_ordered, axis=0) == 0], axis=1) # cross pairs are consecutive for both cross indices and the respective crossings for the consecutive cross pairs are the same
+        if not np.any(consecutive_cross_pairs_inds):
+            break
+        first_ind = consecutive_cross_pairs_inds.nonzero()[0][0] # smallest index where consecutive_cross_pairs_inds is True
+        cross_pairs_to_remove = cross_pairs_ordered[first_ind:first_ind+2, :]
+        cross_ind_to_remove_last = np.min(cross_pairs_to_remove)
+        cross_pair_ind_to_remove_last = np.any(cross_pairs_to_remove == cross_ind_to_remove_last, axis=1)
+        cross_pair_to_remove_first = tuple(cross_pairs_to_remove[~cross_pair_ind_to_remove_last][0])
+        crossings, crossings_links_inds, cross_pairs = remove_cross_pair(crossings, crossings_links_inds, cross_pairs, cross_pair_to_remove_first)
+        cross_pair_to_remove_last = [p for p in cross_pairs if cross_ind_to_remove_last in p][0]
+        crossings, crossings_links_inds, cross_pairs = remove_cross_pair(crossings, crossings_links_inds, cross_pairs, cross_pair_to_remove_last)
+    return crossings, crossings_links_inds, cross_pairs
+
 def crossingsToString(crossings):
     s = ''
     for c in crossings:
@@ -187,6 +204,7 @@ def isKnot(rope_nodes):
     (crossings, crossings_links_inds, cross_pairs, rope_closed) = calculateCrossings(rope_nodes)
     # simplify crossings a bit
     crossings, crossings_links_inds, cross_pairs = remove_consecutive_crossings(crossings, crossings_links_inds, cross_pairs)
+    crossings, crossings_links_inds, cross_pairs = remove_consecutive_cross_pairs(crossings, crossings_links_inds, cross_pairs)
     s = crossingsToString(crossings)
     
     # special cases
