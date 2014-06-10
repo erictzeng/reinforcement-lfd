@@ -44,17 +44,17 @@ def save_task_results_init(fname, sim_env, task_index, rope_nodes, args, rope_pa
     if task_index in result_file:
         del result_file[task_index]
     result_file.create_group(task_index)
-    result_file[task_index].create_group('init')
+    init_group = result_file[task_index].create_group('init')
     trans, rots = sim_util.get_rope_transforms(sim_env)
-    result_file[task_index]['init']['rope_nodes'] = rope_nodes
+    init_group['rope_nodes'] = rope_nodes
     if rope_params:
-        result_file[task_index]['init']['rope_params'] = rope_params
+        init_group['rope_params'] = rope_params
     if hasattr(args, 'jointopt'):
-        result_file[task_index]['init']['jointopt'] = args.jointopt
+        init_group['jointopt'] = args.jointopt
     if hasattr(args, 'use_color'):
-        result_file[task_index]['init']['use_color'] = args.use_color
-    result_file[task_index]['init']['trans'] = trans
-    result_file[task_index]['init']['rots'] = rots
+        init_group['use_color'] = args.use_color
+    init_group['trans'] = trans
+    init_group['rots'] = rots
     result_file.close()
 
 # TODO make the return values more consistent
@@ -63,16 +63,17 @@ def load_task_results_init(fname, task_index):
         raise RuntimeError("Cannot load task results with an unspecified file name")
     result_file = h5py.File(fname, 'r')
     task_index = str(task_index)
-    rope_nodes = result_file[task_index]['init']['rope_nodes'][()]
-    rope_params = result_file[task_index]['init']['rope_params'][()] if 'rope_params' in result_file[task_index]['init'].keys() else None
+    init_group = result_file[task_index]['init']
+    rope_nodes = init_group['rope_nodes'][()]
+    rope_params = init_group['rope_params'][()] if 'rope_params' in init_group.keys() else None
     args_dict = {}
-    if 'jointopt' in result_file[task_index]['init']:
-        args_dict['jointopt'] = result_file[task_index]['init']['jointopt'][()]
-    if 'use_color' in result_file[task_index]['init']:
-        args_dict['use_color'] = result_file[task_index]['init']['use_color'][()]
+    if 'jointopt' in init_group:
+        args_dict['jointopt'] = init_group['jointopt'][()]
+    if 'use_color' in init_group:
+        args_dict['use_color'] = init_group['use_color'][()]
     args = util.Bunch(args_dict)
-    trans = result_file[task_index]['init']['trans'][()]
-    rots = result_file[task_index]['init']['rots'][()]
+    trans = init_group['trans'][()]
+    rots = init_group['rots'][()]
     return rope_nodes, rope_params, args, trans, rots
 
 def save_task_results_step(fname, sim_env, task_index, step_index, eval_stats, best_root_action, full_trajs, q_values_root, demo_cloud=None, demo_cloud_ds=None, cloud=None, cloud_ds=None):
@@ -84,23 +85,23 @@ def save_task_results_step(fname, sim_env, task_index, step_index, eval_stats, b
     assert task_index in result_file, "Must call save_task_results_init() before save_task_results_step()"
  
     if step_index not in result_file[task_index]:
-        result_file[task_index].create_group(step_index)
-    result_file[task_index][step_index]['misgrasp'] = 1 if eval_stats.misgrasp else 0
-    result_file[task_index][step_index]['infeasible'] = 1 if not eval_stats.feasible else 0
-    result_file[task_index][step_index]['rope_nodes'] = sim_env.sim.rope.GetControlPoints()
+        step_group = result_file[task_index].create_group(step_index)
+    step_group['misgrasp'] = 1 if eval_stats.misgrasp else 0
+    step_group['infeasible'] = 1 if not eval_stats.feasible else 0
+    step_group['rope_nodes'] = sim_env.sim.rope.GetControlPoints()
     if demo_cloud is not None:
-        result_file[task_index][step_index]['demo_cloud'] = demo_cloud
+        step_group['demo_cloud'] = demo_cloud
     if demo_cloud_ds is not None:
-        result_file[task_index][step_index]['demo_cloud_ds'] = demo_cloud_ds
+        step_group['demo_cloud_ds'] = demo_cloud_ds
     if cloud is not None:
-        result_file[task_index][step_index]['cloud'] = cloud
+        step_group['cloud'] = cloud
     if cloud_ds is not None:
-        result_file[task_index][step_index]['cloud_ds'] = cloud_ds
+        step_group['cloud_ds'] = cloud_ds
     trans, rots = sim_util.get_rope_transforms(sim_env)
-    result_file[task_index][step_index]['trans'] = trans
-    result_file[task_index][step_index]['rots'] = rots
-    result_file[task_index][step_index]['best_action'] = str(best_root_action)
-    full_trajs_g = result_file[task_index][step_index].create_group('full_trajs')
+    step_group['trans'] = trans
+    step_group['rots'] = rots
+    step_group['best_action'] = str(best_root_action)
+    full_trajs_g = step_group.create_group('full_trajs')
     for (i_traj, (traj, dof_inds)) in enumerate(full_trajs):
         full_traj_g = full_trajs_g.create_group(str(i_traj))
         # current version of h5py can't handle empty arrays, so don't save them if they are empty
@@ -108,9 +109,9 @@ def save_task_results_step(fname, sim_env, task_index, step_index, eval_stats, b
             full_traj_g['traj'] = traj
         if len(dof_inds) > 0:
             full_traj_g['dof_inds'] = dof_inds
-    result_file[task_index][step_index]['values'] = q_values_root
-    result_file[task_index][step_index]['action_time'] = eval_stats.action_elapsed_time
-    result_file[task_index][step_index]['exec_time'] = eval_stats.exec_elapsed_time
+    step_group['values'] = q_values_root
+    step_group['action_time'] = eval_stats.action_elapsed_time
+    step_group['exec_time'] = eval_stats.exec_elapsed_time
     result_file.close()
 
 def save_task_follow_traj_inputs(fname, sim_env, task_index, step_index, choice_index, miniseg_index, manip_name,
@@ -173,8 +174,9 @@ def load_task_results_step(fname, sim_env, task_index, step_index):
     result_file = h5py.File(fname, 'r')
     task_index = str(task_index)
     step_index = str(step_index)
-    best_action = result_file[task_index][step_index]['best_action'][()]
-    full_trajs_g = result_file[task_index][step_index]['full_trajs']
+    step_group = result_file[task_index][step_index]
+    best_action = step_group['best_action'][()]
+    full_trajs_g = step_group['full_trajs']
     full_trajs = []
     for i_traj in range(len(full_trajs_g)):
         full_traj_g = full_trajs_g[str(i_traj)]
@@ -183,9 +185,9 @@ def load_task_results_step(fname, sim_env, task_index, step_index):
         else:
             full_traj = (np.empty((0,0)), [])
         full_trajs.append(full_traj)
-    q_values = result_file[task_index][step_index]['values'][()]
-    trans = result_file[task_index][step_index]['trans'][()]
-    rots = result_file[task_index][step_index]['rots'][()]
+    q_values = step_group['values'][()]
+    trans = step_group['trans'][()]
+    rots = step_group['rots'][()]
     return best_action, full_trajs, q_values, trans, rots
 
 def traj_collisions(sim_env, full_traj, collision_dist_threshold, n=100):
