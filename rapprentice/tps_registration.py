@@ -305,6 +305,7 @@ def tps_segment_registration(rope_nodes_or_crossing_info0, rope_nodes_or_crossin
         f = f_variations[0]
         corr_nm = corr_nm_variations[0]
     
+    # TODO plot correct pts_segmemtation_inds
     if plotting:
         plot_cb(rope_nodes0, rope_nodes1, corr_nm, f, pts_segmentation_inds0, pts_segmentation_inds1)
 
