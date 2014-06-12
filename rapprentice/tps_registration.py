@@ -215,7 +215,16 @@ def calc_segment_corr(rope_nodes1, pts_segmentation_inds0, pts_segmentation_inds
         corr_nm[i_start0:i_end0,i_start1:i_end1] = math_utils.interp_mat(np.linspace(0, summed_lengths[-1], i_end0-i_start0), summed_lengths)
     return corr_nm
 
-def tps_segment_registration(rope_nodes_or_crossing_info0, rope_nodes_or_crossing_info1, x_weights = None, reg = .1, rot_reg = np.r_[1e-4, 1e-4, 1e-1], plotting = False, plot_cb = None):
+def tile(A, tile_pattern):
+    B = np.zeros((A.shape[0]*tile_pattern.shape[0], A.shape[1]*tile_pattern.shape[1]))
+    for i in range(tile_pattern.shape[0]):
+        for j in range(tile_pattern.shape[1]):
+            if tile_pattern[i,j]:
+                B[A.shape[0]*i:A.shape[0]*(i+1), A.shape[1]*j:A.shape[1]*(j+1)] = A
+    return B
+            
+def tps_segment_registration(rope_nodes_or_crossing_info0, rope_nodes_or_crossing_info1, cloud0 = None, cloud1 = None, corr_tile_pattern = np.array([[1]]),
+                             x_weights = None, reg = .1, rot_reg = np.r_[1e-4, 1e-4, 1e-1], plotting = False, plot_cb = None):
     """
     Find a registration by assigning correspondences based on the topology of the rope
     If rope_nodes0 and rope_nodes1 have the same topology (up to a variant of removing the last crossing in open ropes), the correspondences are given by linearly interpolating segments of both rope_nodes. The rope_nodes are segmented based on crossings.
@@ -256,7 +265,8 @@ def tps_segment_registration(rope_nodes_or_crossing_info0, rope_nodes_or_crossin
             rope_nodes_crossing_infos1.append((rope_nodes1, crossings1, crossings_links_inds1, cross_pairs1, True))
         for rope_nodes_crossing_info0 in rope_nodes_crossing_infos0:
             for rope_nodes_crossing_info1 in rope_nodes_crossing_infos1:
-                f_var, corr_nm_var = tps_segment_registration(rope_nodes_crossing_info0, rope_nodes_crossing_info1, x_weights = x_weights, reg = reg, rot_reg = rot_reg, plotting = False, plot_cb = None)
+                f_var, corr_nm_var = tps_segment_registration(rope_nodes_crossing_info0, rope_nodes_crossing_info1, cloud0 = cloud0, cloud1 = cloud1, corr_tile_pattern = corr_tile_pattern, 
+                                                              x_weights = x_weights, reg = reg, rot_reg = rot_reg, plotting = False, plot_cb = None)
                 f_variations.append(f_var)
                 corr_nm_variations.append(corr_nm_var)
     
@@ -285,7 +295,14 @@ def tps_segment_registration(rope_nodes_or_crossing_info0, rope_nodes_or_crossin
                 else:
                     corr_nm_var = calc_segment_corr(rope_nodes1, pts_segmentation_inds0, pts_segmentation_inds1)
                 
-                f_var = fit_ThinPlateSpline_corr(rope_nodes0, rope_nodes1, corr_nm_var, reg, rot_reg, x_weights)
+                if cloud0 is None:
+                    cloud0 = rope_nodes0
+                if cloud1 is None:
+                    cloud1 = rope_nodes1
+                corr_nm_var_aug = tile(corr_nm_var, corr_tile_pattern)
+                assert corr_nm_var_aug.shape == (len(cloud0), len(cloud1))
+
+                f_var = fit_ThinPlateSpline_corr(cloud0, cloud1, corr_nm_var_aug, reg, rot_reg, x_weights)
         
                 f_variations.append(f_var)
                 corr_nm_variations.append(corr_nm_var)
