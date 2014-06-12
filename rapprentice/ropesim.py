@@ -132,11 +132,11 @@ class Simulation(object):
         self.env.UpdatePublishedBodies()
 #         print "settled in %d iterations" % (i+1)
 
-    def observe_cloud(self, upsample=0, upsample_perp=1):
+    def observe_cloud(self, upsample=0, upsample_rad=1):
         """
         If upsample > 0, the number of points along the rope's backbone is resampled to be upsample points
-        If upsample_perp > 1, the number of points perpendicular to the backbone points is resampled to be upsample_perp points, within the radius of the rope
-        The total number of points is then: (upsample if upsample > 0 else len(self.rope.GetControlPoints())) * upsample_perp
+        If upsample_rad > 1, the number of points perpendicular to the backbone points is resampled to be upsample_rad points, around the rope's cross-section
+        The total number of points is then: (upsample if upsample > 0 else len(self.rope.GetControlPoints())) * upsample_rad
         """
         pts = self.rope.GetControlPoints()
         if upsample > 0:
@@ -144,17 +144,21 @@ class Simulation(object):
             summed_lengths = np.cumsum(lengths)
             assert len(lengths) == len(pts)
             pts = math_utils.interp2d(np.linspace(0, summed_lengths[-1], upsample), summed_lengths, pts)
-        if upsample_perp > 1:
-            # add points perpendicular to the points in pts at various distance between -r and +r
-            v = pts[1:,:] - pts[:-1,:] # vectors between the current and next points
-            v /= np.apply_along_axis(np.linalg.norm, 1, v)[:,None]
-            v_perp = np.c_[-v[:,1], v[:,0], np.zeros(v.shape[0])] # perpendicular vectors between the current and next points in the z-plane
-            v_perp /= np.apply_along_axis(np.linalg.norm, 1, v_perp)[:,None]
-            v_perp = np.r_[v_perp, v_perp[-1,:][None,:]] # define the perpendicular vector of the last point to be the same as the second to last one
+        if upsample_rad > 1:
+            # add points perpendicular to the points in pts around the rope's cross-section
+            vs = np.diff(pts, axis=0) # vectors between the current and next points
+            vs /= np.apply_along_axis(np.linalg.norm, 1, vs)[:,None]
+            perp_vs = np.c_[-vs[:,1], vs[:,0], np.zeros(vs.shape[0])] # perpendicular vectors between the current and next points in the xy-plane
+            perp_vs /= np.apply_along_axis(np.linalg.norm, 1, perp_vs)[:,None]
+            vs = np.r_[vs, vs[-1,:][None,:]] # define the vector of the last point to be the same as the second to last one
+            perp_vs = np.r_[perp_vs, perp_vs[-1,:][None,:]] # define the perpendicular vector of the last point to be the same as the second to last one
             perp_pts = []
-            for r in np.linspace(-self.rope_params.radius, self.rope_params.radius, upsample_perp):
-                perp_pts.append(pts + r*v_perp)
-            pts = np.concatenate(perp_pts)
+            from openravepy import matrixFromAxisAngle
+            for theta in np.linspace(0, 2*np.pi, upsample_rad, endpoint=False): # uniformly around the cross-section circumference
+                for (center, rot_axis, perp_v) in zip(pts, vs, perp_vs):
+                    rot = matrixFromAxisAngle(rot_axis, theta)[:3,:3]
+                    perp_pts.append(center + rot.T.dot(self.rope_params.radius * perp_v))
+            pts = np.array(perp_pts)
         return pts
     
     def raycast_cloud(self, T_w_k=None, obj=None, z=1., endpoints=0):
