@@ -40,29 +40,32 @@ def in_grasp_region(robot, lr, pt):
 
     return True
 
-def retime_traj(robot, inds, traj, max_cart_vel=.02, upsample_time=.1):
+def retime_traj(robot, inds, traj, max_cart_vel=.02, max_finger_vel=.02, upsample_time=.1):
     """retime a trajectory so that it executes slowly enough for the simulation"""
     cart_traj = np.empty((len(traj), 6))
+    finger_traj = np.empty((len(traj),2))
     leftarm, rightarm = robot.GetManipulator("leftarm"), robot.GetManipulator("rightarm")
     with robot:
         for i in range(len(traj)):
             robot.SetDOFValues(traj[i], inds)
             cart_traj[i,:3] = leftarm.GetTransform()[:3,3]
             cart_traj[i,3:] = rightarm.GetTransform()[:3,3]
+            finger_traj[i,:1] = leftarm.GetGripperDOFValues()
+            finger_traj[i,1:] = rightarm.GetGripperDOFValues()
 
-    times = retiming.retime_with_vel_limits(cart_traj, np.repeat(max_cart_vel, 6))
+    times = retiming.retime_with_vel_limits(np.c_[cart_traj, finger_traj], np.r_[np.repeat(max_cart_vel, 6),np.repeat(max_finger_vel,2)])
     times_up = np.linspace(0, times[-1], times[-1]/upsample_time) if times[-1] > upsample_time else times
     traj_up = math_utils.interp2d(times_up, times, traj)
     return traj_up
 
-def observe_cloud(pts, half_heights, radius, upsample=0, upsample_rad=1):
+def observe_cloud(pts, radius, upsample=0, upsample_rad=1):
     """
     If upsample > 0, the number of points along the rope's backbone is resampled to be upsample points
     If upsample_rad > 1, the number of points perpendicular to the backbone points is resampled to be upsample_rad points, around the rope's cross-section
     The total number of points is then: (upsample if upsample > 0 else len(self.rope.GetControlPoints())) * upsample_rad
     """
     if upsample > 0:
-        lengths = np.r_[0, half_heights * 2]
+        lengths = np.r_[0, np.apply_along_axis(np.linalg.norm, 1, np.diff(pts, axis=0))]
         summed_lengths = np.cumsum(lengths)
         assert len(lengths) == len(pts)
         pts = math_utils.interp2d(np.linspace(0, summed_lengths[-1], upsample), summed_lengths, pts)
@@ -165,7 +168,7 @@ class Simulation(object):
         If upsample_rad > 1, the number of points perpendicular to the backbone points is resampled to be upsample_rad points, around the rope's cross-section
         The total number of points is then: (upsample if upsample > 0 else len(self.rope.GetControlPoints())) * upsample_rad
         """
-        return observe_cloud(self.rope.GetControlPoints(), self.rope.GetHalfHeights(), self.rope_params.radius, upsample=upsample, upsample_rad=upsample_rad)
+        return observe_cloud(self.rope.GetControlPoints(), self.rope_params.radius, upsample=upsample, upsample_rad=upsample_rad)
     
     def raycast_cloud(self, T_w_k=None, obj=None, z=1., endpoints=0):
         """
@@ -254,3 +257,6 @@ class Simulation(object):
                 geom.SetDiffuseColor([1.,1.,1.])
         self.constraints[lr] = []
         self.constraints_inds[lr] = []
+    
+    def is_grabbing_rope(self, lr):
+        return bool(self.constraints[lr])
