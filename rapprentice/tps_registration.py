@@ -138,13 +138,24 @@ def rpm_em_step(x_nd, y_md, l, T, rot_reg, prev_f, vis_cost_xy = None, outlierpr
 def fit_ThinPlateSpline_corr(x_nd, y_md, corr_nm, l, rot_reg, x_weights = None):
     wt_n = corr_nm.sum(axis=1)
 
-    xtarg_nd = (corr_nm/wt_n[:,None]).dot(y_md)
+    if np.any(wt_n == 0):
+        inlier = wt_n != 0
+        x_nd = x_nd[inlier,:]
+        wt_n = wt_n[inlier,:]
+        x_weights = x_weights[inlier]
+        xtarg_nd = (corr_nm[inlier,:]/wt_n[:,None]).dot(y_md)
+    else:
+        xtarg_nd = (corr_nm/wt_n[:,None]).dot(y_md)
 
     if x_weights is not None:
-        wt_n=wt_n*x_weights
-
+        if x_weights.ndim > 1:
+            wt_n=wt_n[:,None]*x_weights
+        else:
+            wt_n=wt_n*x_weights
+    
     f = fit_ThinPlateSpline(x_nd, xtarg_nd, bend_coef = l, wt_n = wt_n, rot_coef = rot_reg)
     f._bend_coef = l
+    f._wt_n = wt_n
     f._rot_coef = rot_reg
     f._cost = tps.tps_cost(f.lin_ag, f.trans_g, f.w_ng, f.x_na, xtarg_nd, l, wt_n=wt_n)/wt_n.mean()
     
@@ -291,18 +302,21 @@ def tps_segment_registration(rope_nodes_or_crossing_info0, rope_nodes_or_crossin
             for reversed_rope_points1 in reversed_rope_points1_variations:
                 if reversed_rope_points1:
                     corr_nm_var = calc_segment_corr(rope_nodes1[::-1], pts_segmentation_inds0, m - pts_segmentation_inds1[::-1])
+                    #TODO make sure this is the right way to reverse corr_nm_var and corr_nm_var_aug
                     corr_nm_var = corr_nm_var[:,::-1]
+                    tile_pattern = corr_tile_pattern.copy()
+                    tile_pattern = tile_pattern[:,::-1]
+                    tile_pattern = np.r_[tile_pattern[1:,:], tile_pattern[0:1,:]]
+                    corr_nm_var_aug = tile(corr_nm_var, tile_pattern)
                 else:
                     corr_nm_var = calc_segment_corr(rope_nodes1, pts_segmentation_inds0, pts_segmentation_inds1)
+                    corr_nm_var_aug = tile(corr_nm_var, corr_tile_pattern)
                 
-                if cloud0 is None:
-                    cloud0 = rope_nodes0
-                if cloud1 is None:
-                    cloud1 = rope_nodes1
-                corr_nm_var_aug = tile(corr_nm_var, corr_tile_pattern)
-                assert corr_nm_var_aug.shape == (len(cloud0), len(cloud1))
+                cloud0_var = cloud0 if cloud0 is not None else rope_nodes0
+                cloud1_var = cloud1 if cloud1 is not None else rope_nodes1
+                assert corr_nm_var_aug.shape == (len(cloud0_var), len(cloud1_var))
 
-                f_var = fit_ThinPlateSpline_corr(cloud0, cloud1, corr_nm_var_aug, reg, rot_reg, x_weights)
+                f_var = fit_ThinPlateSpline_corr(cloud0_var, cloud1_var, corr_nm_var_aug, reg, rot_reg, x_weights)
         
                 f_variations.append(f_var)
                 corr_nm_variations.append(corr_nm_var)
@@ -324,7 +338,8 @@ def tps_segment_registration(rope_nodes_or_crossing_info0, rope_nodes_or_crossin
     
     # TODO plot correct pts_segmemtation_inds
     if plotting:
-        plot_cb(rope_nodes0, rope_nodes1, corr_nm, f, pts_segmentation_inds0, pts_segmentation_inds1)
+        corr_nm_aug = tile(corr_nm, corr_tile_pattern) if corr_nm is not None else None
+        plot_cb(rope_nodes0, rope_nodes1, cloud0, cloud1, corr_nm, corr_nm_aug, f, pts_segmentation_inds0, pts_segmentation_inds1)
 
     return f, corr_nm
 

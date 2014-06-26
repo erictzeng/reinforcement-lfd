@@ -246,7 +246,7 @@ def plot_tps_registration_proj_2d(x_nd, y_md, f, res, x_color, y_color, xwarped_
     
     plt.draw()
     
-def plot_tps_registration_segment_proj_2d(rope_nodes0, rope_nodes1, corr_nm, f, pts_segmentation_inds0, pts_segmentation_inds1):
+def plot_tps_registration_segment_proj_2d(rope_nodes0, rope_nodes1, cloud0, cloud1, corr_nm, corr_nm_aug, f, pts_segmentation_inds0, pts_segmentation_inds1):
     # set interactive
     plt.ion()
     
@@ -254,32 +254,52 @@ def plot_tps_registration_segment_proj_2d(rope_nodes0, rope_nodes1, corr_nm, f, 
     fig.clear()
     
     plt.subplot(221, aspect='equal')
-    for i, (i_start, i_end) in enumerate(zip(pts_segmentation_inds0[:-1], pts_segmentation_inds0[1:])):
-        color = 'r' if len(pts_segmentation_inds0)<=2 else np.tile(np.array(colorsys.hsv_to_rgb(float(i)/(len(pts_segmentation_inds0)-2),1,1)), (i_end-i_start,1))
-        plt.scatter(rope_nodes0[i_start:i_end,0], rope_nodes0[i_start:i_end,1], c=color, edgecolors=color, marker=',', s=10)
+    if cloud0 is not None:
+        plt.scatter(cloud0[:,0], cloud0[:,1], c=(1,0,0), edgecolors=(1,0,0), marker=',', s=1)
+#     for i, (i_start, i_end) in enumerate(zip(pts_segmentation_inds0[:-1], pts_segmentation_inds0[1:])):
+#         color = 'r' if len(pts_segmentation_inds0)<=2 else np.tile(np.array(colorsys.hsv_to_rgb(float(i)/(len(pts_segmentation_inds0)-2),1,1)), (i_end-i_start,1))
+#         plt.scatter(rope_nodes0[i_start:i_end,0], rope_nodes0[i_start:i_end,1], c=color, edgecolors=color, marker=',', s=1)
+    grid_means = .5 * (rope_nodes0.max(axis=0) + rope_nodes0.min(axis=0))
+    grid_mins = grid_means - (rope_nodes0.max(axis=0) - rope_nodes0.min(axis=0))
+    grid_maxs = grid_means + (rope_nodes0.max(axis=0) - rope_nodes0.min(axis=0))
+    plot_warped_grid_proj_2d(lambda xyz: xyz, grid_mins[:2], grid_maxs[:2], z=np.median(rope_nodes0, axis=0)[2], xres=.05, yres=.05, draw=False)
     
     plt.subplot(222, aspect='equal')
-    for i, (i_start, i_end) in enumerate(zip(pts_segmentation_inds1[:-1], pts_segmentation_inds1[1:])):
-        color = 'r' if len(pts_segmentation_inds1)<=2 else np.tile(np.array(colorsys.hsv_to_rgb(float(i)/(len(pts_segmentation_inds1)-2),1,1)), (i_end-i_start,1))
-        plt.scatter(rope_nodes1[i_start:i_end,0], rope_nodes1[i_start:i_end,1], c=color, edgecolors=color, marker=',', s=10)
+    if cloud1 is not None:
+        plt.scatter(cloud1[:,0], cloud1[:,1], c=(0,0,1), edgecolors=(0,0,1), marker=',', s=1)
+    if f is not None and cloud0 is not None:
+        warped_cloud0 = f.transform_points(cloud0)
+        plt.scatter(warped_cloud0[:,0], warped_cloud0[:,1], c=(0,1,0), edgecolors=(0,1,0), marker=',', s=1)
+#     for i, (i_start, i_end) in enumerate(zip(pts_segmentation_inds1[:-1], pts_segmentation_inds1[1:])):
+#         color = 'r' if len(pts_segmentation_inds1)<=2 else np.tile(np.array(colorsys.hsv_to_rgb(float(i)/(len(pts_segmentation_inds1)-2),1,1)), (i_end-i_start,1))
+#         plt.scatter(rope_nodes1[i_start:i_end,0], rope_nodes1[i_start:i_end,1], c=color, edgecolors=color, marker=',', s=1)
     
-    if corr_nm is not None:
+    if corr_nm is not None or corr_nm_aug is not None:
         plt.subplot(223, aspect='equal')
-        rope_nodes1_resampled = corr_nm.dot(rope_nodes1)
-        for i, (i_start, i_end) in enumerate(zip(pts_segmentation_inds0[:-1], pts_segmentation_inds0[1:])):
-            color = 'r' if len(pts_segmentation_inds0)<=2 else np.tile(np.array(colorsys.hsv_to_rgb(float(i)/(len(pts_segmentation_inds0)-2),1,1)), (i_end-i_start,1))
-            plt.scatter(rope_nodes1_resampled[i_start:i_end,0], rope_nodes1_resampled[i_start:i_end,1], c=color, edgecolors=color, marker=',', s=10)
+        if corr_nm_aug is not None:
+            cloud1_resampled = corr_nm_aug.dot(cloud1)
+            plt.scatter(cloud1_resampled[:,0], cloud1_resampled[:,1], c=(0,0,1), edgecolors=(0,0,1), marker=',', s=1)
+        if f is not None and cloud0 is not None:
+            warped_cloud0 = f.transform_points(cloud0)
+            plt.scatter(warped_cloud0[:,0], warped_cloud0[:,1], c=(0,1,0), edgecolors=(0,1,0), marker=',', s=1)
+#         if corr_nm is not None:
+#             rope_nodes1_resampled = corr_nm.dot(rope_nodes1)
+#             for i, (i_start, i_end) in enumerate(zip(pts_segmentation_inds0[:-1], pts_segmentation_inds0[1:])):
+#                 color = 'r' if len(pts_segmentation_inds0)<=2 else np.tile(np.array(colorsys.hsv_to_rgb(float(i)/(len(pts_segmentation_inds0)-2),1,1)), (i_end-i_start,1))
+#                 plt.scatter(rope_nodes1_resampled[i_start:i_end,0], rope_nodes1_resampled[i_start:i_end,1], c=color, edgecolors=color, marker=',', s=1)
     
     if f is not None:
         plt.subplot(224, aspect='equal')
-        warped_rope_nodes0 = f.transform_points(rope_nodes0)
-        for i, (i_start, i_end) in enumerate(zip(pts_segmentation_inds0[:-1], pts_segmentation_inds0[1:])):
-            color = 'r' if len(pts_segmentation_inds0)<=2 else np.tile(np.array(colorsys.hsv_to_rgb(float(i)/(len(pts_segmentation_inds0)-2),1,1)), (i_end-i_start,1))
-            plt.scatter(warped_rope_nodes0[i_start:i_end,0], warped_rope_nodes0[i_start:i_end,1], c=color, edgecolors=color, marker=',', s=10)
+        warped_cloud0 = f.transform_points(cloud0)
+        plt.scatter(warped_cloud0[:,0], warped_cloud0[:,1], c=(0,1,0), edgecolors=(0,1,0), marker=',', s=1)
+#         warped_rope_nodes0 = f.transform_points(rope_nodes0)
+#         for i, (i_start, i_end) in enumerate(zip(pts_segmentation_inds0[:-1], pts_segmentation_inds0[1:])):
+#             color = 'r' if len(pts_segmentation_inds0)<=2 else np.tile(np.array(colorsys.hsv_to_rgb(float(i)/(len(pts_segmentation_inds0)-2),1,1)), (i_end-i_start,1))
+#             plt.scatter(warped_rope_nodes0[i_start:i_end,0], warped_rope_nodes0[i_start:i_end,1], c=color, edgecolors=color, marker=',', s=1)
         grid_means = .5 * (rope_nodes0.max(axis=0) + rope_nodes0.min(axis=0))
         grid_mins = grid_means - (rope_nodes0.max(axis=0) - rope_nodes0.min(axis=0))
         grid_maxs = grid_means + (rope_nodes0.max(axis=0) - rope_nodes0.min(axis=0))
-        plot_warped_grid_proj_2d(f.transform_points, grid_mins[:2], grid_maxs[:2], z=np.median(rope_nodes0, axis=0)[2], xres=.1, yres=.1, draw=False)
+        plot_warped_grid_proj_2d(f.transform_points, grid_mins[:2], grid_maxs[:2], z=np.median(rope_nodes0, axis=0)[2], xres=.05, yres=.05, draw=False)
     
     plt.draw()
 
