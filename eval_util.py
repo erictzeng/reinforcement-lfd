@@ -194,14 +194,18 @@ def load_task_results_step(fname, sim_env, task_index, step_index):
     rots = step_group['rots'][()]
     return best_action, full_trajs, q_values, trans, rots
 
-def traj_collisions(sim_env, full_traj, collision_dist_threshold, n=100):
+def traj_collisions(sim_env, full_traj, collision_dist_threshold, upsample=0):
     """
     Returns the set of collisions. 
     manip = Manipulator or list of indices
     """
     traj, dof_inds = full_traj
-    
-    traj_up = mu.interp2d(np.linspace(0,1,n), np.linspace(0,1,len(traj)), traj)
+    sim_util.unwrap_in_place(traj, dof_inds=dof_inds)
+
+    if upsample > 0:
+        traj_up = mu.interp2d(np.linspace(0,1,upsample), np.linspace(0,1,len(traj)), traj)
+    else:
+        traj_up = traj
     cc = trajoptpy.GetCollisionChecker(sim_env.env)
 
     with openravepy.RobotStateSaver(sim_env.robot):
@@ -222,5 +226,5 @@ def traj_collisions(sim_env, full_traj, collision_dist_threshold, n=100):
         
     return col_times
 
-def traj_is_safe(sim_env, full_traj, collision_dist_threshold, n=100):
-    return traj_collisions(sim_env, full_traj, collision_dist_threshold, n) == []
+def traj_is_safe(sim_env, full_traj, collision_dist_threshold, upsample=0):
+    return traj_collisions(sim_env, full_traj, collision_dist_threshold, upsample) == []
