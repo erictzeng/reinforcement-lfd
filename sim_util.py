@@ -187,6 +187,17 @@ def include_gripper_collisions(sim_env):
         for rope_link in sim_env.sim.rope.GetKinBody().GetLinks():
             cc.IncludeCollisionPair(gripper_link, rope_link)
 
+def dof_inds_from_name(robot, name):
+    dof_inds = []
+    for component in name.split('+'):
+        if robot.GetManipulator(component) is not None:
+            dof_inds.extend(robot.GetManipulator(component).GetArmIndices())
+        elif robot.GetJoint(component) is not None:
+            dof_inds.append(robot.GetJoint(component).GetDOFIndex())
+        else:
+            raise NotImplementedError, "error in reading manip description: %s must be a manipulator or link"%component 
+    return dof_inds
+
 def sim_traj_maybesim(sim_env, lr2traj, animate=False, interactive=False, max_cart_vel_trans_traj=.05):
     full_traj = get_full_traj(sim_env, lr2traj)
     return sim_full_traj_maybesim(sim_env, full_traj, animate=animate, interactive=interactive, max_cart_vel_trans_traj=max_cart_vel_trans_traj)
