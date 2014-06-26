@@ -160,15 +160,20 @@ def unwrap_arm_traj_in_place(traj):
         traj[:,i] = np.unwrap(traj[:,i])
     return traj
 
-def unwrap_in_place(t):
-    # TODO: do something smarter than just checking shape[1]
-    if t.shape[1] == 7:
-        unwrap_arm_traj_in_place(t)
-    elif t.shape[1] == 14:
-        unwrap_arm_traj_in_place(t[:,:7])
-        unwrap_arm_traj_in_place(t[:,7:])
+def unwrap_in_place(t, dof_inds=None):
+    if dof_inds is not None:
+        unwrap_inds = [dof_inds.index(dof_ind) for dof_ind in [17, 19, 21, 29, 31, 33] if dof_ind in dof_inds]
+        for i in unwrap_inds:
+            t[:,i] = np.unwrap(t[:,i])
     else:
-        raise NotImplementedError
+        # TODO: do something smarter than just checking shape[1]
+        if t.shape[1] == 7:
+            unwrap_arm_traj_in_place(t)
+        elif t.shape[1] == 14:
+            unwrap_arm_traj_in_place(t[:,:7])
+            unwrap_arm_traj_in_place(t[:,7:])
+        else:
+            raise NotImplementedError
 
 def exclude_gripper_collisions(sim_env):
     cc = trajoptpy.GetCollisionChecker(sim_env.env)
