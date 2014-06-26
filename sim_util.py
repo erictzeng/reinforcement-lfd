@@ -82,8 +82,7 @@ def reset_arms_to_side(sim_env):
     #actionfile = None
     sim_env.robot.SetDOFValues(mirror_arm_joints(PR2_L_POSTURES["side"]),
                                sim_env.robot.GetManipulator("rightarm").GetArmIndices())
-    mult = 5
-    open_angle = .08 * mult
+    open_angle = get_binary_gripper_angle(True)
     for lr in 'lr':
         joint_ind = sim_env.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
         start_val = sim_env.robot.GetDOFValues([joint_ind])[0]
@@ -101,7 +100,6 @@ def split_trajectory_by_gripper(seg_info):
 
     n_steps = len(lgrip)
 
-
     # indices BEFORE transition occurs
     l_openings = np.flatnonzero((lgrip[1:] >= thresh) & (lgrip[:-1] < thresh))
     r_openings = np.flatnonzero((rgrip[1:] >= thresh) & (rgrip[:-1] < thresh))
@@ -115,16 +113,45 @@ def split_trajectory_by_gripper(seg_info):
 
     return seg_starts, seg_ends
 
+def split_trajectory_by_lr_gripper(seg_info, lr):
+    grip = asarray(seg_info["%s_gripper_joint"%lr])
+
+    thresh = .04 # open/close threshold
+
+    n_steps = len(grip)
+
+    # indices BEFORE transition occurs
+    openings = np.flatnonzero((grip[1:] >= thresh) & (grip[:-1] < thresh))
+    closings = np.flatnonzero((grip[1:] < thresh) & (grip[:-1] >= thresh))
+
+    before_transitions = np.r_[openings, closings]
+    after_transitions = before_transitions+1
+    seg_starts = np.unique(np.r_[0, after_transitions])
+    seg_ends = np.unique(np.r_[before_transitions, n_steps-1])
+
+    return seg_starts, seg_ends
+
+def gripper_joint2gripper_l_finger_joint_values(gripper_joint_vals):
+    """
+    Only the %s_gripper_l_finger_joint%lr can be controlled (this is the joint returned by robot.GetManipulator({"l":"leftarm", "r":"rightarm"}[lr]).GetGripperIndices())
+    The rest of the gripper joints (like %s_gripper_joint%lr) are mimiced and cannot be controlled directly
+    """
+    mult = 5.0
+    gripper_l_finger_joint_vals = mult * gripper_joint_vals
+    return gripper_l_finger_joint_vals
+
 def binarize_gripper(angle):
     thresh = .04
     return angle > thresh
-    
-def set_gripper_maybesim(sim_env, lr, is_open, prev_is_open):
+
+def get_binary_gripper_angle(open):
     mult = 5
     open_angle = .08 * mult
     closed_angle = .015 * mult
+    return open_angle if open else closed_angle
 
-    target_val = open_angle if is_open else closed_angle
+def set_gripper_maybesim(sim_env, lr, is_open, prev_is_open, animate=False):
+    target_val = get_binary_gripper_angle(is_open)
     
     # release constraints if necessary
     if is_open and not prev_is_open:
@@ -142,7 +169,7 @@ def set_gripper_maybesim(sim_env, lr, is_open, prev_is_open):
 #                sim_env.viewer.Step()
 #             if args.interactive: sim_env.viewer.Idle()
     # add constraints if necessary
-    if sim_env.viewer:
+    if animate:
         sim_env.viewer.Step()
     if not is_open and prev_is_open:
         if not sim_env.sim.grab_rope(lr):
@@ -209,20 +236,27 @@ def sim_full_traj_maybesim(sim_env, full_traj, animate=False, interactive=False,
     animate_speed = 10 if animate else 0
 
     traj, dof_inds = full_traj
-
-    # make the trajectory slow enough for the simulation
-    traj = ropesim.retime_traj(sim_env.robot, dof_inds, traj)
-
+    
+    # clip finger joint angles to the binary gripper angles if necessary
+    for lr in 'lr':
+        joint_ind = sim_env.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()
+        if joint_ind in dof_inds:
+            ind = dof_inds.index(joint_ind)
+            traj[:,ind] = np.minimum(traj[:,ind], get_binary_gripper_angle(True))
+            traj[:,ind] = np.maximum(traj[:,ind], get_binary_gripper_angle(False))
+    
     # in simulation mode, we must make sure to gradually move to the new starting position
     sim_env.robot.SetActiveDOFs(dof_inds)
     curr_vals = sim_env.robot.GetActiveDOFValues()
     transition_traj = np.r_[[curr_vals], [traj[0]]]
-    unwrap_in_place(transition_traj)
+    unwrap_in_place(transition_traj, dof_inds=dof_inds)
     transition_traj = ropesim.retime_traj(sim_env.robot, dof_inds, transition_traj, max_cart_vel=max_cart_vel_trans_traj)
     animate_traj.animate_traj(transition_traj, sim_env.robot, restore=False, pause=interactive,
         callback=sim_callback, step_viewer=animate_speed)
+    
     traj[0] = transition_traj[-1]
-    unwrap_in_place(traj)
+    unwrap_in_place(traj, dof_inds=dof_inds)
+    traj = ropesim.retime_traj(sim_env.robot, dof_inds, traj) # make the trajectory slow enough for the simulation
 
     valid_inds = grippers_exceed_rope_length(sim_env, (traj, dof_inds), 0.05)
     min_gripper_dist = [np.inf] # minimum distance between gripper when the rope capsules are too far apart
@@ -250,42 +284,109 @@ def sim_full_traj_maybesim(sim_env, full_traj, animate=False, interactive=False,
         callback=sim_callback, step_viewer=animate_speed, execute_step_cond=is_rope_pulled_too_tight)
     if min_gripper_dist[0] != np.inf:
         yellowprint("Some steps of the trajectory were not executed because the gripper was pulling the rope too tight.")
-    if sim_env.viewer:
+    if animate:
         sim_env.viewer.Step()
     return True
 
-def get_full_traj(sim_env, lr2traj):
+def get_full_traj(sim_env, lr2arm_traj, lr2finger_traj = {}):
     """
     A full trajectory is a tuple of a trajectory (np matrix) and dof indices (list)
     """
-    if len(lr2traj) > 0:
-        trajs = []
-        dof_inds = []
-        for (lr, traj) in lr2traj.items():
+    trajs = []
+    dof_inds = []
+    if len(lr2arm_traj) > 0:
+        for (lr, arm_traj) in lr2arm_traj.items():
             manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
-            trajs.append(traj)
-            dof_inds.extend(sim_env.robot.GetManipulator(manip_name).GetArmIndices())            
+            trajs.append(arm_traj)
+            dof_inds.extend(sim_env.robot.GetManipulator(manip_name).GetArmIndices())
+    if len(lr2finger_traj) > 0:
+        for (lr, finger_traj) in lr2finger_traj.items():
+            trajs.append(finger_traj)
+            dof_inds.append(sim_env.robot.GetJointIndex("%s_gripper_l_finger_joint"%lr))
+    if len(trajs) > 0:
         full_traj = (np.concatenate(trajs, axis=1), dof_inds)
     else:
         full_traj = (np.zeros((0,0)), [])
     return full_traj
 
-def get_ee_traj(sim_env, lr, joint_or_full_traj, ee_link_name_fmt="%s_gripper_tool_frame"):
+def merge_full_trajs(full_trajs):
+    trajs = []
+    dof_inds = []
+    if len(full_trajs) > 0:
+        for full_traj in full_trajs:
+            trajs.append(full_traj[0])
+            dof_inds.extend(full_traj[1])
+        n_steps = np.max([len(traj) for traj in trajs])
+        for i, traj in enumerate(trajs):
+            if len(traj) < n_steps:
+                trajs[i] = np.r_[traj, np.tile(traj[-1], (n_steps-len(traj),1))]
+        full_traj = (np.concatenate(trajs, axis=1), dof_inds)
+    else:
+        full_traj = (np.zeros((0,0)), [])
+    return full_traj
+
+def get_ee_traj(sim_env, lr, arm_traj_or_full_traj, ee_link_name_fmt="%s_gripper_tool_frame"):
     manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
     ee_link_name = ee_link_name_fmt%lr
     ee_link = sim_env.robot.GetLink(ee_link_name)
-    if type(joint_or_full_traj) == tuple: # it is a full_traj
-        joint_traj = joint_or_full_traj[0]
-        dof_inds = joint_or_full_traj[1]
+    if type(arm_traj_or_full_traj) == tuple: # it is a full_traj
+        full_traj = arm_traj_or_full_traj
+        traj = full_traj[0]
+        dof_inds = full_traj[1]
     else:
-        joint_traj = joint_or_full_traj
+        arm_traj = arm_traj_or_full_traj
+        traj = arm_traj
         dof_inds = sim_env.robot.GetManipulator(manip_name).GetArmIndices()
     ee_traj = []
     with openravepy.RobotStateSaver(sim_env.robot):
-        for i_step in range(joint_traj.shape[0]):
-            sim_env.robot.SetDOFValues(joint_traj[i_step], dof_inds)
+        for i_step in range(traj.shape[0]):
+            sim_env.robot.SetDOFValues(traj[i_step], dof_inds)
             ee_traj.append(ee_link.GetTransform())
     return np.array(ee_traj)
+
+def get_finger_rel_pts(finger_lr):
+    left_rel_pts = np.array([[.027,-.016, .01], [-.002,-.016, .01], 
+                             [-.002,-.016,-.01], [.027,-.016,-.01]])
+    if finger_lr == 'l':
+        return left_rel_pts
+    else:
+        rot_x_180 = np.diag([1,-1,-1])
+        return left_rel_pts.dot(rot_x_180.T)
+
+def get_finger_pts_traj(sim_env, lr, full_traj_or_ee_finger_traj):
+    """
+    ee_traj = sim_util.get_ee_traj(sim_env, lr, arm_traj)
+    flr2finger_pts_traj1 = get_finger_pts_traj(sim_env, lr, (ee_traj, finger_traj))
+    
+    full_traj = sim_util.get_full_traj(sim_env, {lr:arm_traj}, {lr:finger_traj})
+    flr2finger_pts_traj2 = get_finger_pts_traj(sim_env, lr, full_traj)
+    """
+    flr2finger_pts_traj = {}
+    assert type(full_traj_or_ee_finger_traj) == tuple
+    if full_traj_or_ee_finger_traj[0].ndim == 3:
+        ee_traj, finger_traj = full_traj_or_ee_finger_traj
+        assert len(ee_traj) == len(finger_traj)
+        for finger_lr in 'lr':
+            gripper_full_traj = get_full_traj(sim_env, {}, {lr:finger_traj})
+            rel_ee_traj = get_ee_traj(sim_env, lr, gripper_full_traj)
+            rel_finger_traj = get_ee_traj(sim_env, lr, gripper_full_traj, ee_link_name_fmt="%s"+"_gripper_%s_finger_tip_link"%finger_lr)
+            
+            flr2finger_pts_traj[finger_lr] = []
+            for (world_from_ee, world_from_rel_ee, world_from_rel_finger) in zip(ee_traj, rel_ee_traj, rel_finger_traj):
+                ee_from_finger = mu.invertHmat(world_from_rel_ee).dot(world_from_rel_finger)
+                world_from_finger = world_from_ee.dot(ee_from_finger)
+                finger_pts = world_from_finger[:3,3] + get_finger_rel_pts(finger_lr).dot(world_from_finger[:3,:3].T)
+                flr2finger_pts_traj[finger_lr].append(finger_pts)
+            flr2finger_pts_traj[finger_lr] = np.asarray(flr2finger_pts_traj[finger_lr])
+    else:
+        full_traj = full_traj_or_ee_finger_traj
+        for finger_lr in 'lr':
+            finger_traj = get_ee_traj(sim_env, lr, full_traj, ee_link_name_fmt="%s"+"_gripper_%s_finger_tip_link"%finger_lr)
+            flr2finger_pts_traj[finger_lr] = []
+            for world_from_finger in finger_traj:
+                flr2finger_pts_traj[finger_lr].append(world_from_finger[:3,3] + get_finger_rel_pts(finger_lr).dot(world_from_finger[:3,:3].T))
+            flr2finger_pts_traj[finger_lr] = np.asarray(flr2finger_pts_traj[finger_lr])
+    return flr2finger_pts_traj
 
 def grippers_exceed_rope_length(sim_env, full_traj, thresh):
     """
