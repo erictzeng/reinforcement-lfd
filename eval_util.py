@@ -76,7 +76,7 @@ def load_task_results_init(fname, task_index):
     rots = init_group['rots'][()]
     return rope_nodes, rope_params, args, trans, rots
 
-def save_task_results_step(fname, sim_env, task_index, step_index, eval_stats, best_root_action, full_trajs, q_values_root, demo_cloud=None, demo_cloud_ds=None, cloud=None, cloud_ds=None):
+def save_task_results_step(fname, sim_env, task_index, step_index, eval_stats, best_root_action, full_trajs, q_values_root, demo_cloud=None, demo_cloud_ds=None, demo_rope_nodes=None, new_cloud=None, new_cloud_ds=None, new_rope_nodes=None):
     if fname is None:
         return
     result_file = h5py.File(fname, 'a')
@@ -93,10 +93,14 @@ def save_task_results_step(fname, sim_env, task_index, step_index, eval_stats, b
         step_group['demo_cloud'] = demo_cloud
     if demo_cloud_ds is not None:
         step_group['demo_cloud_ds'] = demo_cloud_ds
-    if cloud is not None:
-        step_group['cloud'] = cloud
-    if cloud_ds is not None:
-        step_group['cloud_ds'] = cloud_ds
+    if demo_rope_nodes is not None:
+        step_group['demo_rope_nodes'] = demo_rope_nodes
+    if new_cloud is not None:
+        step_group['new_cloud'] = new_cloud
+    if new_cloud_ds is not None:
+        step_group['new_cloud_ds'] = new_cloud_ds
+    if new_rope_nodes is not None:
+        step_group['new_rope_nodes'] = new_rope_nodes
     trans, rots = sim_util.get_rope_transforms(sim_env)
     step_group['trans'] = trans
     step_group['rots'] = rots
