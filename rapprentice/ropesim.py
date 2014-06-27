@@ -50,8 +50,8 @@ def retime_traj(robot, inds, traj, max_cart_vel=.02, max_finger_vel=.02, upsampl
             robot.SetDOFValues(traj[i], inds)
             cart_traj[i,:3] = leftarm.GetTransform()[:3,3]
             cart_traj[i,3:] = rightarm.GetTransform()[:3,3]
-            finger_traj[i,:1] = leftarm.GetGripperDOFValues()
-            finger_traj[i,1:] = rightarm.GetGripperDOFValues()
+            finger_traj[i,:1] = robot.GetDOFValues(leftarm.GetGripperIndices())
+            finger_traj[i,1:] = robot.GetDOFValues(rightarm.GetGripperIndices())
 
     times = retiming.retime_with_vel_limits(np.c_[cart_traj, finger_traj], np.r_[np.repeat(max_cart_vel, 6),np.repeat(max_finger_vel,2)])
     times_up = np.linspace(0, times[-1], times[-1]/upsample_time) if times[-1] > upsample_time else times
