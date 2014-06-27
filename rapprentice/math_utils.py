@@ -13,16 +13,12 @@ def interp_mat(x, xp):
     """
     interp_mat(x, xp).dot(fp) should be the same as np.interp(x, xp, fp)
     """
-    ixp = 0
-    if len(xp) == 1:
-        m = np.ones((len(x), len(xp)))
-    else:
-        m = np.zeros((len(x), len(xp)))
-        for ix in range(len(x)):
-            while x[ix] > xp[ixp+1]:
-                ixp += 1
-            u = (x[ix] - xp[ixp]) / (xp[ixp+1] - xp[ixp])
-            m[ix, ixp] = 1.-u
+    u_ixps = np.interp(x, xp, range(len(xp)))
+    m = np.zeros((len(x), len(xp)))
+    for ix, u_ixp in enumerate(u_ixps):
+        u, ixp = np.modf(u_ixp)
+        m[ix, ixp] = 1.-u
+        if ixp+1 < m.shape[1]: # the last u is zero by definition
             m[ix, ixp+1] = u
     return m
 def normalize(x):
