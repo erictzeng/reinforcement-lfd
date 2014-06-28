@@ -234,13 +234,14 @@ def tile(A, tile_pattern):
                 B[A.shape[0]*i:A.shape[0]*(i+1), A.shape[1]*j:A.shape[1]*(j+1)] = A
     return B
             
-def tps_segment_registration(rope_nodes_or_crossing_info0, rope_nodes_or_crossing_info1, cloud0 = None, cloud1 = None, corr_tile_pattern = np.array([[1]]),
+def tps_segment_registration(rope_nodes_or_crossing_info0, rope_nodes_or_crossing_info1, cloud0 = None, cloud1 = None, corr_tile_pattern = np.array([[1]]), rev_perm = None,
                              x_weights = None, reg = .1, rot_reg = np.r_[1e-4, 1e-4, 1e-1], plotting = False, plot_cb = None):
     """
     Find a registration by assigning correspondences based on the topology of the rope
     If rope_nodes0 and rope_nodes1 have the same topology (up to a variant of removing the last crossing in open ropes), the correspondences are given by linearly interpolating segments of both rope_nodes. The rope_nodes are segmented based on crossings.
     If rope_nodes0 and rope_nodes1 don't have the same topology, this function returns None for the TPS and the correspondence matrix
     rope_nodes_or_crossing_info is either rope nodes, which is an ordered sequence of points (i.e. it is the back bone of its respective rope), or is a tuple containing the rope nodes and crossings information (the information returned by knot_classifier.calculateCrossings)
+    rev_perm is the permutation matrix of how corr_tile_pattern changes when the rope_nodes have been reversed
     """
     if type(rope_nodes_or_crossing_info0) == tuple:
         rope_nodes0, crossings0, crossings_links_inds0, cross_pairs0, rope_closed0 = rope_nodes_or_crossing_info0
@@ -302,12 +303,12 @@ def tps_segment_registration(rope_nodes_or_crossing_info0, rope_nodes_or_crossin
             for reversed_rope_points1 in reversed_rope_points1_variations:
                 if reversed_rope_points1:
                     corr_nm_var = calc_segment_corr(rope_nodes1[::-1], pts_segmentation_inds0, m - pts_segmentation_inds1[::-1])
-                    #TODO make sure this is the right way to reverse corr_nm_var and corr_nm_var_aug
                     corr_nm_var = corr_nm_var[:,::-1]
-                    tile_pattern = corr_tile_pattern.copy()
-                    tile_pattern = tile_pattern[:,::-1]
-                    tile_pattern = np.r_[tile_pattern[1:,:], tile_pattern[0:1,:]]
-                    corr_nm_var_aug = tile(corr_nm_var, tile_pattern)
+                    if rev_perm is None:
+                        rev_perm = np.eye(len(corr_tile_pattern))
+                        rev_perm = rev_perm[::-1]
+                        rev_perm = np.r_[rev_perm[(len(rev_perm)/2)-1:,:], rev_perm[:(len(rev_perm)/2)-1,:]]
+                    corr_nm_var_aug = tile(corr_nm_var, rev_perm.dot(corr_tile_pattern))
                 else:
                     corr_nm_var = calc_segment_corr(rope_nodes1, pts_segmentation_inds0, pts_segmentation_inds1)
                     corr_nm_var_aug = tile(corr_nm_var, corr_tile_pattern)
