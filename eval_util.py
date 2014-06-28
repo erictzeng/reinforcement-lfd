@@ -1,6 +1,7 @@
 # Contains useful functions for evaluating on PR2 rope tying simulation.
 # The purpose of this class is to eventually consolidate the various
 # instantiations of do_task_eval.py
+import argparse
 import sim_util
 import util
 import openravepy, trajoptpy
@@ -8,13 +9,15 @@ import h5py, numpy as np
 from rapprentice import math_utils as mu
 
 class EvalStats:
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.found_feasible_action = False
         self.success = False
         self.feasible = True
         self.misgrasp = False
         self.action_elapsed_time = 0
         self.exec_elapsed_time = 0
+        for k in kwargs:
+            setattr(self, k, kwargs[k])
 
 def get_holdout_items(holdoutfile, task_list, task_file, i_start, i_end):
     tasks = [] if task_list is None else task_list
@@ -38,7 +41,9 @@ def get_holdout_items(holdoutfile, task_list, task_file, i_start, i_end):
 
 def add_dict_to_group(group, d):
     for (k,v) in d.iteritems():
-        if v is None:
+        if type(v) == dict:
+            add_dict_to_group(group.create_group(k), v)
+        elif v is None:
             group[k] = 'None'
         elif type(v) == list and len(v) == 0:
             group[k] = 'empty_list'
@@ -49,9 +54,11 @@ def add_dict_to_group(group, d):
 def group_to_dict(group):
     d = {}
     for (k,v) in group.iteritems():
-        if v == 'None':
+        if isinstance(v, h5py.Group):
+            d[k] = group_to_dict(v)
+        elif v[()] == 'None':
             d[k] = None
-        elif v == 'empty_list':
+        elif v[()] == 'empty_list':
             d[k] = []
         else:
             d[k] = v[()]
@@ -77,32 +84,51 @@ def group_to_full_trajs(full_trajs_g):
         full_trajs.append(full_traj)
     return full_trajs
 
-def save_results_args(fname, args, independent_args):
-    # independent_args are the args that doesn't need to be bound to a particular results file
+def namespace2dict(args):
+    args_dict = vars(args).copy()
+    for (k,v) in args_dict.iteritems():
+        try:
+            args_dict[k] = namespace2dict(v)
+        except TypeError:
+            continue
+    return args_dict
+
+def dict2namespace(args_dict):
+    args_dict = args_dict.copy()
+    for (k,v) in args_dict.iteritems():
+        if type(v) is dict:
+            args_dict[k] = dict2namespace(v)
+    args = argparse.Namespace(**args_dict)
+    return args
+
+def save_results_args(fname, args):
+    # if args is already in the results file, make sure that the eval arguments are the same
     if fname is None:
         return
     result_file = h5py.File(fname, 'a')
 
+    args_dict = namespace2dict(args)
     if 'args' in result_file:
-        loaded_args_dict = group_to_dict[result_file['args']]
-        args_dict = vars(args)
-        
-        if set(loaded_args_dict.keys())!= set(args_dict.keys()):
-            raise RuntimeError("The arguments of the file and the current arguments mismatches")
-        for (k, args_val) in args_dict.iteritems():
-            if k in independent_args:
-                continue
-            if args_val != loaded_args_dict[k]:
-                raise RuntimeError("The arguments of the file and the current arguments mismatches")
+        loaded_args_dict = group_to_dict(result_file['args'])
+        if 'eval' not in loaded_args_dict:
+            raise RuntimeError("The file doesn't have eval arguments")
+        if 'eval' not in args_dict:
+            raise RuntimeError("The current arguments doesn't have eval arguments")
+        if set(loaded_args_dict['eval'].keys()) != set(args_dict['eval'].keys()):
+            raise RuntimeError("The arguments of the file and the current arguments have different eval arguments")
+        for (k, args_eval_val) in args_dict['eval'].iteritems():
+            loaded_args_eval_val = loaded_args_dict['eval'][k]
+            if np.any(args_eval_val != loaded_args_eval_val):
+                raise RuntimeError("The arguments of the file and the current arguments have different eval arguments: %s, %s"%(loaded_args_eval_val, args_eval_val))
     else:
-        add_dict_to_group(init_group.create_group('args'), vars(args))
+        add_dict_to_group(result_file.create_group('args'), args_dict)
     result_file.close()
 
 def load_results_args(fname):
     if fname is None:
         raise RuntimeError("Cannot load task results with an unspecified file name")
     result_file = h5py.File(fname, 'r')
-    args = util.Bunch(group_to_dict(result_file['args']))
+    args = dict2namespace(group_to_dict(result_file['args']))
     result_file.close()
     return args
 
@@ -166,7 +192,7 @@ def load_task_results_step(fname, task_index, step_index):
     best_action = step_group['best_action'][()]
     q_values = step_group['values'][()]
     full_trajs = group_to_full_trajs(step_group['full_trajs'])
-    eval_stats = util.Bunch(group_to_dict(step_group['eval_stats']))
+    eval_stats = EvalStats(**group_to_dict(step_group['eval_stats']))
     kwargs = group_to_dict(step_group['kwargs'])
     result_file.close()
     return trans, rots, rope_nodes, best_action, q_values, full_trajs, eval_stats, kwargs
