@@ -1,0 +1,1 @@
+./eval_holdout_performance.py 'data/eval2/multi_sc_'$1'/images' 'data/eval2/multi_sc_'$1'/knot_eval.txt'
