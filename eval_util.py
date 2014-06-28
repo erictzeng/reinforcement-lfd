@@ -77,7 +77,36 @@ def group_to_full_trajs(full_trajs_g):
         full_trajs.append(full_traj)
     return full_trajs
 
-def save_task_results_init(fname, task_index, sim_env, init_rope_nodes, args):
+def save_results_args(fname, args, independent_args):
+    # independent_args are the args that doesn't need to be bound to a particular results file
+    if fname is None:
+        return
+    result_file = h5py.File(fname, 'a')
+
+    if 'args' in result_file:
+        loaded_args_dict = group_to_dict[result_file['args']]
+        args_dict = vars(args)
+        
+        if set(loaded_args_dict.keys())!= set(args_dict.keys()):
+            raise RuntimeError("The arguments of the file and the current arguments mismatches")
+        for (k, args_val) in args_dict.iteritems():
+            if k in independent_args:
+                continue
+            if args_val != loaded_args_dict[k]:
+                raise RuntimeError("The arguments of the file and the current arguments mismatches")
+    else:
+        add_dict_to_group(init_group.create_group('args'), vars(args))
+    result_file.close()
+
+def load_results_args(fname):
+    if fname is None:
+        raise RuntimeError("Cannot load task results with an unspecified file name")
+    result_file = h5py.File(fname, 'r')
+    args = util.Bunch(group_to_dict(result_file['args']))
+    result_file.close()
+    return args
+
+def save_task_results_init(fname, task_index, sim_env, init_rope_nodes):
     if fname is None:
         return
     result_file = h5py.File(fname, 'a')
@@ -89,7 +118,6 @@ def save_task_results_init(fname, task_index, sim_env, init_rope_nodes, args):
     init_group['trans'], init_group['rots'] = sim_util.get_rope_transforms(sim_env)
     init_group['rope_nodes'] = sim_env.sim.rope.GetControlPoints()
     init_group['init_rope_nodes'] = init_rope_nodes
-    add_dict_to_group(init_group.create_group('args'), vars(args))
     result_file.close()
 
 def load_task_results_init(fname, task_index):
@@ -102,8 +130,8 @@ def load_task_results_init(fname, task_index):
     rots = init_group['rots'][()]
     rope_nodes = init_group['rope_nodes'][()]
     init_rope_nodes = init_group['init_rope_nodes'][()]
-    args = util.Bunch(group_to_dict(init_group['args']))
-    return trans, rots, rope_nodes, init_rope_nodes, args
+    result_file.close()
+    return trans, rots, rope_nodes, init_rope_nodes
 
 def save_task_results_step(fname, task_index, step_index, sim_env, best_root_action, q_values_root, full_trajs, eval_stats, **kwargs):
     if fname is None:
@@ -140,6 +168,7 @@ def load_task_results_step(fname, task_index, step_index):
     full_trajs = group_to_full_trajs(step_group['full_trajs'])
     eval_stats = util.Bunch(group_to_dict(step_group['eval_stats']))
     kwargs = group_to_dict(step_group['kwargs'])
+    result_file.close()
     return trans, rots, rope_nodes, best_action, q_values, full_trajs, eval_stats, kwargs
 
 def save_task_follow_traj_inputs(fname, sim_env, task_index, step_index, choice_index, miniseg_index, manip_name,
