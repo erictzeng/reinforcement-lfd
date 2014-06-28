@@ -8,6 +8,26 @@ import h5py
 import IPython as ipy
 import os 
 import time
+import argparse
+
+class ArgumentParser(argparse.ArgumentParser):
+    def parse_args(self, *args, **kw):
+        res = argparse.ArgumentParser.parse_args(self, *args, **kw)
+        from argparse import _HelpAction, _SubParsersAction
+        for x in self._subparsers._actions:
+            if not isinstance(x, _SubParsersAction):
+                continue
+            v = x.choices[res.subparser_name] # select the subparser name
+            subparseargs = {}
+            for x1 in v._optionals._actions: # loop over the actions
+                if isinstance(x1, _HelpAction): # skip help
+                    continue
+                n = x1.dest
+                if hasattr(res, n): # pop the argument
+                    subparseargs[n] = getattr(res, n)
+                    delattr(res, n)
+            res.__setattr__(res.subparser_name, argparse.Namespace(**subparseargs))
+        return res
 
 class Bunch(object):
   def __init__(self, adict):
