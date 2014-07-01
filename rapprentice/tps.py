@@ -261,6 +261,35 @@ def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n):
             f[1+i] -= rot_coefs[i]
              
             Theta[:,i] = solve_eqp1(H,f,A)
+    
+    """
+    from rapprentice.registration import ThinPlateSpline
+    f = ThinPlateSpline()
+    f.lin_ag, f.trans_g, f.w_ng = Theta[1:d+1], Theta[0], Theta[d+1:]
+    f.x_na = x_na
+    
+    cost = 0
+    # matching cost
+    if solve_dim_separately:
+        cost += np.linalg.norm((f.transform_points(x_na) - y_ng) * np.sqrt(wt_n))**2
+        # same as (np.square(f.transform_points(x_na) - y_ng) * wt_n).sum()
+    else:
+        cost += np.linalg.norm((f.transform_points(x_na) - y_ng) * np.sqrt(wt_n)[:,None])**2
+        # same as (np.square(np.apply_along_axis(np.linalg.norm, 1, f.transform_points(x_na) - y_ng)) * wt_n).sum()
+    # bending cost
+    if solve_dim_separately:
+        cost += np.trace(np.diag(bend_coefs).dot(f.w_ng.T.dot(K_nn.dot(f.w_ng))))
+    else:
+        cost += bend_coef * np.trace(f.w_ng.T.dot(K_nn.dot(f.w_ng)))
+    # rotation cost
+    cost += np.trace((f.lin_ag - np.eye(d)).T.dot(np.diag(rot_coefs).dot((f.lin_ag - np.eye(d)))))
+    # constants
+    if solve_dim_separately:
+        cost -= np.linalg.norm(y_ng * np.sqrt(wt_n))**2
+    else:
+        cost -= np.linalg.norm(y_ng * np.sqrt(wt_n)[:,None])**2
+    cost -= np.trace(np.diag(rot_coefs))
+    """
                                                             
     return Theta[1:d+1], Theta[0], Theta[d+1:]
 
