@@ -274,9 +274,9 @@ def fit_rotation(tps_fn, src_pts, tgt_pts):
     tps_fn.trans_g= np.dot(tps_fn.lin_ag, -1*src_median) \
                              + tps_local.trans_g[None,:]
     tps_fn.trans_g = np.asarray(tps_fn.trans_g)[0,:]
-
+# @profile
 def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_init = .1, rad_final = .005, rot_reg = 1e-3, 
-            plotting = False, plot_cb = None, x_weights = None, y_weights = None, outlierprior = .1, outlierfrac = 2e-1, vis_cost_xy = None):
+            plotting = False, plot_cb = None, x_weights = None, y_weights = None, outlierprior = .1, outlierfrac = 2e-1, vis_cost_xy = None, return_corr=False):
     """
     tps-rpm algorithm mostly as described by chui and rangaran
     reg_init/reg_final: regularization on curvature
@@ -343,6 +343,8 @@ def tps_rpm_bij(x_nd, y_md, n_iter = 20, reg_init = .1, reg_final = .001, rad_in
     
     f._cost = tps_cost(f.lin_ag, f.trans_g, f.w_ng, f.x_na, xtarg_nd, regs[i], wt_n=wt_n)/wt_n.mean()
     g._cost = tps_cost(g.lin_ag, g.trans_g, g.w_ng, g.x_na, ytarg_md, regs[i], wt_n=wt_m)/wt_m.mean()
+    if return_corr:
+        return (f, g), corr_nm
     return f,g
 
 def tps_reg_cost(f):

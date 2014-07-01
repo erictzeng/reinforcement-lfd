@@ -143,7 +143,7 @@ def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj,
     assert not np.any(orig_dof_vals - robot.GetDOFValues())
     
     return traj, obj_value, pose_costs
-
+# @profile
 def plan_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr2finger_rel_pts, flr2finger_pts_traj, old_traj, 
                                 no_collision_cost_first=False, use_collision_cost=True, start_fixed=False, joint_vel_limits=None,
                                 beta_pos = 10000.0, gamma=1000.0):
@@ -231,7 +231,9 @@ def plan_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr2finger_r
         with util.suppress_stdout():
             prob = trajoptpy.ConstructProblem(s, robot.GetEnv()) # create object that stores optimization problem
             result = trajoptpy.OptimizeProblem(prob) # do optimization
-    traj = result.GetTraj()    
+
+    traj = result.GetTraj() 
+
 
     rel_pts_costs = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "rel_pts"])
     rel_pts_err = []

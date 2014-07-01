@@ -5,7 +5,6 @@ from __future__ import division
 import pprint
 import argparse
 import eval_util, sim_util, util
-import tps_registration as tps_registration_old
 from rapprentice import tps_registration, planning
  
 from rapprentice import registration, colorize, berkeley_pr2, \
@@ -14,25 +13,28 @@ from rapprentice import registration, colorize, berkeley_pr2, \
 from rapprentice import math_utils as mu
 from rapprentice.yes_or_no import yes_or_no
 import pdb, time
- 
+
+from constants import ROPE_RADIUS, ROPE_ANG_STIFFNESS, ROPE_ANG_DAMPING, ROPE_LIN_DAMPING, ROPE_ANG_LIMIT,\
+    ROPE_LIN_STOP_ERP, ROPE_MASS, ROPE_RADIUS_THICK, DS_SIZE, COLLISION_DIST_THRESHOLD, EXACT_LAMBDA, \
+    N_ITER_EXACT, BEND_COEF_DIGITS, MAX_CLD_SIZE
+
+from tpsopt.registration import tps_rpm_bij
+from tpsopt.transformations import TPSSolver, EmptySolver
+from tpsopt.precompute import loglinspace
+
+from features import BatchRCFeats
 import trajoptpy, openravepy
-import rope_qlearn
-from rope_qlearn import get_closing_pts, get_closing_inds
+from rope_utils import get_closing_pts, get_closing_inds
 from knot_classifier import isKnot as is_knot, calculateCrossings
 import os, os.path, numpy as np, h5py
 from numpy import asarray
+from util import redprint, yellowprint
 import atexit
 import importlib
 from itertools import combinations
 import IPython as ipy
 import random
 import hashlib
-
-COLLISION_DIST_THRESHOLD = 0.0
-MAX_ACTIONS_TO_TRY = 10  # Number of actions to try (ranked by cost), if TrajOpt trajectory is infeasible
-TRAJOPT_MAX_ACTIONS = 5  # Number of actions to compute full feature (TPS + TrajOpt) on
-WEIGHTS = np.array([-1]) 
-DS_SIZE = .025
 
 class GlobalVars:
     unique_id = 0
@@ -42,222 +44,38 @@ class GlobalVars:
     trajopt_errors_top10 = []
     actions_ds_clouds = {}
     rope_nodes_crossing_info = {}
+    features = None
+    action_solvers = {}
+    empty_solver = None
 
-def get_action_cloud(sim_env, action, args_eval):
-    rope_nodes = get_action_rope_nodes(sim_env, action, args_eval)
-    cloud = ropesim.observe_cloud(rope_nodes, sim_env.sim.rope_params.radius, upsample_rad=args_eval.upsample_rad)
-    return cloud
-
-def get_action_cloud_ds(sim_env, action, args_eval):
-    if args_eval.downsample:
-        if action not in GlobalVars.actions_ds_clouds:
-            GlobalVars.actions_ds_clouds[action] = clouds.downsample(get_action_cloud(sim_env, action), DS_SIZE)
-        return GlobalVars.actions_ds_clouds[action]
-    else:
-        return get_action_cloud(sim_env, action, args_eval)
-
-def get_action_rope_nodes(sim_env, action, args_eval):
-    rope_nodes = GlobalVars.actions[action]['cloud_xyz'][()]
-    return ropesim.observe_cloud(rope_nodes, sim_env.sim.rope_params.radius, upsample=args_eval.upsample)
-
-def color_cloud(xyz, endpoint_inds, endpoint_color = np.array([0,0,1]), non_endpoint_color = np.array([1,0,0])):
-    xyzrgb = np.zeros((len(xyz),6))
-    xyzrgb[:,:3] = xyz  
-    xyzrgb[endpoint_inds,3:] = np.tile(endpoint_color, (endpoint_inds.sum(), 1))
-    xyzrgb[~endpoint_inds,3:] = np.tile(non_endpoint_color, ((~endpoint_inds).sum(), 1))
-    return xyzrgb
-
-def redprint(msg):
-    print colorize.colorize(msg, "red", bold=True)
-
-def yellowprint(msg):
-    print colorize.colorize(msg, "yellow", bold=True)
-
-def draw_grid(sim_env, old_xyz, f, color = (1,1,0,1)):
-    grid_means = .5 * (old_xyz.max(axis=0) + old_xyz.min(axis=0))
-    grid_mins = grid_means - (old_xyz.max(axis=0) - old_xyz.min(axis=0))
-    grid_maxs = grid_means + (old_xyz.max(axis=0) - old_xyz.min(axis=0))
-    return plotting_openrave.draw_grid(sim_env.env, f.transform_points, grid_mins, grid_maxs, xres = .1, yres = .1, zres = .04, color = color)
-
-def draw_axis(sim_env, hmat):
-    handles = []
-    handles.append(sim_env.env.drawarrow(hmat[:3,3], hmat[:3,3]+hmat[:3,0]/10.0, 0.005, (1,0,0,1)))
-    handles.append(sim_env.env.drawarrow(hmat[:3,3], hmat[:3,3]+hmat[:3,1]/10.0, 0.005, (0,1,0,1)))
-    handles.append(sim_env.env.drawarrow(hmat[:3,3], hmat[:3,3]+hmat[:3,2]/10.0, 0.005, (0,0,1,1)))
-    return handles
-
-def draw_finger_pts_traj(sim_env, flr2finger_pts_traj, color):
-    handles = []
-    for finger_lr, pts_traj in flr2finger_pts_traj.items():
-        for pts in pts_traj:
-            handles.append(sim_env.env.drawlinestrip(np.r_[pts, pts[0][None,:]], 1, color))
-    return handles
-
-def register_tps(sim_env, state, action, args_eval, interest_pts = None, closing_hmats = None, closing_finger_pts = None, reg_type='segment'):
-    old_cloud = get_action_cloud(sim_env, action, args_eval)
+# @profile
+def register_tps(sim_env, state, action, args_eval, interest_pts = None, closing_hmats = None, 
+                 closing_finger_pts = None, reg_type='bij'):
+    scaled_x_nd, src_params = get_scaled_action_cloud(state, action)
     new_cloud = state[1]
-    if reg_type == 'segment':
-        old_rope_nodes = get_action_rope_nodes(sim_env, action, args_eval)
-        state_id, new_cloud, new_rope_nodes = state
-        def plot_cb(rope_nodes0, rope_nodes1, cloud0, cloud1, corr_nm, corr_nm_aug, f, pts_segmentation_inds0, pts_segmentation_inds1):
-            from rapprentice.plotting_plt import plot_tps_registration_segment_proj_2d
-            import matplotlib.pyplot as plt
-            plot_tps_registration_segment_proj_2d(rope_nodes0, rope_nodes1, cloud0, cloud1, corr_nm, corr_nm_aug, f, pts_segmentation_inds0, pts_segmentation_inds1)
-            
-            if closing_hmats is not None:
-                plt.subplot(223, aspect='equal')
-                interest_pts_inds = np.zeros(len(cloud0), dtype=bool)
-                for hmat in closing_hmats.values():
-                    interest_pts_inds += np.apply_along_axis(np.linalg.norm, 1, cloud0 - hmat[:3,3]) < 0.025
-                cloud1_resampled = corr_nm_aug.dot(cloud1)
-                plt.scatter(cloud1_resampled[interest_pts_inds,0], cloud1_resampled[interest_pts_inds,1], c='none', edgecolors='b', marker='o', s=15)
-                warped_cloud0 = f.transform_points(cloud0)
-                plt.scatter(warped_cloud0[interest_pts_inds,0], warped_cloud0[interest_pts_inds,1], c='none', edgecolors='g', marker='o', s=15)
-            
-            if interest_pts is not None and len(interest_pts) > 0:
-                plt.subplot(221, aspect='equal')
-                pts = np.array(interest_pts)
-                plt.scatter(pts[:,0], pts[:,1], marker='x')
-                plt.subplot(222, aspect='equal')
-                pts = f.transform_points(pts)
-                plt.scatter(pts[:,0], pts[:,1], marker='x')
-            if closing_hmats is not None:
-                plt.subplot(221, aspect='equal')
-                for hmat in closing_hmats.values():
-                    plt.arrow(hmat[0,3], hmat[1,3], hmat[0,0]/10.0, hmat[1,0]/10.0, fc='r', ec='r')
-                    plt.arrow(hmat[0,3], hmat[1,3], hmat[0,1]/10.0, hmat[1,1]/10.0, fc='g', ec='g')
-                    plt.arrow(hmat[0,3], hmat[1,3], hmat[0,2]/10.0, hmat[1,2]/10.0, fc='b', ec='b')
-                for i_plot in range(2,5):
-                    plt.subplot(2,2,i_plot, aspect='equal')
-                    for hmat in f.transform_hmats(np.array(closing_hmats.values())):
-                        plt.arrow(hmat[0,3], hmat[1,3], hmat[0,0]/10.0, hmat[1,0]/10.0, fc='r', ec='r')
-                        plt.arrow(hmat[0,3], hmat[1,3], hmat[0,1]/10.0, hmat[1,1]/10.0, fc='g', ec='g')
-                        plt.arrow(hmat[0,3], hmat[1,3], hmat[0,2]/10.0, hmat[1,2]/10.0, fc='b', ec='b')
-            if closing_finger_pts is not None:
-                import matplotlib
-                plt.subplot(221, aspect='equal')
-                lines = []
-                for pts_list in closing_finger_pts.values():
-                    for pts in pts_list:
-                        lines.append(np.r_[pts, pts[0][None,:]][:,:2])
-#                         lines.append(pts[np.array([True,False,False,True])][:,:2])
-                lc = matplotlib.collections.LineCollection(lines, colors=(1,0,0), lw=2)
-                ax = plt.gca()
-                ax.add_collection(lc)
-
-                lines = []
-                for pts_list in closing_finger_pts.values():
-                    for i_pt in range(4):
-                        closing_pts = mu.interp2d(np.linspace(0,1,20), np.arange(2), np.r_[pts_list[0][i_pt,:][None,:], pts_list[1][3-i_pt,:][None,:]])
-                        lines.append(closing_pts[:,:2])
-                lc = matplotlib.collections.LineCollection(lines, colors=(1,0,0), lw=1)
-                ax = plt.gca()
-                ax.add_collection(lc)
-
-#                 closing_pts = []
-#                 for pts_list in closing_finger_pts.values():
-#                     for i_pt in range(4):
-#                         closing_pts.append(mu.interp2d(np.linspace(0,1,10), np.arange(2), np.r_[pts_list[0][i_pt,:][None,:], pts_list[1][3-i_pt,:][None,:]]))
-#                 closing_pts = np.concatenate(np.asarray(closing_pts))
-#                 plt.scatter(closing_pts[:,0], closing_pts[:,1], c=(1,0,0), edgecolors=(1,0,0), marker=',', s=1)
-
-                lines = []
-                for pts_list in closing_finger_pts.values():
-                    for pts in pts_list:
-                        pts = f.transform_points(pts)
-                        lines.append(np.r_[pts, pts[0][None,:]][:,:2])
-                for i_plot in range(2,5):
-                    plt.subplot(2,2,i_plot, aspect='equal')
-                    lc = matplotlib.collections.LineCollection(lines, colors=(0,1,0), lw=2)
-                    ax = plt.gca()
-                    ax.add_collection(lc)
-
-                lines = []
-                for pts_list in closing_finger_pts.values():
-                    for i_pt in range(4):
-                        closing_pts = mu.interp2d(np.linspace(0,1,20), np.arange(2), np.r_[pts_list[0][i_pt,:][None,:], pts_list[1][3-i_pt,:][None,:]])
-                        closing_pts = f.transform_points(closing_pts)
-                        lines.append(closing_pts[:,:2])
-                for i_plot in range(2,5):
-                    plt.subplot(2,2,i_plot, aspect='equal')
-                    lc = matplotlib.collections.LineCollection(lines, colors=(0,1,0), lw=1)
-                    ax = plt.gca()
-                    ax.add_collection(lc)
-            plt.show()
-        x_weights = np.ones(len(old_cloud)) * 1.0/len(old_cloud)
-        f, corr = tps_registration.tps_segment_registration(old_rope_nodes, new_rope_nodes, 
-                                                        cloud0 = old_cloud, cloud1 = new_cloud, corr_tile_pattern = np.eye(args_eval.upsample_rad), 
-                                                        reg=np.array([0.00015, 0.00015, 0.0015]), x_weights=x_weights, plotting=False, plot_cb=plot_cb)
-        if corr is not None:
-            corr = tps_registration.tile(corr, np.eye(args_eval.upsample_rad))
-        
-    elif reg_type == 'rpm':
+    if reg_type == 'bij':
         vis_cost_xy = tps_registration.ab_cost(old_cloud, new_cloud) if args_eval.use_color else None
-        f, corr = tps_registration.tps_rpm(old_cloud[:,:3], new_cloud[:,:3], vis_cost_xy=vis_cost_xy, user_data={'old_cloud':old_cloud, 'new_cloud':new_cloud})
-    elif reg_type == 'bij':
-        vis_cost_xy = tps_registration.ab_cost(old_cloud, new_cloud) if args_eval.use_color else None
-        x_nd = old_cloud[:,:3]
         y_md = new_cloud[:,:3]
-        scaled_x_nd, src_params = registration.unit_boxify(x_nd)
         scaled_y_md, targ_params = registration.unit_boxify(y_md)
-        f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, rot_reg=np.r_[1e-4, 1e-4, 1e-1], n_iter=50, reg_init=10, reg_final=.1, outlierfrac=1e-2, vis_cost_xy=vis_cost_xy)
+        scaled_K_mm = tps.tps_kernel_matrix(scaled_y_md)
+        bend_coefs = np.around(loglinspace(EXACT_LAMBDA[0], EXACT_LAMBDA[1], N_ITER_EXACT), BEND_COEF_DIGITS)
+        gsolve = GlobalVars.empty_solver.get_solver(scaled_y_md, scaled_K_mm, bend_coefs)
+        fsolve = GlobalVars.action_solvers[action]
+        rot_reg = np.r_[1e-4, 1e-4, 1e-1]
+        reg_init = EXACT_LAMBDA[0]
+        reg_final = EXACT_LAMBDA[1]
+        n_iter = N_ITER_EXACT
+        (f,g), corr = tps_rpm_bij(scaled_x_nd, scaled_y_md, fsolve, gsolve, rot_reg=rot_reg, n_iter=n_iter, 
+                                  reg_init=reg_init, reg_final=reg_final, outlierfrac=1e-2, vis_cost_xy=vis_cost_xy, 
+                                  return_corr=True, check_solver=True)
         f = registration.unscale_tps(f, src_params, targ_params)
-        corr = None
+        f._bend_coef = reg_final
+        f._rot_coef = rot_reg
+        f._wt_n = corr.sum(axis=1)
+    else:
+        raise RuntimeError('invalid registration type')
     return f, corr
-
-def register_tps_cheap(sim_env, state, action, args_eval, reg_type='segment'):
-    old_cloud = get_action_cloud(sim_env, action, args_eval)
-    new_cloud = state[1]
-    if reg_type == 'segment':
-        old_rope_nodes = get_action_rope_nodes(sim_env, action, args_eval)
-        old_rope_nodes_hash = hashlib.sha1(old_rope_nodes).hexdigest()
-        if action not in GlobalVars.rope_nodes_crossing_info:
-            if action not in GlobalVars.actions_cache:
-                action_group = GlobalVars.actions_cache.create_group(action)
-            else:
-                action_group = GlobalVars.actions_cache[action]
-            if old_rope_nodes_hash not in action_group:
-                action_rope_nodes_group = action_group.create_group(old_rope_nodes_hash)
-                crossings, crossings_links_inds, cross_pairs, rope_closed = calculateCrossings(old_rope_nodes)
-                action_rope_nodes_group['rope_nodes'] = old_rope_nodes
-                if crossings: action_rope_nodes_group['crossings'] = crossings
-                if crossings_links_inds: action_rope_nodes_group['crossings_links_inds'] = crossings_links_inds
-                if cross_pairs: action_rope_nodes_group['cross_pairs'] = list(cross_pairs)
-                action_rope_nodes_group['rope_closed'] = rope_closed
-            else:
-                action_rope_nodes_group = action_group[old_rope_nodes_hash]
-                assert np.all(old_rope_nodes == action_rope_nodes_group['rope_nodes'][()])
-                crossings =  action_rope_nodes_group['crossings'][()] if 'crossings' in action_rope_nodes_group else []
-                crossings_links_inds = action_rope_nodes_group['crossings_links_inds'][()] if 'crossings_links_inds' in action_rope_nodes_group else []
-                cross_pairs = set([tuple(p) for p in action_rope_nodes_group['cross_pairs']]) if 'cross_pairs' in action_rope_nodes_group else set([])
-                rope_closed = action_rope_nodes_group['rope_closed'][()]
-            GlobalVars.rope_nodes_crossing_info[action] = (old_rope_nodes, crossings, crossings_links_inds, cross_pairs, rope_closed)
-        state_id, new_cloud, new_rope_nodes = state
-        if state_id not in GlobalVars.rope_nodes_crossing_info:
-            crossings, crossings_links_inds, cross_pairs, rope_closed = calculateCrossings(new_rope_nodes)
-            GlobalVars.rope_nodes_crossing_info[state_id] = (new_rope_nodes, crossings, crossings_links_inds, cross_pairs, rope_closed)
-        def plot_cb(rope_nodes0, rope_nodes1, corr_nm, f, pts_segmentation_inds0, pts_segmentation_inds1):
-            from rapprentice.plotting_plt import plot_tps_registration_segment_proj_2d
-            import matplotlib.pyplot as plt
-            plot_tps_registration_segment_proj_2d(rope_nodes0, rope_nodes1, corr_nm, f, pts_segmentation_inds0, pts_segmentation_inds1)
-            plt.show()
-        x_weights = np.ones(len(old_cloud)) * 1.0/len(old_cloud)
-        f, corr = tps_registration.tps_segment_registration(GlobalVars.rope_nodes_crossing_info[action], GlobalVars.rope_nodes_crossing_info[state_id], 
-                                                            cloud0 = old_cloud, cloud1 = new_cloud, corr_tile_pattern = np.eye(args_eval.upsample_rad), 
-                                                            reg=np.array([0.00015, 0.00015, 0.0015]), x_weights=x_weights, plotting=False, plot_cb=plot_cb)
-    elif reg_type == 'rpm':
-        vis_cost_xy = tps_registration.ab_cost(old_cloud, new_cloud) if args_eval.use_color else None
-        f, corr = tps_registration.tps_rpm(old_cloud[:,:3], new_cloud[:,:3], n_iter=14, em_iter=1, vis_cost_xy=vis_cost_xy, user_data={'old_cloud':old_cloud, 'new_cloud':new_cloud})
-    elif reg_type == 'bij':
-        vis_cost_xy = tps_registration.ab_cost(old_cloud, new_cloud) if args_eval.use_color else None
-        x_nd = old_cloud[:,:3]
-        y_md = new_cloud[:,:3]
-        scaled_x_nd, src_params = registration.unit_boxify(x_nd)
-        scaled_y_md, targ_params = registration.unit_boxify(y_md)
-        f,g = registration.tps_rpm_bij(scaled_x_nd, scaled_y_md, rot_reg=1e-3, n_iter=10, vis_cost_xy=vis_cost_xy)
-        corr = None
-    return f, corr
-
+# @profile
 def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval, transferopt=None, animate=False, interactive=False, simulate=True, replay_full_trajs=None):
     alpha = args_eval.alpha
     beta_pos = args_eval.beta_pos
@@ -340,14 +158,14 @@ def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval
                 ### Generate fullbody traj
                 old_arm_traj_rs = mu.interp2d(timesteps_rs, np.arange(len(old_arm_traj)), old_arm_traj)
 
-                f, corr = register_tps(sim_env, state, action, args_eval)
+                f, corr = register_tps(sim_env, state, action, args_eval, reg_type='bij')
                 if f is None: break
 
                 if animate:
                     handles.append(sim_env.env.plot3(f.transform_points(old_cloud[:,:3]), 2, old_cloud[:,3:] if args_eval.use_color else (1,1,0)))
                     new_cloud_rs = corr.dot(new_cloud)
                     handles.append(sim_env.env.plot3(new_cloud_rs[:,:3], 2, new_cloud_rs[:,3:] if args_eval.use_color else (0,1,0)))
-                    handles.extend(draw_grid(sim_env, old_cloud[:,:3], f))
+                    handles.extend(sim_util.draw_grid(sim_env, old_cloud[:,:3], f))
                 
                 x_na = old_cloud
                 y_ng = (corr/corr.sum(axis=1)[:,None]).dot(new_cloud)
@@ -370,7 +188,8 @@ def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval
                             break
                         redprint("TPS fitting: The error of the interest points is above the tolerance. Increasing penalty for these weights.")
                         wt_n[interest_pts_inds] *= penalty_factor
-                        f = registration.fit_ThinPlateSpline(x_na, y_ng, bend_coef, rot_coef, wt_n)
+                        GlobalVars.action_solvers[action].solve(wt_n, y_ng, bend_coef, rot_coef, f)
+                        
         
                 old_ee_traj = asarray(seg_info["%s_gripper_tool_frame"%lr]['hmat'][i_start - int(i_start > 0):i_end+1])
                 transformed_ee_traj = f.transform_hmats(old_ee_traj)
@@ -389,6 +208,7 @@ def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval
                 init_arm_traj[:,dof_inds.index(joint_ind)] = sim_env.robot.GetDOFLimits([joint_ind])[0][0]
                 new_arm_traj, obj_value, pose_errs = planning.plan_follow_traj(sim_env.robot, manip_name, sim_env.robot.GetLink(ee_link_name), transformed_ee_traj_rs, init_arm_traj, 
                                                                                start_fixed=i_miniseg_lr!=0,
+                                                                               use_collision_cost=False,
                                                                                beta_pos=beta_pos, beta_rot=beta_rot)
                 
                 if transferopt == 'finger' or transferopt == 'joint':
@@ -405,24 +225,27 @@ def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval
                         flr2finger_rel_pts[finger_lr] = sim_util.get_finger_rel_pts(finger_lr)
                     
                     if animate:
-                        handles.extend(draw_finger_pts_traj(sim_env, flr2old_finger_pts_traj_rs, (1,0,0)))
-                        handles.extend(draw_finger_pts_traj(sim_env, flr2transformed_finger_pts_traj_rs, (0,1,0)))
+                        handles.extend(sim_util.draw_finger_pts_traj(sim_env, flr2old_finger_pts_traj_rs, (1,0,0)))
+                        handles.extend(sim_util.draw_finger_pts_traj(sim_env, flr2transformed_finger_pts_traj_rs, (0,1,0)))
                         sim_env.viewer.Step()
                         
                     # enable finger DOF and extend the trajectories to include the closing part only if the gripper closes at the end of this minisegment
                     next_gripper_open = sim_util.binarize_gripper(seg_info["%s_gripper_joint"%lr][i_end+1]) if i_end+1 < len(seg_info["%s_gripper_joint"%lr]) else True
                     if not sim_env.sim.is_grabbing_rope(lr) and not next_gripper_open:
+                        FINGER_CLOSE_RATE = .02
                         manip_name = manip_name + "+" + "%s_gripper_l_finger_joint"%lr
                         
                         old_finger_closing_traj_start = old_finger_traj_rs[-1][0]
                         old_finger_closing_traj_target = sim_util.get_binary_gripper_angle(sim_util.binarize_gripper(seg_info["%s_gripper_joint"%lr][i_end+1]))
-                        old_finger_closing_traj_rs = np.linspace(old_finger_closing_traj_start, old_finger_closing_traj_target, np.ceil(abs(old_finger_closing_traj_target - old_finger_closing_traj_start) / .02))[:,None]
+                        old_finger_closing_traj_rs = np.linspace(old_finger_closing_traj_start, old_finger_closing_traj_target, np.ceil(abs(old_finger_closing_traj_target - old_finger_closing_traj_start) / FINGER_CLOSE_RATE))[:,None]
                         closing_n_steps = len(old_finger_closing_traj_rs)
                         old_ee_closing_traj_rs = np.tile(old_ee_traj_rs[-1], (closing_n_steps,1,1))
                         flr2old_finger_pts_closing_traj_rs = sim_util.get_finger_pts_traj(sim_env, lr, (old_ee_closing_traj_rs, old_finger_closing_traj_rs))
                           
                         init_traj = np.r_[np.c_[new_arm_traj,                                   old_finger_traj_rs],
                                             np.c_[np.tile(new_arm_traj[-1], (closing_n_steps,1)), old_finger_closing_traj_rs]]
+                        # init_traj = np.r_[np.c_[init_arm_traj,                                   old_finger_traj_rs],
+                        #                     np.c_[np.tile(init_arm_traj[-1], (closing_n_steps,1)), old_finger_closing_traj_rs]]
                         flr2transformed_finger_pts_closing_traj_rs = {}
                         for finger_lr in 'lr':
                             flr2old_finger_pts_traj_rs[finger_lr] = np.r_[flr2old_finger_pts_traj_rs[finger_lr], flr2old_finger_pts_closing_traj_rs[finger_lr]]
@@ -431,16 +254,20 @@ def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval
                                                                                   flr2transformed_finger_pts_closing_traj_rs[finger_lr]]
                         
                         if animate:
-                            handles.extend(draw_finger_pts_traj(sim_env, flr2old_finger_pts_closing_traj_rs, (1,0,0)))
-                            handles.extend(draw_finger_pts_traj(sim_env, flr2transformed_finger_pts_closing_traj_rs, (0,1,0)))
+                            handles.extend(sim_util.draw_finger_pts_traj(sim_env, flr2old_finger_pts_closing_traj_rs, (1,0,0)))
+                            handles.extend(sim_util.draw_finger_pts_traj(sim_env, flr2transformed_finger_pts_closing_traj_rs, (0,1,0)))
                             sim_env.viewer.Step()
                     else:
                         init_traj = new_arm_traj
+                        # init_traj = init_arm_traj
                     
-                    print "planning finger points trajectory following"
-                    new_traj, obj_value, pose_errs = planning.plan_follow_finger_pts_traj(sim_env.robot, manip_name, flr2finger_link, flr2finger_rel_pts, flr2transformed_finger_pts_traj_rs, init_traj, 
+                    new_traj, obj_value, pose_errs = planning.plan_follow_finger_pts_traj(sim_env.robot, manip_name, 
+                                                                                          flr2finger_link, flr2finger_rel_pts, 
+                                                                                          flr2transformed_finger_pts_traj_rs, init_traj, 
+                                                                                          use_collision_cost=False,
                                                                                           start_fixed=i_miniseg_lr!=0,
                                                                                           beta_pos=beta_pos, gamma=gamma)
+
                     
                     if transferopt == 'joint':
                         print "planning joint TPS and finger points trajectory following"
@@ -461,14 +288,14 @@ def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval
                                                                                                                    x_na, y_ng, bend_coef, rot_coef, wt_n, old_N_z=new_N_z,
                                                                                                                    start_fixed=i_miniseg_lr!=0,
                                                                                                                    alpha=alpha, beta_pos=beta_pos, gamma=gamma)
-                    else:
-                        obj_value += alpha * planning.tps_obj(f, x_na, y_ng, bend_coef, rot_coef, wt_n)
+                    # else:
+                    #     obj_value += alpha * planning.tps_obj(f, x_na, y_ng, bend_coef, rot_coef, wt_n)
                     
                     if animate:
                         flr2new_transformed_finger_pts_traj_rs = {}
                         for finger_lr in 'lr':
                             flr2new_transformed_finger_pts_traj_rs[finger_lr] = f.transform_points(np.concatenate(flr2old_finger_pts_traj_rs[finger_lr], axis=0)).reshape((-1,4,3))
-                        handles.extend(draw_finger_pts_traj(sim_env, flr2new_transformed_finger_pts_traj_rs, (0,1,1)))
+                        handles.extend(sim_util.draw_finger_pts_traj(sim_env, flr2new_transformed_finger_pts_traj_rs, (0,1,1)))
                         sim_env.viewer.Step()
                 else:
                     new_traj = new_arm_traj
@@ -485,7 +312,7 @@ def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval
                 if animate:
                     handles.append(sim_env.env.drawlinestrip(sim_util.get_ee_traj(sim_env, lr, full_traj)[:,:3,3], 2, (0,0,1)))
                     flr2new_finger_pts_traj = sim_util.get_finger_pts_traj(sim_env, lr, full_traj)
-                    handles.extend(draw_finger_pts_traj(sim_env, flr2new_finger_pts_traj, (0,0,1)))
+                    handles.extend(sim_util.draw_finger_pts_traj(sim_env, flr2new_finger_pts_traj, (0,0,1)))
                     sim_env.viewer.Step()
             full_traj = sim_util.merge_full_trajs(group_full_trajs)
         else:
@@ -502,16 +329,16 @@ def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval
             redprint("Executing %s arm joint trajectory for part %i"%(lr, i_miniseg_lr))
         
         if len(full_traj[0]) > 0:
-            if not eval_util.traj_is_safe(sim_env, full_traj, COLLISION_DIST_THRESHOLD, upsample=100):
-                redprint("Trajectory not feasible")
-                feasible = False
-                success = False
-            else:  # Only execute feasible trajectories
-                first_miniseg = True
-                for (i_miniseg_lr, _, _, _) in miniseg_interval_group:
-                    first_miniseg &= i_miniseg_lr == 0
-                if len(full_traj[0]) > 0:
-                    success &= sim_util.sim_full_traj_maybesim(sim_env, full_traj, animate=animate, interactive=interactive, max_cart_vel_trans_traj=.05 if first_miniseg else .02)
+            # if not eval_util.traj_is_safe(sim_env, full_traj, COLLISION_DIST_THRESHOLD, upsample=100):
+            #     redprint("Trajectory not feasible")
+            #     feasible = False
+            #     success = False
+            # else:  # Only execute feasible trajectories
+            first_miniseg = True
+            for (i_miniseg_lr, _, _, _) in miniseg_interval_group:
+                first_miniseg &= i_miniseg_lr == 0
+            if len(full_traj[0]) > 0:
+                success &= sim_util.sim_full_traj_maybesim(sim_env, full_traj, animate=animate, interactive=interactive, max_cart_vel_trans_traj=.05 if first_miniseg else .02)
 
         if not success: break
         
@@ -537,36 +364,6 @@ def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval
     
     return success, feasible, misgrasp, full_trajs
 
-def regcost_feature_fn(sim_env, state, action, args_eval):
-    f, corr = register_tps_cheap(sim_env, state, action, args_eval)
-    if f is None:
-        cost = np.inf
-    else:
-        cost = registration.tps_reg_cost(f)
-    return np.array([float(cost)]) # no need to normalize since bending cost is independent of number of points
-
-def regcost_trajopt_feature_fn(sim_env, state, action, args_eval):
-    obj_values_sum = compute_trans_traj(sim_env, state, action, None, args_eval, simulate=False, transferopt='finger')
-    return np.array([obj_values_sum])
-
-def jointopt_feature_fn(sim_env, state, action, args_eval):
-    obj_values_sum = compute_trans_traj(sim_env, state, action, None, args_eval, simulate=False, transferopt='joint')
-    return np.array([obj_values_sum])
-
-def q_value_fn(state, action, sim_env, fn):
-    return np.dot(WEIGHTS, fn(sim_env, state, action)) #+ w0
-
-def select_feature_fn(warping_cost, args_eval):
-    if warping_cost == "regcost":
-        feature_fn = lambda sim_env, state, action: regcost_feature_fn(sim_env, state, action, args_eval)
-    elif warping_cost == "regcost-trajopt":
-        feature_fn = lambda sim_env, state, action: regcost_trajopt_feature_fn(sim_env, state, action, args_eval)
-    elif warping_cost == "jointopt":
-        feature_fn = lambda sim_env, state, action: jointopt_feature_fn(sim_env, state, action, args_eval)
-    else:
-        raise RuntimeError("Invalid warping cost")
-    return feature_fn
-
 def get_unique_id(): 
     GlobalVars.unique_id += 1
     return GlobalVars.unique_id - 1
@@ -586,34 +383,9 @@ def get_state(sim_env, args_eval):
     new_rope_nodes= ropesim.observe_cloud(new_rope_nodes, sim_env.sim.rope_params.radius, upsample=args_eval.upsample)
     state = ("eval_%i"%get_unique_id(), new_cloud_ds, new_rope_nodes)
     return state
-
-def select_best_action(sim_env, state, num_actions_to_try, feature_fn, prune_feature_fn, eval_stats, warpingcost):
-    print "Choosing an action"
-    num_top_actions = max(num_actions_to_try, TRAJOPT_MAX_ACTIONS)
-
-    start_time = time.time()
-    q_values_prune = [(q_value_fn(state, action, sim_env, prune_feature_fn), action) for action in GlobalVars.actions]
-    agenda_top_actions = sorted(q_values_prune, key = lambda v: -v[0])[:num_top_actions]
-
-    if feature_fn == prune_feature_fn:
-        q_values = q_values_prune
-        agenda = agenda_top_actions
-    else:
-        if len(agenda_top_actions) > TRAJOPT_MAX_ACTIONS:
-            agenda_top_actions = agenda_top_actions[:TRAJOPT_MAX_ACTIONS]
-        q_values = [(q_value_fn(state, a, sim_env, feature_fn), a) for (v, a) in agenda_top_actions]
-        agenda = sorted(q_values, key = lambda v: -v[0])
-
-    eval_stats.action_elapsed_time += time.time() - start_time
-    q_values_root = [q for (q, a) in q_values]
-    return agenda, q_values_root
-
+# @profile
 def eval_on_holdout(args, sim_env):
-    feature_fn = select_feature_fn(args.eval.warpingcost, args.eval)
-    if args.eval.warpingcost == 'regcost':
-        prune_feature_fn = feature_fn # so that we can check for function equality
-    else:
-        prune_feature_fn = select_feature_fn('regcost', args.eval)
+    # feature_fn = select_feature_fn(args.eval.warpingcost, args.eval)
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
 
@@ -643,16 +415,16 @@ def eval_on_holdout(args, sim_env):
             num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
             eval_stats = eval_util.EvalStats()
 
-            agenda, q_values_root = select_best_action(sim_env, state, num_actions_to_try, feature_fn, prune_feature_fn, eval_stats, args.eval.warpingcost)
+            agenda, q_values_root = GlobalVars.features.select_best(state, num_actions_to_try)
 
             time_machine.set_checkpoint('prechoice_%i'%i_step, sim_env)
             for i_choice in range(num_actions_to_try):
-                if agenda[i_choice][0] == -np.inf: # none of the demonstrations generalize
+                if q_values_root[i_choice] == -np.inf: # none of the demonstrations generalize
                     break
-                redprint("TRYING %s"%agenda[i_choice][1])
+                redprint("TRYING %s"%agenda[i_choice])
 
                 time_machine.restore_from_checkpoint('prechoice_%i'%i_step, sim_env, sim_util.get_rope_params(args.eval.rope_params))
-                best_root_action = agenda[i_choice][1]
+                best_root_action = agenda[i_choice]
                 start_time = time.time()
                 pre_trans, pre_rots = sim_util.get_rope_transforms(sim_env)
                 eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs = compute_trans_traj(sim_env, get_state_fn, best_root_action, i_step, args.eval, animate=args.animation, interactive=args.interactive)
@@ -735,7 +507,7 @@ def replay_on_holdout(args, sim_env):
             
             start_time = time.time()
             if i_step in args.replay.compute_traj_steps: # compute the trajectory in this step
-                replay_full_trajs = None
+                replay_full_trajs = None            
             eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs = compute_trans_traj(sim_env, get_state_fn, best_action, i_step, args.eval, animate=args.animation, interactive=args.interactive, replay_full_trajs=replay_full_trajs)
             eval_stats.exec_elapsed_time += time.time() - start_time
 
@@ -826,6 +598,30 @@ def parse_input_args():
 
     return parser.parse_args()
 
+def get_scaled_action_cloud(state, action):
+    ds_key = 'DS_SIZE_{}'.format(DS_SIZE)
+    ds_g = GlobalVars.actions[action]['inv'][ds_key]
+    scaled_x_na = ds_g['scaled_cloud_xyz'][:]
+    src_params = (ds_g['scaling'][()], ds_g['scaled_translation'][:])
+    return scaled_x_na, src_params
+
+def get_action_cloud(sim_env, action, args_eval):
+    rope_nodes = get_action_rope_nodes(sim_env, action, args_eval)
+    cloud = ropesim.observe_cloud(rope_nodes, ROPE_RADIUS, upsample_rad=args_eval.upsample_rad)
+    return cloud
+
+def get_action_cloud_ds(sim_env, action, args_eval):
+    if args_eval.downsample:
+        ds_key = 'DS_SIZE_{}'.format(DS_SIZE)
+        return GlobalVars.actions[action]['inv'][ds_key]['cloud_xyz']
+    else:
+        return get_action_cloud(sim_env, action, args_eval)
+
+def get_action_rope_nodes(sim_env, action, args_eval):
+    rope_nodes = GlobalVars.actions[action]['cloud_xyz'][()]
+    return ropesim.observe_cloud(rope_nodes, sim_env.sim.rope_params.radius, upsample=args_eval.upsample)
+
+
 def setup_log_file(args):
     if args.log:
         redprint("Writing log to file %s" % args.log)
@@ -835,25 +631,26 @@ def setup_log_file(args):
 
 def set_global_vars(args, sim_env):
     if args.random_seed is not None: np.random.seed(args.random_seed)
-
     GlobalVars.actions = h5py.File(args.eval.actionfile, 'r')
     actions_root, actions_ext = os.path.splitext(args.eval.actionfile)
     GlobalVars.actions_cache = h5py.File(actions_root + '.cache' + actions_ext, 'a')
-    
-    if args.eval.downsample:
-        global clouds
-        from rapprentice import clouds
+    GlobalVars.features = BatchRCFeats(args.eval.actionfile)
+    GlobalVars.action_solvers = TPSSolver.get_solvers(GlobalVars.actions)
+    exact_bend_coefs = np.around(loglinspace(EXACT_LAMBDA[0], EXACT_LAMBDA[1], N_ITER_EXACT), BEND_COEF_DIGITS)
+    GlobalVars.empty_solver = EmptySolver(MAX_CLD_SIZE, exact_bend_coefs)
+
     
 def load_simulation(args, sim_env):
     sim_env.env = openravepy.Environment()
     sim_env.env.StopSimulation()
 #     sim_env.env.Load("robots/pr2-beta-static.zae")
-    sim_env.env.Load("./data/misc/pr2-beta-static-decomposed-shoulder.zae")
+    sim_env.env.Load("../data/misc/pr2-beta-static-decomposed-shoulder.zae")
     sim_env.robot = sim_env.env.GetRobots()[0]
 
     actions = h5py.File(args.eval.actionfile, 'r')
     
-    init_rope_xyz, _ = sim_util.load_fake_data_segment(sim_env, actions, args.eval.fake_data_segment, args.eval.fake_data_transform) # this also sets the torso (torso_lift_joint) to the height in the data
+    init_rope_xyz, _ = sim_util.load_fake_data_segment(sim_env, actions, args.eval.fake_data_segment, args.eval.fake_data_transform) 
+    # this also sets the torso (torso_lift_joint) to the height in the data
     table_height = init_rope_xyz[:,2].mean() - .02
     table_xml = sim_util.make_table_xml(translation=[1, 0, table_height + (-.1 + .01)], extents=[.85, .85, .1])
 #     table_xml = sim_util.make_table_xml(translation=[1-.3, 0, table_height + (-.1 + .01)], extents=[.85-.3, .85-.3, .1])
@@ -941,7 +738,9 @@ def main():
     load_simulation(args, sim_env)
 
     if args.subparser_name == "eval":
+        start = time.time()
         eval_on_holdout(args, sim_env)
+        print "eval time is:\t{}".format(time.time() - start)
     elif args.subparser_name == "replay":
         replay_on_holdout(args, sim_env)
     else:
