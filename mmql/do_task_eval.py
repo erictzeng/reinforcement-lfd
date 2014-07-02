@@ -4,7 +4,8 @@ from __future__ import division
 
 import pprint
 import argparse
-import eval_util, sim_util, util
+from ropesimulation import sim_util
+from rapprentice import eval_util, util
 from rapprentice import tps_registration, planning
  
 from rapprentice import registration, colorize, berkeley_pr2, \
@@ -24,11 +25,11 @@ from tpsopt.precompute import loglinspace
 
 from features import BatchRCFeats
 import trajoptpy, openravepy
-from rope_utils import get_closing_pts, get_closing_inds
+from ropesimulation.rope_utils import get_closing_pts, get_closing_inds
 from knot_classifier import isKnot as is_knot, calculateCrossings
 import os, os.path, numpy as np, h5py
 from numpy import asarray
-from util import redprint, yellowprint
+from rapprentice.util import redprint, yellowprint
 import atexit
 import importlib
 from itertools import combinations
