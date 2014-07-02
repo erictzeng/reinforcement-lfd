@@ -26,7 +26,7 @@ from tpsopt.precompute import loglinspace
 from features import BatchRCFeats
 import trajoptpy, openravepy
 from ropesimulation.rope_utils import get_closing_pts, get_closing_inds
-from knot_classifier import isKnot as is_knot, calculateCrossings
+from rapprentice.knot_classifier import isKnot as is_knot, calculateCrossings
 import os, os.path, numpy as np, h5py
 from numpy import asarray
 from rapprentice.util import redprint, yellowprint
