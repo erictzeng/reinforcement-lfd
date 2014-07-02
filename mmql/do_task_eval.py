@@ -17,7 +17,7 @@ import pdb, time
 
 from constants import ROPE_RADIUS, ROPE_ANG_STIFFNESS, ROPE_ANG_DAMPING, ROPE_LIN_DAMPING, ROPE_ANG_LIMIT,\
     ROPE_LIN_STOP_ERP, ROPE_MASS, ROPE_RADIUS_THICK, DS_SIZE, COLLISION_DIST_THRESHOLD, EXACT_LAMBDA, \
-    N_ITER_EXACT, BEND_COEF_DIGITS, MAX_CLD_SIZE
+    N_ITER_EXACT, BEND_COEF_DIGITS, MAX_CLD_SIZE, JOINT_LENGTH_PER_STEP, FINGER_CLOSE_RATE
 
 from tpsopt.registration import tps_rpm_bij
 from tpsopt.transformations import TPSSolver, EmptySolver
@@ -153,7 +153,6 @@ def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval
                 if not sim_util.arm_moved(old_arm_traj):
                     continue
                 old_finger_traj = sim_util.gripper_joint2gripper_l_finger_joint_values(seg_info['%s_gripper_joint'%lr][i_start - int(i_start > 0):i_end+1])[:,None]
-                JOINT_LENGTH_PER_STEP = .1
                 _, timesteps_rs = sim_util.unif_resample(old_arm_traj, JOINT_LENGTH_PER_STEP)
             
                 ### Generate fullbody traj
@@ -233,7 +232,6 @@ def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval
                     # enable finger DOF and extend the trajectories to include the closing part only if the gripper closes at the end of this minisegment
                     next_gripper_open = sim_util.binarize_gripper(seg_info["%s_gripper_joint"%lr][i_end+1]) if i_end+1 < len(seg_info["%s_gripper_joint"%lr]) else True
                     if not sim_env.sim.is_grabbing_rope(lr) and not next_gripper_open:
-                        FINGER_CLOSE_RATE = .02
                         manip_name = manip_name + "+" + "%s_gripper_l_finger_joint"%lr
                         
                         old_finger_closing_traj_start = old_finger_traj_rs[-1][0]
