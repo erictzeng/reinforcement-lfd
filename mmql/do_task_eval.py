@@ -8,7 +8,7 @@ from ropesimulation import sim_util
 from rapprentice import eval_util, util
 from rapprentice import tps_registration, planning
  
-from rapprentice import registration, colorize, berkeley_pr2, \
+from rapprentice import registration, berkeley_pr2, \
      animate_traj, ros2rave, plotting_openrave, task_execution, \
      tps, func_utils, resampling, ropesim, rope_initialization, clouds
 from rapprentice import math_utils as mu
