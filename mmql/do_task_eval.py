@@ -565,6 +565,8 @@ def parse_input_args():
     parser_eval.add_argument('actionfile', type=str, nargs='?', default='data/misc/actions.h5')
     parser_eval.add_argument('holdoutfile', type=str, nargs='?', default='data/misc/holdout_set.h5')
 
+    parser_eval.add_argument('--weightfile', type=str, default='')
+
     parser_eval.add_argument('warpingcost', type=str, choices=['regcost', 'regcost-trajopt', 'jointopt'])
     parser_eval.add_argument("transferopt", type=str, choices=['pose', 'finger', 'joint'])
     
@@ -634,6 +636,8 @@ def set_global_vars(args, sim_env):
     actions_root, actions_ext = os.path.splitext(args.eval.actionfile)
     GlobalVars.actions_cache = h5py.File(actions_root + '.cache' + actions_ext, 'a')
     GlobalVars.features = BatchRCFeats(args.eval.actionfile)
+    if args.eval.weightfile:
+        GlobalVars.features.load_weights(args.eval.weightfile)
     GlobalVars.action_solvers = TPSSolver.get_solvers(GlobalVars.actions)
     exact_bend_coefs = np.around(loglinspace(EXACT_LAMBDA[0], EXACT_LAMBDA[1], N_ITER_EXACT), BEND_COEF_DIGITS)
     GlobalVars.empty_solver = EmptySolver(MAX_CLD_SIZE, exact_bend_coefs)
