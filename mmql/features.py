@@ -56,7 +56,7 @@ class BatchRCFeats(Feature):
         return self.costs[self.name_to_ind[segname]]
 
     def all_features(self, state):
-        self.tgt_cld = state[1]
+        self.tgt_cld = state.cloud
         self.tgt_ctx.set_cld(unit_boxify(self.tgt_cld)[0])
         self.costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx)
         return dict(zip(self.src_ctx.seg_names, self.costs))

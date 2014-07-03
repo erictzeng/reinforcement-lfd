@@ -53,7 +53,7 @@ class GlobalVars:
 def register_tps(sim_env, state, action, args_eval, interest_pts = None, closing_hmats = None, 
                  closing_finger_pts = None, reg_type='bij'):
     scaled_x_nd, src_params = get_scaled_action_cloud(state, action)
-    new_cloud = state[1]
+    new_cloud = state.cloud
     if reg_type == 'bij':
         vis_cost_xy = tps_registration.ab_cost(old_cloud, new_cloud) if args_eval.use_color else None
         y_md = new_cloud[:,:3]
@@ -77,7 +77,7 @@ def register_tps(sim_env, state, action, args_eval, interest_pts = None, closing
         raise RuntimeError('invalid registration type')
     return f, corr
 # @profile
-def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval, transferopt=None, animate=False, interactive=False, simulate=True, replay_full_trajs=None):
+def compute_trans_traj(sim_env, state, action, args_eval, transferopt=None, animate=False, interactive=False, simulate=True, replay_full_trajs=None):
     alpha = args_eval.alpha
     beta_pos = args_eval.beta_pos
     beta_rot = args_eval.beta_rot
@@ -92,6 +92,18 @@ def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval
     cloud_dim = 6 if args_eval.use_color else 3
     old_cloud = get_action_cloud_ds(sim_env, action, args_eval)[:,:cloud_dim]
     old_rope_nodes = get_action_rope_nodes(sim_env, action, args_eval)
+    
+    new_cloud = state.cloud
+    new_cloud = new_cloud[:,:cloud_dim]
+    
+    sim_env.set_rope_state(state)
+
+    handles = []
+    if animate:
+        # color code: r demo, y transformed, g transformed resampled, b new
+        handles.append(sim_env.env.plot3(old_cloud[:,:3], 2, (1,0,0)))
+        handles.append(sim_env.env.plot3(new_cloud[:,:3], 2, new_cloud[:,3:] if args_eval.use_color else (0,0,1)))
+        sim_env.viewer.Step()
     
     closing_inds = get_closing_inds(seg_info)
     closing_hmats = {}
@@ -124,21 +136,6 @@ def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval
     full_trajs = []
     obj_values = []
     for i_miniseg_group, miniseg_interval_group in enumerate(miniseg_interval_groups):
-        if type(state_or_get_state_fn) == tuple:
-            state = state_or_get_state_fn
-        else:
-            state = state_or_get_state_fn(sim_env)
-        if state is None: break
-        _, new_cloud, new_rope_nodes = state
-        new_cloud = new_cloud[:,:cloud_dim]
-    
-        handles = []
-        if animate:
-            # color code: r demo, y transformed, g transformed resampled, b new
-            handles.append(sim_env.env.plot3(old_cloud[:,:3], 2, (1,0,0)))
-            handles.append(sim_env.env.plot3(new_cloud[:,:3], 2, new_cloud[:,3:] if args_eval.use_color else (0,0,1)))
-            sim_env.viewer.Step()
-
         if not simulate or replay_full_trajs is None: # we are not simulating, we still want to compute the costs
             group_full_trajs = []
             for (i_miniseg_lr, lr, i_start, i_end) in miniseg_interval_group:
@@ -361,7 +358,7 @@ def compute_trans_traj(sim_env, state_or_get_state_fn, action, i_step, args_eval
     if animate:
         sim_env.viewer.Step()
     
-    return success, feasible, misgrasp, full_trajs
+    return success, feasible, misgrasp, full_trajs, get_state(sim_env, args_eval)
 
 def get_unique_id(): 
     GlobalVars.unique_id += 1
@@ -380,11 +377,13 @@ def get_state(sim_env, args_eval):
     new_cloud_ds = clouds.downsample(new_cloud, DS_SIZE) if args_eval.downsample else new_cloud
     new_rope_nodes = sim_env.sim.rope.GetControlPoints()
     new_rope_nodes= ropesim.observe_cloud(new_rope_nodes, sim_env.sim.rope_params.radius, upsample=args_eval.upsample)
-    state = ("eval_%i"%get_unique_id(), new_cloud_ds, new_rope_nodes)
+    init_rope_nodes = sim_env.sim.rope_pts
+    rope_params = args_eval.rope_params
+    tfs = sim_util.get_rope_transforms(sim_env)
+    state = sim_util.RopeState("eval_%i"%get_unique_id(), new_cloud_ds, new_rope_nodes, init_rope_nodes, rope_params, tfs)
     return state
 # @profile
 def eval_on_holdout(args, sim_env):
-    # feature_fn = select_feature_fn(args.eval.warpingcost, args.eval)
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
 
@@ -395,63 +394,54 @@ def eval_on_holdout(args, sim_env):
         redprint("task %s" % i_task)
         sim_util.reset_arms_to_side(sim_env)
         init_rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
-        # don't call replace_rope and sim.settle() directly. use time machine interface for deterministic results!
-        time_machine = sim_util.RopeSimTimeMachine(init_rope_nodes, sim_env)
-
+        sim_env.set_rope_state(init_rope_nodes, args.eval.rope_params)
+        next_state = get_state(sim_env, args.eval)
+        
         if args.animation:
             sim_env.viewer.Step()
 
-        eval_util.save_task_results_init(args.resultfile, i_task, sim_env, init_rope_nodes)
-
         for i_step in range(args.eval.num_steps):
             redprint("task %s step %i" % (i_task, i_step))
-            sim_util.reset_arms_to_side(sim_env)
             
-            get_state_fn = lambda sim_env: get_state(sim_env, args.eval)
-            state = get_state_fn(sim_env)
-            _, new_cloud_ds, new_rope_nodes = get_state_fn(sim_env)
+            state = next_state
 
             num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
             eval_stats = eval_util.EvalStats()
 
             agenda, q_values_root = GlobalVars.features.select_best(state, num_actions_to_try)
 
-            time_machine.set_checkpoint('prechoice_%i'%i_step, sim_env)
+            unable_to_generalize = False
             for i_choice in range(num_actions_to_try):
                 if q_values_root[i_choice] == -np.inf: # none of the demonstrations generalize
+                    unable_to_generalize = True
                     break
                 redprint("TRYING %s"%agenda[i_choice])
 
-                time_machine.restore_from_checkpoint('prechoice_%i'%i_step, sim_env, sim_util.get_rope_params(args.eval.rope_params))
                 best_root_action = agenda[i_choice]
                 start_time = time.time()
-                pre_trans, pre_rots = sim_util.get_rope_transforms(sim_env)
-                eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs = compute_trans_traj(sim_env, get_state_fn, best_root_action, i_step, args.eval, animate=args.animation, interactive=args.interactive)
-                trans, rots = sim_util.get_rope_transforms(sim_env)
+                eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = compute_trans_traj(sim_env, state, best_root_action, args.eval, animate=args.animation, interactive=args.interactive)
                 eval_stats.exec_elapsed_time += time.time() - start_time
 
                 if eval_stats.feasible:  # try next action if TrajOpt cannot find feasible action
-                     eval_stats.found_feasible_action = True
                      break
-                else:
-                     redprint('TRYING NEXT ACTION')
-
-            if not eval_stats.feasible:  # If not feasible, restore_from_checkpoint
-                time_machine.restore_from_checkpoint('prechoice_%i'%i_step, sim_env, sim_util.get_rope_params(args.eval.rope_params))
+            if unable_to_generalize:
+                 break
             print "BEST ACTION:", best_root_action
+
+            if not eval_stats.feasible:  # If not feasible, restore state
+                next_state = state
             
-            eval_util.save_task_results_step(args.resultfile, i_task, i_step, sim_env, best_root_action, q_values_root, full_trajs, eval_stats, new_cloud_ds=new_cloud_ds, new_rope_nodes=new_rope_nodes)
+            eval_util.save_task_results_step(args.resultfile, i_task, i_step, state, best_root_action, q_values_root, full_trajs, next_state, eval_stats, new_cloud_ds=state.cloud, new_rope_nodes=state.rope_nodes)
             
-            if not eval_stats.found_feasible_action:
+            if not eval_stats.feasible:
                 # Skip to next knot tie if the action is infeasible -- since
                 # that means all future steps (up to 5) will have infeasible trajectories
                 break
             
-            if is_knot(sim_env.sim.rope.GetControlPoints()):
+            if is_knot(next_state.rope_nodes):
+                num_successes += 1
                 break;
 
-        if is_knot(sim_env.sim.rope.GetControlPoints()):
-            num_successes += 1
         num_total += 1
 
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
@@ -466,75 +456,47 @@ def replay_on_holdout(args, sim_env):
     
     for i_task, _ in loadresult_items:
         redprint("task %s" % i_task)
-        sim_util.reset_arms_to_side(sim_env)
-        _, _, _, init_rope_nodes = eval_util.load_task_results_init(args.replay.loadresultfile, i_task)
-        # don't call replace_rope and sim.settle() directly. use time machine interface for deterministic results!
-        time_machine = sim_util.RopeSimTimeMachine(init_rope_nodes, sim_env)
 
-        if args.animation:
-            sim_env.viewer.Step()
-
-        eval_util.save_task_results_init(args.resultfile, i_task, sim_env, init_rope_nodes)
-        
         for i_step in range(len(loadresultfile[i_task]) - (1 if 'init' in loadresultfile[i_task] else 0)):
             if args.replay.simulate_traj_steps is not None and i_step not in args.replay.simulate_traj_steps:
                 continue
             
             redprint("task %s step %i" % (i_task, i_step))
-            sim_util.reset_arms_to_side(sim_env)
-
-            restore_from_saved_trans_rots = args.replay.simulate_traj_steps is not None
-            if restore_from_saved_trans_rots:
-                if i_step == 0:
-                    pre_trans, pre_rots = eval_util.load_task_results_init(args.replay.loadresultfile, i_task)[:2]
-                else:
-                    pre_trans, pre_rots = eval_util.load_task_results_step(args.replay.loadresultfile, i_task, i_step-1)[:2]
-                time_machine.set_checkpoint('preexec_%i'%i_step, sim_env, tfs=(pre_trans, pre_rots))
-            else:
-                time_machine.set_checkpoint('preexec_%i'%i_step, sim_env)
-            time_machine.restore_from_checkpoint('preexec_%i'%i_step, sim_env, sim_util.get_rope_params(args.eval.rope_params))
-            
-            get_state_fn = lambda sim_env: get_state(sim_env, args.eval)
-            _, new_cloud_ds, new_rope_nodes = get_state_fn(sim_env)
 
             eval_stats = eval_util.EvalStats()
 
-            trans, rots, _, best_action, q_values, replay_full_trajs, _, _ = eval_util.load_task_results_step(args.replay.loadresultfile, i_task, i_step)
-            
-            if q_values.max() == -np.inf: # none of the demonstrations generalize
+            state, best_action, q_values, replay_full_trajs, replay_next_state, _, _ = eval_util.load_task_results_step(args.replay.loadresultfile, i_task, i_step)
+
+            unable_to_generalize = q_values.max() == -np.inf # none of the demonstrations generalize
+            if unable_to_generalize:
                 break
             
             start_time = time.time()
             if i_step in args.replay.compute_traj_steps: # compute the trajectory in this step
                 replay_full_trajs = None            
-            eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs = compute_trans_traj(sim_env, get_state_fn, best_action, i_step, args.eval, animate=args.animation, interactive=args.interactive, replay_full_trajs=replay_full_trajs)
+            eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = compute_trans_traj(sim_env, state, best_action, args.eval, animate=args.animation, interactive=args.interactive, replay_full_trajs=replay_full_trajs)
             eval_stats.exec_elapsed_time += time.time() - start_time
-
-            if eval_stats.feasible:
-                 eval_stats.found_feasible_action = True
-
-            if not eval_stats.feasible:  # If not feasible, restore_from_checkpoint
-                time_machine.restore_from_checkpoint('preexec_%i'%i_step, sim_env, sim_util.get_rope_params(args.eval.rope_params))
             print "BEST ACTION:", best_action
 
-            replay_trans, replay_rots = sim_util.get_rope_transforms(sim_env)
-            if np.all(trans == replay_trans) and np.all(rots == replay_rots):
+            if not eval_stats.feasible:  # If not feasible, restore state
+                next_state = state
+            
+            if np.all(next_state.tfs[0] == replay_next_state.tfs[0]) and np.all(next_state.tfs[1] == replay_next_state.tfs[1]):
                 yellowprint("Reproducible results OK")
             else:
-                yellowprint("The rope transforms of the replay rope doesn't match the ones in the original result file by %f and %f" % (np.linalg.norm(trans - replay_trans), np.linalg.norm(rots - replay_rots)))
+                yellowprint("The rope transforms of the replay rope doesn't match the ones in the original result file by %f and %f" % (np.linalg.norm(next_state.tfs[0] - replay_next_state.tfs[0]), np.linalg.norm(next_state.tfs[1] - replay_next_state.tfs[1])))
             
-            eval_util.save_task_results_step(args.resultfile, i_task, i_step, sim_env, best_action, q_values, full_trajs, eval_stats)
+            eval_util.save_task_results_step(args.resultfile, i_task, i_step, state, best_action, q_values, full_trajs, next_state, eval_stats)
             
-            if not eval_stats.found_feasible_action:
+            if not eval_stats.feasible:
                 # Skip to next knot tie if the action is infeasible -- since
                 # that means all future steps (up to 5) will have infeasible trajectories
                 break
             
-            if is_knot(sim_env.sim.rope.GetControlPoints()):
+            if is_knot(next_state.rope_nodes):
+                num_successes += 1
                 break;
 
-        if is_knot(sim_env.sim.rope.GetControlPoints()):
-            num_successes += 1
         num_total += 1
 
         redprint('REPLAY Successes / Total: ' + str(num_successes) + '/' + str(num_total))
@@ -618,7 +580,7 @@ def get_action_cloud_ds(sim_env, action, args_eval):
 
 def get_action_rope_nodes(sim_env, action, args_eval):
     rope_nodes = GlobalVars.actions[action]['cloud_xyz'][()]
-    return ropesim.observe_cloud(rope_nodes, sim_env.sim.rope_params.radius, upsample=args_eval.upsample)
+    return ropesim.observe_cloud(rope_nodes, ROPE_RADIUS, upsample=args_eval.upsample)
 
 
 def setup_log_file(args):
