@@ -4,7 +4,7 @@ from __future__ import division
 
 import pprint
 import argparse
-from ropesimulation import sim_util
+from ropesimulation import sim_util, transfer_simulate
 from rapprentice import eval_util, util
 from rapprentice import tps_registration, planning
  
@@ -387,6 +387,9 @@ def eval_on_holdout(args, sim_env):
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
 
+    transfer = transfer_simulate.Transfer(args.eval, GlobalVars.action_solvers, register_tps) # signature of this class will change
+    batch_transfer_simulate = transfer_simulate.BatchTransferSimulate(transfer, sim_env)
+
     num_successes = 0
     num_total = 0
 
@@ -419,7 +422,13 @@ def eval_on_holdout(args, sim_env):
 
                 best_root_action = agenda[i_choice]
                 start_time = time.time()
-                eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = compute_trans_traj(sim_env, state, best_root_action, args.eval, animate=args.animation, interactive=args.interactive)
+                # the following lines is the same as the last commented line
+                batch_transfer_simulate.add_transfer_simulate_job(state, best_root_action, get_unique_id())
+                results = batch_transfer_simulate.get_results()
+                trajectory_result, next_state = results[0]
+                eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs = \
+                    trajectory_result.success, trajectory_result.feasible, trajectory_result.misgrasp, trajectory_result.full_trajs
+                #eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = compute_trans_traj(sim_env, state, best_root_action, args.eval, animate=args.animation, interactive=args.interactive)
                 eval_stats.exec_elapsed_time += time.time() - start_time
 
                 if eval_stats.feasible:  # try next action if TrajOpt cannot find feasible action
