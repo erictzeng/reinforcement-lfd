@@ -628,7 +628,7 @@ def setup_log_file(args):
         atexit.register(GlobalVars.exec_log.close)
         GlobalVars.exec_log(0, "main.args", args)
 
-def set_global_vars(args, sim_env):
+def set_global_vars(args):
     if args.random_seed is not None: np.random.seed(args.random_seed)
     GlobalVars.actions = h5py.File(args.eval.actionfile, 'r')
     actions_root, actions_ext = os.path.splitext(args.eval.actionfile)
@@ -638,42 +638,14 @@ def set_global_vars(args, sim_env):
     exact_bend_coefs = np.around(loglinspace(EXACT_LAMBDA[0], EXACT_LAMBDA[1], N_ITER_EXACT), BEND_COEF_DIGITS)
     GlobalVars.empty_solver = EmptySolver(MAX_CLD_SIZE, exact_bend_coefs)
 
-    
-def load_simulation(args, sim_env):
-    sim_env.env = openravepy.Environment()
-    sim_env.env.StopSimulation()
-#     sim_env.env.Load("robots/pr2-beta-static.zae")
-    sim_env.env.Load("../data/misc/pr2-beta-static-decomposed-shoulder.zae")
-    sim_env.robot = sim_env.env.GetRobots()[0]
-
+def load_simulation(args):
     actions = h5py.File(args.eval.actionfile, 'r')
     
-    init_rope_xyz, _ = sim_util.load_fake_data_segment(sim_env, actions, args.eval.fake_data_segment, args.eval.fake_data_transform) 
-    # this also sets the torso (torso_lift_joint) to the height in the data
+    init_rope_xyz, init_joint_names, init_joint_values = sim_util.load_fake_data_segment(actions, args.eval.fake_data_segment, args.eval.fake_data_transform) 
     table_height = init_rope_xyz[:,2].mean() - .02
-    table_xml = sim_util.make_table_xml(translation=[1, 0, table_height + (-.1 + .01)], extents=[.85, .85, .1])
-#     table_xml = sim_util.make_table_xml(translation=[1-.3, 0, table_height + (-.1 + .01)], extents=[.85-.3, .85-.3, .1])
-    sim_env.env.LoadData(table_xml)
-    obstacle_bodies = []
-    if 'bookshelve' in args.eval.obstacles:
-        sim_env.env.Load("data/bookshelves.env.xml")
-        obstacle_bodies.extend(sim_env.env.GetBodies()[-1:])
-    if 'boxes' in args.eval.obstacles:
-        sim_env.env.LoadData(sim_util.make_box_xml("box0", [.7,.43,table_height+(.01+.12)], [.12,.12,.12]))
-        sim_env.env.LoadData(sim_util.make_box_xml("box1", [.74,.47,table_height+(.01+.12*2+.08)], [.08,.08,.08]))
-        obstacle_bodies.extend(sim_env.env.GetBodies()[-2:])
-    if 'cylinders' in args.eval.obstacles:
-        sim_env.env.LoadData(sim_util.make_cylinder_xml("cylinder0", [.7,.43,table_height+(.01+.5)], .12, 1.))
-        sim_env.env.LoadData(sim_util.make_cylinder_xml("cylinder1", [.7,-.43,table_height+(.01+.5)], .12, 1.))
-        sim_env.env.LoadData(sim_util.make_cylinder_xml("cylinder2", [.4,.2,table_height+(.01+.65)], .06, .5))
-        sim_env.env.LoadData(sim_util.make_cylinder_xml("cylinder3", [.4,-.2,table_height+(.01+.65)], .06, .5))
-        obstacle_bodies.extend(sim_env.env.GetBodies()[-4:])
 
-    cc = trajoptpy.GetCollisionChecker(sim_env.env)
-    for gripper_link in [link for link in sim_env.robot.GetLinks() if 'gripper' in link.GetName()]:
-        cc.ExcludeCollisionPair(gripper_link, sim_env.env.GetKinBody('table').GetLinks()[0])
-
-    sim_util.reset_arms_to_side(sim_env)
+    sim_env = sim_util.SimulationEnv(table_height, init_joint_names, init_joint_values, args.eval.obstacles, args.eval.dof_limits_factor)
+    sim_env.initialize()
     
     if args.animation:
         sim_env.viewer = trajoptpy.GetViewer(sim_env.env)
@@ -698,24 +670,8 @@ def load_simulation(args, sim_env):
                 np.savetxt(args.camera_matrix_file, camera_matrix)
             except:
                 print "GetWindowProp and GetCameraManipulatorMatrix are not defined. Pull and recompile Trajopt."
-        for body in obstacle_bodies:
-            sim_env.viewer.SetTransparency(body, .35)
     
-    if args.eval.dof_limits_factor != 1.0:
-        assert 0 < args.eval.dof_limits_factor and args.eval.dof_limits_factor <= 1.0
-        active_dof_indices = sim_env.robot.GetActiveDOFIndices()
-        active_dof_limits = sim_env.robot.GetActiveDOFLimits()
-        for lr in 'lr':
-            manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
-            dof_inds = sim_env.robot.GetManipulator(manip_name).GetArmIndices()
-            limits = np.asarray(sim_env.robot.GetDOFLimits(dof_inds))
-            limits_mean = limits.mean(axis=0)
-            limits_width = np.diff(limits, axis=0)
-            new_limits = limits_mean + args.eval.dof_limits_factor * np.r_[-limits_width/2.0, limits_width/2.0]
-            for i, ind in enumerate(dof_inds):
-                active_dof_limits[0][active_dof_indices.tolist().index(ind)] = new_limits[0,i]
-                active_dof_limits[1][active_dof_indices.tolist().index(ind)] = new_limits[1,i]
-        sim_env.robot.SetDOFLimits(active_dof_limits[0], active_dof_limits[1])
+    return sim_env
 
 def main():
     args = parse_input_args()
@@ -731,10 +687,9 @@ def main():
     
     setup_log_file(args)
     
-    sim_env = sim_util.SimulationEnv()
-    set_global_vars(args, sim_env)
+    set_global_vars(args)
     trajoptpy.SetInteractive(args.interactive)
-    load_simulation(args, sim_env)
+    sim_env = load_simulation(args)
 
     if args.subparser_name == "eval":
         start = time.time()
