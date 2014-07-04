@@ -23,7 +23,9 @@ class Feature(object):
         """
         returns the feature for this state/segname
         """
-        raise NotImplementedError
+        feats = self.features(state)
+        ind = self.get_ind(segname)
+        return feats[ind]
 
     def features(self, state):
         """
@@ -44,7 +46,8 @@ class Feature(object):
         self.weights = weights
 
     def get_ind(self, a):
-        return self.name2ind[a]
+        raise NotImplementedError
+
 
 
 class BatchRCFeats(Feature):        
@@ -73,6 +76,8 @@ class BatchRCFeats(Feature):
         self.costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx)
         return np.c_[self.costs, self.indicators]
 
+    def get_ind(self, a):
+        return self.name2ind[a]
 
     @staticmethod
     def get_size(num_actions):
