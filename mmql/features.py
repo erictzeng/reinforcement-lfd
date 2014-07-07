@@ -64,14 +64,14 @@ class BatchRCFeats(Feature):
         self.weights = np.r_[-1, np.zeros(self.N)]
 
     def feature(self, state, segname):
-        self.tgt_cld = state[1]
+        self.tgt_cld = state.cloud
         self.tgt_ctx.set_cld(self.tgt_cld)
         self.costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx)
         ind = self.name2ind[segname]
         return np.c_[self.costs[ind], self.indicators[ind]]
 
     def features(self, state):
-        self.tgt_cld = state[1]
+        self.tgt_cld = state.cloud
         self.tgt_ctx.set_cld(self.tgt_cld)
         self.costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx)
         return np.c_[self.costs, self.indicators]
