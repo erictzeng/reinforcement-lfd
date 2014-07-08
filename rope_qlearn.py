@@ -15,7 +15,6 @@ from pdb import pm, set_trace
 from knot_classifier import isKnot as is_knot
 import traj_utils
 import numpy as np
-from joblib import Parallel, delayed
 import scipy.spatial.distance as ssd
 import scipy.spatial as sp_spat
 import os.path
