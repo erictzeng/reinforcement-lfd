@@ -21,7 +21,7 @@ import os.path
 import cProfile
 import util as u
 import sys
-from rapprentice import registration, tps_registration_parallel
+from rapprentice import registration
 from rapprentice.registration import ThinPlateSpline # needs to be defined in order to be defined properly in the cluster
 
 DS_SIZE = .025
