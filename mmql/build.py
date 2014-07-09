@@ -118,13 +118,15 @@ def optimize_model(args):
     # # mm_model.model.setParam('method', 1)  # Use dual simplex method to solve model
     # mm_model.model.setParam('method', 0)  # Use primal simplex method to solve model
     try:
+        mm_model.model.setParam('method', 2)  # try solving model with barrier
         mm_model.optimize_model()
         assert mm_model.model.status == 2
     except grb.GurobiError, AssertionError:
         print "model failure"
-    if mm_model.model.status != 2:
-        from pdb import set_trace
-        set_trace()
+        mm_model.model.setParam('threads', 1)  # Use single thread instead of maximum
+        mm_model.model.setParam('method', 0)  # Use primal simplex method to solve model
+        mm_model.optimize_model()
+    assert mm_model.model.status == 2
     mm_model.save_weights_to_file(args.weightfile)
 
 def do_all(args):

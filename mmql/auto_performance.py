@@ -7,7 +7,8 @@ import sys
 
 C_vals = [1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000]
 C_strs = ['1e-05', '0.0001', '0.001', '0.01', '1.0', '10.0', '100.0', '1000.0']
-feature_types = ['base', 'mul', 'mul_s', 'mul_quad']
+feature_types = ['base', 'mul', 'mul_s', 'mul_quad', 'landmark']
+MODEL_TYPE='bellman'
 
 def estimate_performance(results_file):
     if type(results_file) is str:
@@ -49,7 +50,7 @@ if __name__ == '__main__':
     outf = h5py.File(args.outfile, 'w')
     for f in feature_types:
         for c in C_strs:
-            results_fname = '../data/evals/jul_6_cross_val/jul_6_{}_0.1_c={}.h5'.format(f, c)
+            results_fname = '../data/evals/jul_6_{}_0.1_c={}_{}.h5'.format(f, c, MODEL_TYPE)
             print "checking {}".format(results_fname)
     
             num_successes, knot_inds, not_inds = estimate_performance(results_fname)
@@ -63,7 +64,7 @@ if __name__ == '__main__':
         sys.stdout.write('\t\t{}'.format(c))
     print
     for f in feature_types:
-        if f =='mul_quad':
+        if f =='mul_quad' or f == 'landmark':
             sys.stdout.write('{}\t'.format(f))
         else:
             sys.stdout.write('{}\t\t'.format(f))
