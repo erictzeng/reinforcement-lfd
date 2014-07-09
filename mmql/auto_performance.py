@@ -4,6 +4,9 @@ import argparse
 import h5py
 from rapprentice.knot_classifier import isKnot
 import sys
+import os.path as osp
+
+from string import lower
 
 C_vals = [1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1000]
 C_strs = ['1e-05', '0.0001', '0.001', '0.01', '1.0', '10.0', '100.0', '1000.0']
@@ -44,22 +47,26 @@ if __name__ == '__main__':
     parser.add_argument("outfile")
     parser.add_argument("--baseline", type=str, default='../data/evals/7_3_0.1_baseline.h5')
     args = parser.parse_args()
-    base_successes, a, b = estimate_performance(args.baseline)
-    base_rate = base_successes / float(len(a) + len(b))
+    recompute_results = True
+    if osp.exists(args.outfile):
+        user_resp = raw_input("Overwrite results file {}[y/N]".format(args.outfile))
+        recompute_results = lower(user_resp) == 'y'
+    if recompute_results:
+        outf = h5py.File(args.outfile, 'w')
+        base_successes, a, b = estimate_performance(args.baseline)
+        base_rate = base_successes / float(len(a) + len(b))
+        outf['base_rate'] = base_rate
+        for f in feature_types:
+            for c in C_strs:
+                results_fname = '../data/evals/jul_6_{}_0.1_c={}_{}.h5'.format(f, c, MODEL_TYPE)
+                print "checking {}".format(results_fname)
     
-    outf = h5py.File(args.outfile, 'w')
-    for f in feature_types:
-        for c in C_strs:
-            results_fname = '../data/evals/jul_6_{}_0.1_c={}_{}.h5'.format(f, c, MODEL_TYPE)
-            print "checking {}".format(results_fname)
-    
-            num_successes, knot_inds, not_inds = estimate_performance(results_fname)
-    # print "knot_inds:", ' '.join(str(ind) for ind in knot_inds)
-    # print "not_inds:", ' '.join(str(ind) for ind in not_inds)
-    # print "Successes / Total: %d/%d" % (num_successes, len(results_file))
-            print "Success rate:", num_successes / float(len(knot_inds) + len(not_inds))
-            key = str((f, float(c)))
-            outf[key] = num_successes / float(len(knot_inds) + len(not_inds))
+                num_successes, knot_inds, not_inds = estimate_performance(results_fname)
+                print "Success rate:", num_successes / float(len(knot_inds) + len(not_inds))
+                key = str((f, float(c)))
+                outf[key] = num_successes / float(len(knot_inds) + len(not_inds))
+    else:
+        outf = h5py.File(args.outfile, 'r')
     for c in C_strs:
         sys.stdout.write('\t\t{}'.format(c))
     print
@@ -69,11 +76,12 @@ if __name__ == '__main__':
         else:
             sys.stdout.write('{}\t\t'.format(f))
         for c in C_strs:
-            sys.stdout.write('{}'.format(outf[str((f, float(c)))][()]))
+            sys.stdout.write('{:.2f}'.format(outf[str((f, float(c)))][()]))
             sys.stdout.write('\t\t')
         print
     sys.stdout.write('baseline\t')
     for c in C_strs:
-        sys.stdout.write('{.2f}'.format(base_rate))
+        sys.stdout.write('{:.2f}'.format(outf['base_rate'][()]))
         sys.stdout.write('\t\t')
     print
+    outf.close()
