@@ -19,9 +19,8 @@ from constants import ROPE_RADIUS, ROPE_ANG_STIFFNESS, ROPE_ANG_DAMPING, ROPE_LI
     ROPE_LIN_STOP_ERP, ROPE_MASS, ROPE_RADIUS_THICK, DS_SIZE, COLLISION_DIST_THRESHOLD, EXACT_LAMBDA, \
     N_ITER_EXACT, BEND_COEF_DIGITS, MAX_CLD_SIZE, JOINT_LENGTH_PER_STEP, FINGER_CLOSE_RATE
 
-from tpsopt.registration import tps_rpm_bij
+from tpsopt.registration import tps_rpm_bij, loglinspace
 from tpsopt.transformations import TPSSolver, EmptySolver
-from tpsopt.precompute import loglinspace
 
 from features import BatchRCFeats
 import trajoptpy, openravepy
@@ -424,7 +423,7 @@ def eval_on_holdout(args, sim_env):
                 start_time = time.time()
                 # the following lines is the same as the last commented line
                 batch_transfer_simulate.add_transfer_simulate_job(state, best_root_action, get_unique_id())
-                results = batch_transfer_simulate.get_results()
+                results = batch_transfer_simulate.get_results(animate=args.animation)
                 trajectory_result, next_state = results[0]
                 eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs = \
                     trajectory_result.success, trajectory_result.feasible, trajectory_result.misgrasp, trajectory_result.full_trajs
@@ -516,6 +515,7 @@ def parse_input_args():
     parser.add_argument("--animation", type=int, default=0, help="if greater than 1, the viewer tries to load the window and camera properties without idling at the beginning")
     parser.add_argument("--interactive", action="store_true", help="step animation and optimization if specified")
     parser.add_argument("--resultfile", type=str, help="no results are saved if this is not specified")
+    parser.add_argument("--landmarkfile", type=str, default='../data/misc/landmarks.h5')
 
     # selects tasks to evaluate/replay
     parser.add_argument("--tasks", type=int, nargs='*', metavar="i_task")
@@ -537,9 +537,11 @@ def parse_input_args():
     parser_eval.add_argument('holdoutfile', type=str, nargs='?', default='data/misc/holdout_set.h5')
 
     parser_eval.add_argument('--weightfile', type=str, default='')
+    parser_eval.add_argument('feature_type', type=str, nargs='?', choices=['base', 'mul', 'mul_quad', 'mul_s', 'landmark'], default='base')
 
-    parser_eval.add_argument('warpingcost', type=str, choices=['regcost', 'regcost-trajopt', 'jointopt'])
-    parser_eval.add_argument("transferopt", type=str, choices=['pose', 'finger', 'joint'])
+    parser_eval.add_argument('warpingcost', type=str, nargs='?', choices=['regcost', 'regcost-trajopt', 'jointopt'], default='regcost')
+    parser_eval.add_argument("transferopt", type=str, nargs='?', choices=['pose', 'finger', 'joint'], default='finger')
+    
     
     parser_eval.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelve', 'boxes', 'cylinders'], default=[])
     parser_eval.add_argument("--raycast", type=int, default=0, help="use raycast or rope nodes observation model")
@@ -601,12 +603,36 @@ def setup_log_file(args):
         atexit.register(GlobalVars.exec_log.close)
         GlobalVars.exec_log(0, "main.args", args)
 
+def get_features(args):
+    feat_type = args.eval.feature_type
+    if feat_type == 'base':
+        from features import BatchRCFeats as feat
+    elif feat_type == 'mul':
+        from features import MulFeats as feat
+    elif feat_type == 'mul_quad':
+        from features import QuadMulFeats as feat
+    elif feat_type == 'mul_s':
+        from features import SimpleMulFeats as feat
+    elif feat_type == 'landmark':
+        from features import LandmarkFeats as feat
+    else:
+        raise ValueError('Incorrect Feature Type')
+    
+    feats = feat(args.eval.actionfile)
+    try:
+        feats.set_landmark_file(args.landmarkfile)
+    except AttributeError:
+        pass
+    return feats
+
+
+
 def set_global_vars(args):
     if args.random_seed is not None: np.random.seed(args.random_seed)
     GlobalVars.actions = h5py.File(args.eval.actionfile, 'r')
     actions_root, actions_ext = os.path.splitext(args.eval.actionfile)
     GlobalVars.actions_cache = h5py.File(actions_root + '.cache' + actions_ext, 'a')
-    GlobalVars.features = BatchRCFeats(args.eval.actionfile)
+    GlobalVars.features = get_features(args)
     if args.eval.weightfile:
         GlobalVars.features.load_weights(args.eval.weightfile)
     GlobalVars.action_solvers = TPSSolver.get_solvers(GlobalVars.actions)
