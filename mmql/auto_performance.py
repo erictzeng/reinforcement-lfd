@@ -74,6 +74,6 @@ if __name__ == '__main__':
         print
     sys.stdout.write('baseline\t')
     for c in C_strs:
-        sys.stdout.write('{}'.format(base_rate))
+        sys.stdout.write('{.2f}'.format(base_rate))
         sys.stdout.write('\t\t')
     print
