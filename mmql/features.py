@@ -63,7 +63,7 @@ class BatchRCFeats(Feature):
         self.indicators = np.eye(self.N)
         self.weights = np.r_[-1, np.zeros(self.N)]
 
-    def feature(self, state, segname):
+    def features(self, state):
         self.tgt_cld = state.cloud
         self.tgt_ctx.set_cld(self.tgt_cld)
         self.costs = batch_tps_rpm_bij(self.src_ctx, self.tgt_ctx)
