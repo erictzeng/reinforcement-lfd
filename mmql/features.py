@@ -6,7 +6,7 @@ import h5py
 import numpy as np
 
 from tpsopt.batchtps import SrcContext, TgtContext, batch_tps_rpm_bij, GPUContext
-from tpsopt.transformations import unit_boxify
+from tpsopt.registration import unit_boxify
 
 import IPython as ipy
 from pdb import pm, set_trace

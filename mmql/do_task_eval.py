@@ -19,9 +19,8 @@ from constants import ROPE_RADIUS, ROPE_ANG_STIFFNESS, ROPE_ANG_DAMPING, ROPE_LI
     ROPE_LIN_STOP_ERP, ROPE_MASS, ROPE_RADIUS_THICK, DS_SIZE, COLLISION_DIST_THRESHOLD, EXACT_LAMBDA, \
     N_ITER_EXACT, BEND_COEF_DIGITS, MAX_CLD_SIZE, JOINT_LENGTH_PER_STEP, FINGER_CLOSE_RATE
 
-from tpsopt.registration import tps_rpm_bij
+from tpsopt.registration import tps_rpm_bij, loglinspace
 from tpsopt.transformations import TPSSolver, EmptySolver
-from tpsopt.precompute import loglinspace
 
 from features import BatchRCFeats
 import trajoptpy, openravepy
