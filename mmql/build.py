@@ -119,6 +119,7 @@ def optimize_model(args):
     # mm_model.model.setParam('method', 0)  # Use primal simplex method to solve model
     try:
         mm_model.optimize_model()
+        mm_model.model.setParam('method', 2)  # Use dual simplex method to solve model
         assert mm_model.model.status == 2
     except grb.GurobiError, AssertionError:
         print "model failure"
