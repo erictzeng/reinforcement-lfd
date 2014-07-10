@@ -19,6 +19,8 @@ from constants import ROPE_RADIUS, ROPE_ANG_STIFFNESS, ROPE_ANG_DAMPING, ROPE_LI
     ROPE_LIN_STOP_ERP, ROPE_MASS, ROPE_RADIUS_THICK, DS_SIZE, COLLISION_DIST_THRESHOLD, EXACT_LAMBDA, \
     N_ITER_EXACT, BEND_COEF_DIGITS, MAX_CLD_SIZE, JOINT_LENGTH_PER_STEP, FINGER_CLOSE_RATE
 
+from search import beam_search
+
 from tpsopt.registration import tps_rpm_bij, loglinspace
 from tpsopt.transformations import TPSSolver, EmptySolver
 
@@ -381,6 +383,15 @@ def get_state(sim_env, args_eval):
     tfs = sim_util.get_rope_transforms(sim_env)
     state = sim_util.RopeState("eval_%i"%get_unique_id(), new_cloud_ds, new_rope_nodes, init_rope_nodes, rope_params, tfs)
     return state
+
+def select_best(args, state, expander):
+    actions = GlobalVars.actions.keys()
+    N = len(actions)
+    def evaluator(state):
+        return np.dot(GlobalVars.features.features(state), GlobalVars.features.weights)
+    goal_test = lambda x: is_knot(x.rope_nodes)
+    return beam_search(state, actions, expander, evaluator, goal_test, width=args.width, depth=args.depth)        
+
 # @profile
 def eval_on_holdout(args, sim_env):
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
@@ -410,7 +421,7 @@ def eval_on_holdout(args, sim_env):
             num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
             eval_stats = eval_util.EvalStats()
 
-            agenda, q_values_root = GlobalVars.features.select_best(state, num_actions_to_try)
+            agenda, q_values_root = select_best(args, state, batch_transfer_simulate)
 
             unable_to_generalize = False
             for i_choice in range(num_actions_to_try):
@@ -424,7 +435,7 @@ def eval_on_holdout(args, sim_env):
                 # the following lines is the same as the last commented line
                 batch_transfer_simulate.add_transfer_simulate_job(state, best_root_action, get_unique_id())
                 results = batch_transfer_simulate.get_results(animate=args.animation)
-                trajectory_result, next_state = results[0]
+                trajectory_result, next_state, _ = results[0]
                 eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs = \
                     trajectory_result.success, trajectory_result.feasible, trajectory_result.misgrasp, trajectory_result.full_trajs
                 #eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = compute_trans_traj(sim_env, state, best_root_action, args.eval, animate=args.animation, interactive=args.interactive)
@@ -529,6 +540,9 @@ def parse_input_args():
     parser.add_argument("--log", type=str, default="")
     parser.add_argument("--print_mean_and_var", action="store_true")
 
+    parser.add_argument("--width", type=int, default=1)
+    parser.add_argument("--depth", type=int, default=0)
+
     subparsers = parser.add_subparsers(dest='subparser_name')
 
     parser_eval = subparsers.add_parser('eval')
@@ -557,7 +571,7 @@ def parse_input_args():
     parser_eval.add_argument("--alpha", type=float, default=10000000.0)
     parser_eval.add_argument("--beta_pos", type=float, default=10000.0)
     parser_eval.add_argument("--beta_rot", type=float, default=10.0)
-    parser_eval.add_argument("--gamma", type=float, default=1000.0)
+    parser_eval.add_argument("--gamma", type=float, default=10000.0)
     parser_eval.add_argument("--num_steps", type=int, default=5, help="maximum number of steps to simulate each task")
     parser_eval.add_argument("--use_color", type=int, default=0)
     parser_eval.add_argument("--dof_limits_factor", type=float, default=1.0)
