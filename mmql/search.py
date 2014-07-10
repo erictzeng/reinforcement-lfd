@@ -80,7 +80,7 @@ class MaxNode(SearchNode):
         expanded_inds = self.child_expands == np.max(self.child_expands)
         old_value = self.value
         self.value = np.max(self.child_vals[expanded_inds])
-        if self.parent != self and old_value != self.value:
+        if self.parent != self:
             self.parent.update(self.value, self.ID)        
 
     def select_best(self):
@@ -111,7 +111,7 @@ def beam_search(start_state, actions, expander, evaluator, goal_test, width=1, d
             expander.add_transfer_simulate_job(parent_state, a, child_id)
             child_node = ExpandingNode(child_id, parent_node)            
         agenda = []
-        expand_res = expander.get_results(animate=True)
+        expand_res = expander.get_results()
         for traj_res, next_s, next_s_id in expand_res:
             parent = SearchNode.id_map[next_s_id].parent
             del SearchNode.id_map[next_s_id]
@@ -124,12 +124,11 @@ def beam_search(start_state, actions, expander, evaluator, goal_test, width=1, d
                 parent.update(-np.inf, next_s_id)
                 continue
             child_vals = evaluator(next_s)            
-            child_node = MaxNode(next_s_id, next_s, child_vals)
+            child_node = MaxNode(next_s_id, next_s, child_vals, parent=parent)
             parent.update(child_node.value, next_s_id)
             agenda.append(child_node)
         if goal_found:
             break
-    from pdb import set_trace; set_trace()
     return root.select_best()
 
             
