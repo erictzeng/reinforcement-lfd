@@ -4,13 +4,16 @@ from __future__ import division
 
 import pprint
 import argparse
-from ropesimulation import sim_util, transfer_simulate
+from ropesimulation import sim_util
+from ropesimulation.sim_util import RopeState, SceneState
+from ropesimulation.transfer_simulate import TransferSimulate, BatchTransferSimulate
+from trajectory_transfer.transfer import Transfer
 from rapprentice import eval_util, util
 from rapprentice import tps_registration, planning
  
 from rapprentice import registration, berkeley_pr2, \
      animate_traj, ros2rave, plotting_openrave, task_execution, \
-     tps, func_utils, resampling, ropesim, rope_initialization, clouds
+     tps, func_utils, resampling, ropesim, rope_initialization
 from rapprentice import math_utils as mu
 from rapprentice.yes_or_no import yes_or_no
 import pdb, time
@@ -76,35 +79,18 @@ def register_tps(sim_env, state, action, args_eval, interest_pts = None, closing
         raise RuntimeError('invalid registration type')
     return f, corr
 
-def get_unique_id(): 
-    GlobalVars.unique_id += 1
-    return GlobalVars.unique_id - 1
-
-def get_state(sim_env, args_eval):
-    if args_eval.raycast:
-        new_cloud, endpoint_inds = sim_env.sim.raycast_cloud(endpoints=3)
-        if new_cloud.shape[0] == 0: # rope is not visible (probably because it fall off the table)
-            return None
-    else:
-        new_cloud = sim_env.sim.observe_cloud(upsample=args_eval.upsample, upsample_rad=args_eval.upsample_rad)
-        endpoint_inds = np.zeros(len(new_cloud), dtype=bool) # for now, args_eval.raycast=False is not compatible with args_eval.use_color=True
-    if args_eval.use_color:
-        new_cloud = color_cloud(new_cloud, endpoint_inds)
-    new_cloud_ds = clouds.downsample(new_cloud, DS_SIZE) if args_eval.downsample else new_cloud
-    new_rope_nodes = sim_env.sim.rope.GetControlPoints()
-    new_rope_nodes= ropesim.observe_cloud(new_rope_nodes, sim_env.sim.rope_params.radius, upsample=args_eval.upsample)
-    init_rope_nodes = sim_env.sim.rope_pts
-    rope_params = args_eval.rope_params
-    tfs = sim_util.get_rope_transforms(sim_env)
-    state = sim_util.RopeState("eval_%i"%get_unique_id(), new_cloud_ds, new_rope_nodes, init_rope_nodes, rope_params, tfs)
-    return state
 # @profile
-def eval_on_holdout(args, sim_env):
+def eval_on_holdout(args, transfer, sim_env):
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
 
-    transfer = transfer_simulate.Transfer(args.eval, register_tps) # signature of this class will change
-    batch_transfer_simulate = transfer_simulate.BatchTransferSimulate(transfer, sim_env)
+    rope_params = sim_util.RopeParams()
+    if args.eval.rope_param_radius is not None:
+        rope_params.radius = args.eval.rope_param_radius
+    if args.eval.rope_param_angStiffness is not None:
+        rope_params.angStiffness = args.eval.rope_param_angStiffness
+
+    transfer_simulate = TransferSimulate(transfer, sim_env)
 
     num_successes = 0
     num_total = 0
@@ -113,8 +99,8 @@ def eval_on_holdout(args, sim_env):
         redprint("task %s" % i_task)
         sim_util.reset_arms_to_side(sim_env)
         init_rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
-        sim_env.set_rope_state(init_rope_nodes, args.eval.rope_params)
-        next_state = get_state(sim_env, args.eval)
+        sim_env.set_rope_state(RopeState(init_rope_nodes, rope_params))
+        next_state = sim_env.observe_scene(**vars(args.eval))
         
         if args.animation:
             sim_env.viewer.Step()
@@ -138,13 +124,8 @@ def eval_on_holdout(args, sim_env):
 
                 best_root_action = agenda[i_choice]
                 start_time = time.time()
-                # the following lines is the same as the last commented line
-                batch_transfer_simulate.add_transfer_simulate_job(state, best_root_action, get_unique_id())
-                results = batch_transfer_simulate.get_results(animate=args.animation)
-                trajectory_result, next_state, next_state_id = results[0]
-                eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs = \
-                    trajectory_result.success, trajectory_result.feasible, trajectory_result.misgrasp, trajectory_result.full_trajs
-                #eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = compute_trans_traj(sim_env, state, best_root_action, args.eval, animate=args.animation, interactive=args.interactive)
+                result = transfer_simulate.transfer_simulate(state, best_root_action, SceneState.get_unique_id(), transferopt=args.eval.transferopt, animate=args.animation, interactive=args.interactive)
+                eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = result.success, result.feasible, result.misgrasp, result.full_trajs, result.state
                 eval_stats.exec_elapsed_time += time.time() - start_time
 
                 if eval_stats.feasible:  # try next action if TrajOpt cannot find feasible action
@@ -171,10 +152,122 @@ def eval_on_holdout(args, sim_env):
 
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
-def replay_on_holdout(args, sim_env):
+def eval_on_holdout_parallel(args, transfer, sim_env):
+    holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
+    holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
+
+    rope_params = sim_util.RopeParams()
+    if args.eval.rope_param_radius is not None:
+        rope_params.radius = args.eval.rope_param_radius
+    if args.eval.rope_param_angStiffness is not None:
+        rope_params.angStiffness = args.eval.rope_param_angStiffness
+
+    batch_transfer_simulate = BatchTransferSimulate(transfer, sim_env)
+
+    states = {}
+    q_values_roots = {}
+    best_root_actions = {}
+    state_id2i_task = {}
+    results = {}
+    successes = {}
+    for i_step in range(args.eval.num_steps):
+        queue_size = 0
+        for i_task, demo_id_rope_nodes in holdout_items:
+            if i_task in successes:
+                # task already finished
+                continue
+
+            redprint("task %s step %i" % (i_task, i_step))
+
+            if i_step == 0:
+                sim_util.reset_arms_to_side(sim_env)
+
+                init_rope_nodes = demo_id_rope_nodes["rope_nodes"][:]
+                sim_env.set_rope_state(RopeState(init_rope_nodes, rope_params))
+                states[i_task] = {}
+                states[i_task][i_step] = sim_env.observe_scene(**vars(args.eval))
+                best_root_actions[i_task] = {}
+                q_values_roots[i_task] = {}
+                results[i_task] = {}
+                
+                if args.animation:
+                    sim_env.viewer.Step()
+            
+            state = states[i_task][i_step]
+
+            num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
+
+            agenda, q_values_root = GlobalVars.features.select_best(state, num_actions_to_try)
+            q_values_roots[i_task][i_step] = q_values_root
+
+            i_choice = 0
+            if q_values_root[i_choice] == -np.inf: # none of the demonstrations generalize
+                successes[i_task] = False
+                continue
+
+            best_root_action = agenda[i_choice]
+            best_root_actions[i_task][i_step] = best_root_action
+
+            next_state_id = SceneState.get_unique_id()
+            batch_transfer_simulate.queue_transfer_simulate(state, best_root_action, next_state_id, transferopt=args.eval.transferopt)
+
+            state_id2i_task[next_state_id] = i_task
+            queue_size += 1
+
+        results_size = 0
+        while results_size < queue_size:
+            time.sleep(.1)
+            for result in batch_transfer_simulate.get_results():
+                i_task = state_id2i_task[result.state.id]
+                results[i_task][i_step] = result
+                results_size += 1
+        
+        for i_task, demo_id_rope_nodes in holdout_items:
+            if i_task in successes:
+                # task already finished
+                continue
+
+            result = results[i_task][i_step]
+            eval_stats = eval_util.EvalStats()
+            eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = result.success, result.feasible, result.misgrasp, result.full_trajs, result.state
+            # TODO eval_stats.exec_elapsed_time
+
+            if not eval_stats.feasible:  # If not feasible, restore state
+                next_state = states[i_task][i_step]
+            
+            state = states[i_task][i_step]
+            best_root_action = best_root_actions[i_task][i_step]
+            q_values_root = q_values_roots[i_task][i_step]
+            eval_util.save_task_results_step(args.resultfile, i_task, i_step, state, best_root_action, q_values_root, full_trajs, next_state, eval_stats, new_cloud_ds=state.cloud, new_rope_nodes=state.rope_nodes)
+            
+            states[i_task][i_step+1] = next_state
+            
+            if not eval_stats.feasible:
+                successes[i_task] = False
+                # Skip to next knot tie if the action is infeasible -- since
+                # that means all future steps (up to 5) will have infeasible trajectories
+                continue
+            
+            if is_knot(next_state.rope_nodes):
+                successes[i_task] = True
+                continue
+        
+        if i_step == args.eval.num_steps - 1:
+            for i_task, demo_id_rope_nodes in holdout_items:
+                if i_task not in successes:
+                    # task ran out of steps
+                    successes[i_task] = False
+
+        num_successes = np.sum(successes.values())
+        num_total = len(successes)
+        redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
+
+def replay_on_holdout(args, transfer, sim_env):
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     loadresultfile = h5py.File(args.replay.loadresultfile, 'r')
     loadresult_items = eval_util.get_holdout_items(loadresultfile, args.tasks, args.taskfile, args.i_start, args.i_end)
+
+    transfer_simulate = TransferSimulate(transfer, sim_env)
 
     num_successes = 0
     num_total = 0
@@ -199,17 +292,18 @@ def replay_on_holdout(args, sim_env):
             start_time = time.time()
             if i_step in args.replay.compute_traj_steps: # compute the trajectory in this step
                 replay_full_trajs = None            
-            eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = compute_trans_traj(sim_env, state, best_action, args.eval, animate=args.animation, interactive=args.interactive, replay_full_trajs=replay_full_trajs)
+            result = transfer_simulate.transfer_simulate(state, best_action, SceneState.get_unique_id(), transferopt=args.eval.transferopt, animate=args.animation, interactive=args.interactive, replay_full_trajs=replay_full_trajs)
+            eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = result.success, result.feasible, result.misgrasp, result.full_trajs, result.state
             eval_stats.exec_elapsed_time += time.time() - start_time
             print "BEST ACTION:", best_action
 
             if not eval_stats.feasible:  # If not feasible, restore state
                 next_state = state
             
-            if np.all(next_state.tfs[0] == replay_next_state.tfs[0]) and np.all(next_state.tfs[1] == replay_next_state.tfs[1]):
+            if np.all(next_state.rope_state.tfs[0] == replay_next_state.rope_state.tfs[0]) and np.all(next_state.rope_state.tfs[1] == replay_next_state.rope_state.tfs[1]):
                 yellowprint("Reproducible results OK")
             else:
-                yellowprint("The rope transforms of the replay rope doesn't match the ones in the original result file by %f and %f" % (np.linalg.norm(next_state.tfs[0] - replay_next_state.tfs[0]), np.linalg.norm(next_state.tfs[1] - replay_next_state.tfs[1])))
+                yellowprint("The rope transforms of the replay rope doesn't match the ones in the original result file by %f and %f" % (np.linalg.norm(next_state.rope_state.tfs[0] - replay_next_state.rope_state.tfs[0]), np.linalg.norm(next_state.rope_state.tfs[1] - replay_next_state.rope_state.tfs[1])))
             
             eval_util.save_task_results_step(args.resultfile, i_task, i_step, state, best_action, q_values, full_trajs, next_state, eval_stats)
             
@@ -278,7 +372,10 @@ def parse_input_args():
     parser_eval.add_argument("--num_steps", type=int, default=5, help="maximum number of steps to simulate each task")
     parser_eval.add_argument("--use_color", type=int, default=0)
     parser_eval.add_argument("--dof_limits_factor", type=float, default=1.0)
-    parser_eval.add_argument("--rope_params", type=str, default='default')
+    parser_eval.add_argument("--rope_param_radius", type=str, default=None)
+    parser_eval.add_argument("--rope_param_angStiffness", type=str, default=None)
+    
+    parser_eval.add_argument("--parallel", action="store_true")
 
     parser_replay = subparsers.add_parser('replay')
     parser_replay.add_argument("loadresultfile", type=str)
@@ -295,23 +392,6 @@ def get_scaled_action_cloud(state, action):
     scaled_x_na = ds_g['scaled_cloud_xyz'][:]
     src_params = (ds_g['scaling'][()], ds_g['scaled_translation'][:])
     return scaled_x_na, src_params
-
-def get_action_cloud(sim_env, action, args_eval):
-    rope_nodes = get_action_rope_nodes(sim_env, action, args_eval)
-    cloud = ropesim.observe_cloud(rope_nodes, ROPE_RADIUS, upsample_rad=args_eval.upsample_rad)
-    return cloud
-
-def get_action_cloud_ds(sim_env, action, args_eval):
-    if args_eval.downsample:
-        ds_key = 'DS_SIZE_{}'.format(DS_SIZE)
-        return GlobalVars.actions[action]['inv'][ds_key]['cloud_xyz']
-    else:
-        return get_action_cloud(sim_env, action, args_eval)
-
-def get_action_rope_nodes(sim_env, action, args_eval):
-    rope_nodes = GlobalVars.actions[action]['cloud_xyz'][()]
-    return ropesim.observe_cloud(rope_nodes, ROPE_RADIUS, upsample=args_eval.upsample)
-
 
 def setup_log_file(args):
     if args.log:
@@ -341,8 +421,6 @@ def get_features(args):
     except AttributeError:
         pass
     return feats
-
-
 
 def set_global_vars(args):
     if args.random_seed is not None: np.random.seed(args.random_seed)
@@ -407,14 +485,19 @@ def main():
     
     set_global_vars(args)
     trajoptpy.SetInteractive(args.interactive)
+    transfer = Transfer(args.eval)
+    transfer.initialize()
     sim_env = load_simulation(args)
 
     if args.subparser_name == "eval":
         start = time.time()
-        eval_on_holdout(args, sim_env)
+        if args.eval.parallel:
+            eval_on_holdout_parallel(args, transfer, sim_env)
+        else:
+            eval_on_holdout(args, transfer, sim_env)
         print "eval time is:\t{}".format(time.time() - start)
     elif args.subparser_name == "replay":
-        replay_on_holdout(args, sim_env)
+        replay_on_holdout(args, transfer, sim_env)
     else:
         raise RuntimeError("Invalid subparser name")
 
