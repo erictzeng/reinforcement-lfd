@@ -22,6 +22,8 @@ from constants import ROPE_RADIUS, ROPE_ANG_STIFFNESS, ROPE_ANG_DAMPING, ROPE_LI
     ROPE_LIN_STOP_ERP, ROPE_MASS, ROPE_RADIUS_THICK, DS_SIZE, COLLISION_DIST_THRESHOLD, EXACT_LAMBDA, \
     N_ITER_EXACT, BEND_COEF_DIGITS, MAX_CLD_SIZE, JOINT_LENGTH_PER_STEP, FINGER_CLOSE_RATE
 
+from search import beam_search
+
 from tpsopt.registration import tps_rpm_bij, loglinspace
 from tpsopt.transformations import TPSSolver, EmptySolver
 
@@ -79,6 +81,14 @@ def register_tps(sim_env, state, action, args_eval, interest_pts = None, closing
         raise RuntimeError('invalid registration type')
     return f, corr
 
+def select_best(args_eval, state, expander):
+    actions = GlobalVars.actions.keys()
+    N = len(actions)
+    def evaluator(state):
+        return np.dot(GlobalVars.features.features(state), GlobalVars.features.weights)
+    goal_test = lambda x: is_knot(x.rope_nodes)
+    return beam_search(state, actions, expander, evaluator, goal_test, width=args_eval.width, depth=args_eval.depth)        
+
 # @profile
 def eval_on_holdout(args, transfer, sim_env):
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
@@ -113,7 +123,7 @@ def eval_on_holdout(args, transfer, sim_env):
             num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
             eval_stats = eval_util.EvalStats()
 
-            agenda, q_values_root = GlobalVars.features.select_best(state, num_actions_to_try)
+            agenda, q_values_root = select_best(args.eval, state, transfer_simulate)
 
             unable_to_generalize = False
             for i_choice in range(num_actions_to_try):
@@ -153,6 +163,7 @@ def eval_on_holdout(args, transfer, sim_env):
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
 def eval_on_holdout_parallel(args, transfer, sim_env):
+    # almost the same as eval_on_holdout. the only difference is that this uses the old select_best
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
 
@@ -171,7 +182,6 @@ def eval_on_holdout_parallel(args, transfer, sim_env):
     results = {}
     successes = {}
     for i_step in range(args.eval.num_steps):
-        queue_size = 0
         for i_task, demo_id_rope_nodes in holdout_items:
             if i_task in successes:
                 # task already finished
@@ -197,7 +207,7 @@ def eval_on_holdout_parallel(args, transfer, sim_env):
 
             num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
 
-            agenda, q_values_root = GlobalVars.features.select_best(state, num_actions_to_try)
+            agenda, q_values_root = GlobalVars.features.select_best(state, num_actions_to_try) # TODO use new select_best
             q_values_roots[i_task][i_step] = q_values_root
 
             i_choice = 0
@@ -209,18 +219,14 @@ def eval_on_holdout_parallel(args, transfer, sim_env):
             best_root_actions[i_task][i_step] = best_root_action
 
             next_state_id = SceneState.get_unique_id()
-            batch_transfer_simulate.queue_transfer_simulate(state, best_root_action, next_state_id, transferopt=args.eval.transferopt)
+            batch_transfer_simulate.queue_transfer_simulate(state, best_root_action, next_state_id)
 
             state_id2i_task[next_state_id] = i_task
-            queue_size += 1
 
-        results_size = 0
-        while results_size < queue_size:
-            time.sleep(.1)
-            for result in batch_transfer_simulate.get_results():
-                i_task = state_id2i_task[result.state.id]
-                results[i_task][i_step] = result
-                results_size += 1
+        batch_transfer_simulate.wait_while_queue_is_nonempty()
+        for result in batch_transfer_simulate.get_results():
+            i_task = state_id2i_task[result.state.id]
+            results[i_task][i_step] = result
         
         for i_task, demo_id_rope_nodes in holdout_items:
             if i_task in successes:
@@ -340,6 +346,7 @@ def parse_input_args():
     parser.add_argument("--log", type=str, default="")
     parser.add_argument("--print_mean_and_var", action="store_true")
 
+
     subparsers = parser.add_subparsers(dest='subparser_name')
 
     parser_eval = subparsers.add_parser('eval')
@@ -352,7 +359,8 @@ def parse_input_args():
 
     parser_eval.add_argument('warpingcost', type=str, nargs='?', choices=['regcost', 'regcost-trajopt', 'jointopt'], default='regcost')
     parser_eval.add_argument("transferopt", type=str, nargs='?', choices=['pose', 'finger', 'joint'], default='finger')
-    
+    parser_eval.add_argument("--width", type=int, default=1)
+    parser_eval.add_argument("--depth", type=int, default=0)
     
     parser_eval.add_argument("--obstacles", type=str, nargs='*', choices=['bookshelve', 'boxes', 'cylinders'], default=[])
     parser_eval.add_argument("--raycast", type=int, default=0, help="use raycast or rope nodes observation model")
@@ -365,10 +373,12 @@ def parse_input_args():
         default=[0,0,0,0,0,0], help="translation=(tx,ty,tz), axis-angle rotation=(rx,ry,rz)")
     
     parser_eval.add_argument("--search_until_feasible", action="store_true")
+
     parser_eval.add_argument("--alpha", type=float, default=1000000.0)
     parser_eval.add_argument("--beta_pos", type=float, default=1000000.0)
     parser_eval.add_argument("--beta_rot", type=float, default=1.0)
     parser_eval.add_argument("--gamma", type=float, default=1000.0)
+
     parser_eval.add_argument("--num_steps", type=int, default=5, help="maximum number of steps to simulate each task")
     parser_eval.add_argument("--use_color", type=int, default=0)
     parser_eval.add_argument("--dof_limits_factor", type=float, default=1.0)
