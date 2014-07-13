@@ -112,7 +112,8 @@ def beam_search(start_state, actions, expander, evaluator, goal_test, width=1, d
             expand_res.append(expander.transfer_simulate(parent_state, a, child_id))
             child_node = ExpandingNode(child_id, parent_node)
         agenda = []
-        for traj_res, next_s, next_s_id in expand_res:
+        for res in expand_res:
+            next_s, next_s_id = res.state, res.state.id
             parent = SearchNode.id_map[next_s_id].parent
             del SearchNode.id_map[next_s_id]
 
@@ -120,7 +121,7 @@ def beam_search(start_state, actions, expander, evaluator, goal_test, width=1, d
                 goal_found = True
                 parent.update(np.inf, next_s_id)
                 break    
-            elif not traj_res.feasible or traj_res.misgrasp:
+            elif not res.feasible or res.misgrasp:
                 parent.update(-np.inf, next_s_id)
                 continue
             child_vals = evaluator(next_s)            

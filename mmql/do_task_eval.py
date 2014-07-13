@@ -163,7 +163,6 @@ def eval_on_holdout(args, transfer, sim_env):
         redprint('Eval Successes / Total: ' + str(num_successes) + '/' + str(num_total))
 
 def eval_on_holdout_parallel(args, transfer, sim_env):
-    # almost the same as eval_on_holdout. the only difference is that this uses the old select_best
     holdoutfile = h5py.File(args.eval.holdoutfile, 'r')
     holdout_items = eval_util.get_holdout_items(holdoutfile, args.tasks, args.taskfile, args.i_start, args.i_end)
 
@@ -207,7 +206,7 @@ def eval_on_holdout_parallel(args, transfer, sim_env):
 
             num_actions_to_try = MAX_ACTIONS_TO_TRY if args.eval.search_until_feasible else 1
 
-            agenda, q_values_root = GlobalVars.features.select_best(state, num_actions_to_try) # TODO use new select_best
+            agenda, q_values_root = select_best(args.eval, state, batch_transfer_simulate) # TODO fix select_best to handle batch_transfer_simulate
             q_values_roots[i_task][i_step] = q_values_root
 
             i_choice = 0
