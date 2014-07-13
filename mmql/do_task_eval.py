@@ -134,7 +134,7 @@ def eval_on_holdout(args, transfer, sim_env):
 
                 best_root_action = agenda[i_choice]
                 start_time = time.time()
-                result = transfer_simulate.transfer_simulate(state, best_root_action, SceneState.get_unique_id(), transferopt=args.eval.transferopt, animate=args.animation, interactive=args.interactive)
+                result = transfer_simulate.transfer_simulate(state, best_root_action, SceneState.get_unique_id(), animate=args.animation, interactive=args.interactive)
                 eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = result.success, result.feasible, result.misgrasp, result.full_trajs, result.state
                 eval_stats.exec_elapsed_time += time.time() - start_time
 
@@ -298,7 +298,7 @@ def replay_on_holdout(args, transfer, sim_env):
             start_time = time.time()
             if i_step in args.replay.compute_traj_steps: # compute the trajectory in this step
                 replay_full_trajs = None            
-            result = transfer_simulate.transfer_simulate(state, best_action, SceneState.get_unique_id(), transferopt=args.eval.transferopt, animate=args.animation, interactive=args.interactive, replay_full_trajs=replay_full_trajs)
+            result = transfer_simulate.transfer_simulate(state, best_action, SceneState.get_unique_id(), animate=args.animation, interactive=args.interactive, replay_full_trajs=replay_full_trajs)
             eval_stats.success, eval_stats.feasible, eval_stats.misgrasp, full_trajs, next_state = result.success, result.feasible, result.misgrasp, result.full_trajs, result.state
             eval_stats.exec_elapsed_time += time.time() - start_time
             print "BEST ACTION:", best_action
