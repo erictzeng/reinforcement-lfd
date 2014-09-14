@@ -90,9 +90,9 @@ def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj,
     s = json.dumps(request)
     with openravepy.RobotStateSaver(robot):
         orig_dof_vals
-        with util.suppress_stdout():
-            prob = trajoptpy.ConstructProblem(s, robot.GetEnv()) # create object that stores optimization problem
-            result = trajoptpy.OptimizeProblem(prob) # do optimization
+#         with util.suppress_stdout():
+        prob = trajoptpy.ConstructProblem(s, robot.GetEnv()) # create object that stores optimization problem
+        result = trajoptpy.OptimizeProblem(prob) # do optimization
     traj = result.GetTraj()
     
     pose_costs = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "pose"])
@@ -228,9 +228,9 @@ def plan_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr2finger_r
 
     s = json.dumps(request)
     with openravepy.RobotStateSaver(robot):
-        with util.suppress_stdout():
-            prob = trajoptpy.ConstructProblem(s, robot.GetEnv()) # create object that stores optimization problem
-            result = trajoptpy.OptimizeProblem(prob) # do optimization
+#         with util.suppress_stdout():
+        prob = trajoptpy.ConstructProblem(s, robot.GetEnv()) # create object that stores optimization problem
+        result = trajoptpy.OptimizeProblem(prob) # do optimization
     traj = result.GetTraj()    
 
     rel_pts_costs = np.sum([cost_val for (cost_type, cost_val) in result.GetCosts() if cost_type == "rel_pts"])
@@ -487,9 +487,9 @@ def joint_fit_tps_follow_finger_pts_traj(robot, manip_name, flr2finger_link, flr
 
     s = json.dumps(request)
     with openravepy.RobotStateSaver(robot):
-        with util.suppress_stdout():
-            prob = trajoptpy.ConstructProblem(s, robot.GetEnv()) # create object that stores optimization problem
-            result = trajoptpy.OptimizeProblem(prob) # do optimization
+#         with util.suppress_stdout():
+        prob = trajoptpy.ConstructProblem(s, robot.GetEnv()) # create object that stores optimization problem
+        result = trajoptpy.OptimizeProblem(prob) # do optimization
     traj = result.GetTraj()
     z = result.GetExt()
     theta = N.dot(z)

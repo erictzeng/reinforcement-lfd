@@ -233,7 +233,7 @@ def sim_full_traj_maybesim(sim_env, full_traj, animate=False, interactive=False,
     def sim_callback(i):
         sim_env.sim.step()
 
-    animate_speed = 10 if animate else 0
+    animate_speed = 1#0 if animate else 0
 
     traj, dof_inds = full_traj
     

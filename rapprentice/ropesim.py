@@ -147,11 +147,14 @@ class Simulation(object):
     def settle(self, max_steps=100, tol=.001, animate=False):
         """Keep stepping until the rope doesn't move, up to some tolerance"""
         prev_nodes = self.rope.GetNodes()
+        if animate:
+            viewer = trajoptpy.GetViewer(self.env)
         for i in range(max_steps):
             self.bt_env.Step(.01, 200, .005)
             if animate:
                 self.rope.UpdateRave()
                 self.env.UpdatePublishedBodies()
+                viewer.Step()
             if i % 10 == 0 and i != 0:
                 curr_nodes = self.rope.GetNodes()
                 diff = np.sqrt(((curr_nodes - prev_nodes)**2).sum(axis=1))
@@ -160,6 +163,8 @@ class Simulation(object):
                 prev_nodes = curr_nodes
         self.rope.UpdateRave()
         self.env.UpdatePublishedBodies()
+        if animate:
+            viewer.Step()
 #         print "settled in %d iterations" % (i+1)
 
     def observe_cloud(self, upsample=0, upsample_rad=1):
